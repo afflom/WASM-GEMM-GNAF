@@ -48,3 +48,6 @@
 *~
 .idea/
 .vscode/
+/.probe_bytes.lean
+/.independence_probe.lean
+/.schema_probe.lean

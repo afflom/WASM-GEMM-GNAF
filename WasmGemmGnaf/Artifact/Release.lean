@@ -173,6 +173,7 @@ import WasmGemmGnaf.Wasm.CostedExplore
 import WasmGemmGnaf.Gemm.Problem
 import WasmGemmGnaf.Gemm.Reference
 import WasmGemmGnaf.GNAF.CompileCorrect
+import WasmGemmGnaf.Wasm.CoreArtifact
 
 set_option autoImplicit false
 
@@ -198,10 +199,26 @@ def wasmProfileBody : Wasm.ProfileBody :=
   Wasm.canonicalCore3Wasm32ProfileBody Wasm.core3RevisionCommit
     Wasm.canonicalCostTableUnits
 
-/-- The checked release profile: the canonical Core 3.0 wasm32 body together
-with its lawfulness proof.  It is `Wasm.unitWitnessProfile`, reused rather than
-rebuilt. -/
-def wasmProfile : Wasm.Profile := Wasm.unitWitnessProfile
+/-- The checked release profile: `Release.wasmProfileBody` above, together with
+its lawfulness proof.
+
+This used to read `:= Wasm.unitWitnessProfile`, and an external audit was right
+to object to a release line whose profile is spelled as somebody else's
+non-vacuity witness.  The definition now names its own body.  **The change is
+`rfl` and nothing else**: `Wasm.unitWitnessProfile` is that same body with that
+same lawfulness proof, and `wasmProfile_eq_unitWitnessProfile` below states the
+identity rather than hiding it.  What is *not* fixed by renaming is the
+disclosed cost-table deviation of the file header — SPEC §7.5's
+`Release.wasmCostTableBody` still cannot be built here. -/
+def wasmProfile : Wasm.Profile :=
+  Wasm.Profile.checked wasmProfileBody Wasm.unitWitnessProfileBody_lawful
+
+/-- **The disclosure, as a theorem.**  The release profile and the witness
+profile of `Wasm/Profile.lean` are the same record.  Renaming the definition
+strengthened nothing, and this equation is here so that no reader has to take
+that on trust. -/
+theorem wasmProfile_eq_unitWitnessProfile :
+    wasmProfile = Wasm.unitWitnessProfile := rfl
 
 /-- **SPEC §7.2**, `Release.wasmProfile_body`. -/
 theorem wasmProfile_body : wasmProfile.body = wasmProfileBody := rfl
@@ -246,7 +263,114 @@ theorem wasmProfile_maxPages : wasmProfile.body.maxPages = 65536 := rfl
 terminal unit. -/
 theorem wasmProfile_decodeCost (bytes : ByteArray) :
     wasmProfile.costTableBody.decodeCost bytes = bytes.size + 1 :=
-  Wasm.unitWitnessProfile_decodeCost bytes
+  wasmProfile.decodeCost_eq bytes
+
+/-! ### 1.1a The released module over the PINNED Core 3.0 front end (SPEC §7.2)
+
+Everything else in this file is stated over `Wasm.Module`, the subset syntax of
+`Wasm/Syntax.lean`, because the costed machine, the configuration, the reduction
+relation and `Universal.SystemEvaluation` all are.  This section is the part of
+the release scope that is **not**: a concrete byte string, the module the pinned
+Core 3.0 decoder returns for it, and the released profile's verdict on that
+module.
+
+Read the scope carefully, because the honesty of the whole file depends on it:
+
+* `Wasm.decode` here is the decoder of the complete pinned Core 3.0 binary
+  format (`Wasm/CoreFrontEnd.lean`), and `coreArtifact_declarative` reaches the
+  pinned grammar `Bmodule` through `Wasm.decode_sound`, which `xtask
+  independence` checks is not a statement about an encoder.
+* `Wasm.Core.Module.ValidUnder` is the conjunction SPEC §7.2 asks for:
+  well-typedness in the amended Core 3.0 judgment, AND admission by the
+  profile's own feature matrix, limit table, closed import policy and exported
+  ABI.
+* **`Universal.ProfileValid` does not range over these bytes.**  That predicate
+  still decodes with `Wasm.Subset.decode`; it is the competitor universe, and
+  moving it needs the Core execution layer (`Wasm.Config`, `Wasm.Step`,
+  `Wasm.initialGemmInvocationCosted`), which `Wasm/Core/` does not have.
+  `coreArtifact_profileValid_spec_reading` below therefore states SPEC §10.1's
+  *own* reading — the one whose decoder is `Wasm.decode` — and discharges it on
+  this artifact, without claiming it of `Universal.ProfileValid`.
+* Nothing here says these are the bytes the release path SELECTS.
+  `Release.artifactBytes` does not exist; selection is open. -/
+
+/-- **The released Core 3.0 artifact bytes.**  A 53-byte literal of the pinned
+binary format (`Wasm/CoreArtifact.lean`). -/
+def coreArtifactBytes : ByteArray := Wasm.Core.releaseArtifactBytes
+
+/-- The module those bytes denote: the released ABI shape of SPEC §7.2 in the
+pinned Core 3.0 abstract syntax. -/
+def coreArtifactModule : Wasm.Core.Module := Wasm.Core.releaseBaselineModule
+
+/-- **SPEC §7.3.**  The pinned Core 3.0 decoder accepts the released bytes and
+returns exactly that module. -/
+theorem coreArtifact_decode :
+    Wasm.decode coreArtifactBytes = .ok coreArtifactModule :=
+  Wasm.Core.decode_releaseArtifactBytes
+
+/-- **SPEC §7.3.**  The released bytes are derivable in the pinned Core 3.0
+binary grammar, with the released module as the derived value. -/
+theorem coreArtifact_declarative :
+    Wasm.DeclarativeBinaryRelation coreArtifactBytes coreArtifactModule :=
+  Wasm.Core.releaseArtifactBytes_declarative
+
+/-- **SPEC §7.2.**  The released profile admits the released Core 3.0 module. -/
+theorem coreArtifact_admitted :
+    Wasm.Core.Module.AdmittedBy wasmProfile coreArtifactModule :=
+  Wasm.Core.releaseArtifactBytes_admitted wasmProfile
+
+/-- **SPEC §7.2.**  The released Core 3.0 module is valid under the released
+profile: well typed in the amended Core 3.0 judgment, and admitted. -/
+theorem coreArtifact_validUnder :
+    Wasm.Core.Module.ValidUnder wasmProfile coreArtifactModule :=
+  Wasm.Core.releaseArtifactBytes_validUnder wasmProfile
+
+/-- The released Core 3.0 module declares no import: the release profile is
+closed and the module obeys it. -/
+theorem coreArtifact_imports : coreArtifactModule.imports = [] := rfl
+
+/-- The released Core 3.0 module carries exactly the two exports SPEC §7.2
+requires, and no others. -/
+theorem coreArtifact_exports :
+    coreArtifactModule.exports =
+      [ { name := Wasm.Core.memoryExportName, externidx := .mem Wasm.Core.idx0 }
+      , { name := Wasm.Core.gemmExportName, externidx := .func Wasm.Core.idx0 } ] :=
+  rfl
+
+/--
+  **SPEC §10.1's `ProfileValid`, in SPEC's own spelling, discharged on the
+  released Core 3.0 artifact.**
+
+  SPEC §10.1 writes the predicate as
+
+      ∃ module, Wasm.decode bytes = .ok module ∧
+                Wasm.validateUnder P module = true ∧
+                module.imports = [] ∧ HasExactGemmExports P module
+
+  and `Wasm.decode` is the pinned Core 3.0 decoder.  This theorem is that
+  conjunction, with `Wasm.Core.Module.ValidUnder` for the validity clause and
+  `Module.exportsAdmittedBy` for the ABI clause — the Core 3.0 readings of the
+  two, from `Wasm/Core/ProfileAmendment.lean` and `Wasm/Core/Profile.lean`.
+
+  It is **not** `Universal.ProfileValid`, and it is not offered as a discharge
+  of it: that definition decodes with `Wasm.Subset.decode` and is the predicate
+  the competitor universe and `GlobalOptimal` actually quantify over.  What this
+  theorem establishes is that SPEC's reading is *satisfiable by a concrete byte
+  string in this repository* — which, before `Wasm/CoreArtifact.lean`, no
+  declaration here could say.
+-/
+theorem coreArtifact_profileValid_spec_reading :
+    ∃ m : Wasm.Core.Module,
+      Wasm.decode coreArtifactBytes = .ok m ∧
+        Wasm.Core.Module.ValidUnder wasmProfile m ∧
+        m.imports = [] ∧
+        Wasm.Core.Module.exportsAdmittedBy wasmProfile m = true :=
+  ⟨coreArtifactModule, coreArtifact_decode, coreArtifact_validUnder,
+   coreArtifact_imports, by
+     have h := coreArtifact_admitted
+     unfold Wasm.Core.Module.AdmittedBy Wasm.Core.Module.admittedBy at h
+     simp only [Bool.and_eq_true] at h
+     exact h.2⟩
 
 /-! ### 1.2 The problem (SPEC §8.3) -/
 
@@ -860,7 +984,7 @@ theorem witnessModule_validate : Wasm.validate witnessModule = true :=
   GNAF.validate_moduleOf witnessEnv witnessBody rfl
 
 /-- The witness bytes decode back to the witness module. -/
-theorem witness_decode : Wasm.decode witnessBytes = .ok witnessModule :=
+theorem witness_decode : Wasm.Subset.decode witnessBytes = .ok witnessModule :=
   Artifact.decode_emit witnessModule
 
 /-- **SPEC §7.2.**  Every index-space population of the witness module is inside
@@ -1318,7 +1442,7 @@ theorem gemmKernelModule_validate : Wasm.validate gemmKernelModule = true :=
   GNAF.gemmKernel_compiles
 
 /-- The kernel bytes decode back to the kernel module. -/
-theorem gemmKernel_decode : Wasm.decode gemmKernelBytes = .ok gemmKernelModule :=
+theorem gemmKernel_decode : Wasm.Subset.decode gemmKernelBytes = .ok gemmKernelModule :=
   Artifact.decode_emit gemmKernelModule
 
 /-- **SPEC §7.2.**  Every index-space population of the compiled kernel is

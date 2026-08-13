@@ -39,7 +39,7 @@
 
   `release_decoder_leaves_core` closes the obvious escape --- "the bad modules
   are unreachable, so a map defined on the decoder's image would do".  They are
-  reachable: `Wasm.decode` really does return `gapIndexModule`, because
+  reachable: `Wasm.Subset.decode` really does return `gapIndexModule`, because
   `Wasm/Binary.lean`'s `decULEB` is *unbounded*.  It reads LEB128 groups until a
   byte below `0x80` and multiplies up in `Nat`, with no width test at all,
   whereas the pinned `Bu32` of `5.1-binary.values.spectec` admits at most five
@@ -62,8 +62,8 @@
 
   ## What this file does NOT claim
 
-  It does not claim the old model is unsound, nor that `Wasm.decode` is wrong
-  about any byte string both decoders accept.  It claims exactly one thing: the
+  It does not claim the old model is unsound, nor that `Wasm.Subset.decode` is
+  wrong about any byte string both decoders accept.  It claims exactly one thing: the
   function `Wasm.Module -> Wasm.Core.Module` that a bridge would need does not
   exist, so `Wasm.Module` has to go.
 
@@ -174,9 +174,9 @@ reach: the release decoder returns it, from bytes the release encoder produces.
 No Core function carries its type index.  A bridge defined only on the decoder's
 image would therefore still have to be partial. -/
 theorem release_decoder_leaves_core :
-    decode (encode gapIndexModule) = .ok gapIndexModule ∧
+    Subset.decode (Subset.encode gapIndexModule) = .ok gapIndexModule ∧
       ∀ g : Core.Func, g.typeidx.val ≠ 2 ^ 32 :=
-  ⟨encode_decode_roundtrip gapIndexModule, fun g => Nat.ne_of_lt g.typeidx.property⟩
+  ⟨Subset.encode_decode_roundtrip gapIndexModule, fun g => Nat.ne_of_lt g.typeidx.property⟩
 
 /-! ## 5. What the migration costs on the artifact side
 

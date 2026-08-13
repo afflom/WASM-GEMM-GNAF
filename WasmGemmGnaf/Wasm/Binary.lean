@@ -3203,7 +3203,23 @@ def moduleC : Codec Module :=
         p.2.2.2.2.2.2.2.2.2.1, p.2.2.2.2.2.2.2.2.2.2⟩)
       (fun _ => rfl) (fun _ => rfl))
 
-/-! ## `Wasm.encode` and `Wasm.decode` -/
+/-! ## The SUBSET codec: `Wasm.Subset.encode` and `Wasm.Subset.decode`
+
+These used to be `Wasm.encode` and `Wasm.decode`.  They are not any more, and
+the rename is the point.  SPEC section 7.2 asks for a decoder that "SHALL
+recognize the complete pinned Core 3.0 binary grammar"; the codec below
+recognizes the eleven-section, canonical-LEB128, custom-section-free subset
+this file's header describes, and `Wasm/CoreGap.lean` proves it accepts modules
+the pinned syntax cannot even express.  The public names `Wasm.decode` and
+`Wasm.DeclarativeBinaryRelation` now denote the Core 3.0 decoder and the pinned
+binary grammar (`Wasm/CoreFrontEnd.lean`), so a reader who sees `Wasm.decode`
+in a SPEC section 15 theorem is looking at the pinned format and not at this.
+
+Everything here is still proved and still used: `Artifact/Emit.lean` and the
+competitor universe of `Universal/` are built on this codec, and they now say
+so in their types. -/
+
+namespace Subset
 
 /-- The canonical byte-list encoding of a module. -/
 def encodeList (m : Module) : List UInt8 := moduleC.enc m
@@ -3334,5 +3350,7 @@ theorem decode_empty : decode ByteArray.empty = .error .badMagic := by
     simp [Bytes.byteArray_toList]
   rw [h]
   rfl
+
+end Subset
 
 end WasmGemmGnaf.Wasm

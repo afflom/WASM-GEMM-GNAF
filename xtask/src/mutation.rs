@@ -1150,15 +1150,49 @@ mod tests {
 // avoid.
 // ---------------------------------------------------------------------------
 fn m16(root: &Path) -> Result<bool> {
-    // The real table must reject exactly the three known-circular names. If the
-    // rule stops firing, this half goes red.
-    let real = crate::independence::report(root)?;
-    let rejects_known = real.rejected()
-        == vec![
-            "Wasm.decode_complete".to_string(),
-            "Wasm.decode_sound".to_string(),
-            "Wasm.validate_iff_declarative".to_string(),
-        ];
+    // The real table must still be ANSWERABLE by the compiled environment:
+    // `report` errors when a `#print` goes unanswered, so an entry naming a
+    // declaration that has been renamed or deleted turns this row red instead
+    // of passing for want of a match. That is the failure mode this half is
+    // for, and it is the one the check itself carried until this tranche --
+    // `declarativeBinaryRelation_iff_encode` was listed unqualified and so was
+    // never matched, because `.` is an identifier character.
+    //
+    // What this half deliberately does NOT do any more: assert that the real
+    // table rejects one particular set of names. It used to assert exactly
+    // `[decode_complete, decode_sound, validate_iff_declarative]`, which made
+    // the falsifier a snapshot of the defect rather than a test of the rule --
+    // REPAIRING a circularity turned M16 red, which is precisely backwards.
+    // `Wasm.decode_sound` and `Wasm.decode_complete` were repaired by being
+    // re-pointed at `Wasm.Core`; the planted half below is what shows the rule
+    // still fires, and it does so independently of how many names are currently
+    // circular.
+    let _real = crate::independence::report(root)?;
+
+    // PLANTED CIRCULARITY. Each entry forbids a name the compiled environment
+    // really does print for the declaration named: the proof term of
+    // `Wasm.decode_sound` cites `Wasm.Core.decode_sound`, and the definition of
+    // `Wasm.DeclarativeBinaryRelation` cites `Wasm.Core.Binary.Bmodule`. Both
+    // must be found, one through the `proof term` path and one through the
+    // `definition` path, so a checker that inspected only one of the two would
+    // fail this half.
+    const PLANTED: &[crate::independence::Entry] = &[
+        crate::independence::Entry {
+            required: "WasmGemmGnaf.Wasm.decode_sound",
+            declarative: "WasmGemmGnaf.Wasm.DeclarativeBinaryRelation",
+            forbidden: &["WasmGemmGnaf.Wasm.Core.decode_sound"],
+            why: "planted: the proof term really does cite this name",
+        },
+        crate::independence::Entry {
+            required: "WasmGemmGnaf.Wasm.decode_complete",
+            declarative: "WasmGemmGnaf.Wasm.DeclarativeBinaryRelation",
+            forbidden: &["WasmGemmGnaf.Wasm.Core.Binary.Bmodule"],
+            why: "planted: the declarative definition really does cite this name",
+        },
+    ];
+    let planted = crate::independence::report_over(root, PLANTED)?;
+    let rejects_known = planted.rejected()
+        == vec!["Wasm.decode_complete".to_string(), "Wasm.decode_sound".to_string()];
 
     // The control: the SAME declarations, with nothing forbidden, must produce
     // no finding. Without this the half above would also pass a checker that

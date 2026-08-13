@@ -57,14 +57,24 @@ pub struct Entry {
 }
 
 const ENTRIES: &[Entry] = &[
+    // The subset codec that made these two circular is now `Wasm.Subset.*`,
+    // and `Wasm.decode` / `Wasm.DeclarativeBinaryRelation` are the Core 3.0
+    // decoder and the pinned grammar `Wasm.Core.Binary.Bmodule`. Every
+    // forbidden name below is spelled at its CURRENT fully qualified spelling:
+    // a stale spelling would make the obligation pass for want of a match,
+    // which is how `declarativeBinaryRelation_iff_encode` -- written here
+    // unqualified, and therefore never matched, because `.` is an identifier
+    // character -- was dead before this tranche.
     Entry {
         required: "WasmGemmGnaf.Wasm.decode_sound",
         declarative: "WasmGemmGnaf.Wasm.DeclarativeBinaryRelation",
         forbidden: &[
-            "WasmGemmGnaf.Wasm.encode",
-            "WasmGemmGnaf.Wasm.decode_is_encode",
-            "WasmGemmGnaf.Wasm.encode_decode_roundtrip",
-            "declarativeBinaryRelation_iff_encode",
+            "WasmGemmGnaf.Wasm.Subset.encode",
+            "WasmGemmGnaf.Wasm.Subset.encodeList",
+            "WasmGemmGnaf.Wasm.Subset.decode",
+            "WasmGemmGnaf.Wasm.Subset.decode_is_encode",
+            "WasmGemmGnaf.Wasm.Subset.encode_decode_roundtrip",
+            "WasmGemmGnaf.Wasm.Subset.declarativeBinaryRelation_iff_encode",
         ],
         why: "a decoder proved inverse to its own encoder says nothing about the pinned \
               binary format",
@@ -73,10 +83,12 @@ const ENTRIES: &[Entry] = &[
         required: "WasmGemmGnaf.Wasm.decode_complete",
         declarative: "WasmGemmGnaf.Wasm.DeclarativeBinaryRelation",
         forbidden: &[
-            "WasmGemmGnaf.Wasm.encode",
-            "WasmGemmGnaf.Wasm.decode_is_encode",
-            "WasmGemmGnaf.Wasm.encode_decode_roundtrip",
-            "declarativeBinaryRelation_iff_encode",
+            "WasmGemmGnaf.Wasm.Subset.encode",
+            "WasmGemmGnaf.Wasm.Subset.encodeList",
+            "WasmGemmGnaf.Wasm.Subset.decode",
+            "WasmGemmGnaf.Wasm.Subset.decode_is_encode",
+            "WasmGemmGnaf.Wasm.Subset.encode_decode_roundtrip",
+            "WasmGemmGnaf.Wasm.Subset.declarativeBinaryRelation_iff_encode",
         ],
         why: "same: completeness against one's own encoder is a round-trip lemma, not a \
               statement about Core 3.0",

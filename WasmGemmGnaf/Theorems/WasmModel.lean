@@ -53,6 +53,7 @@
   `costed_initialization_erase_error`).  None of the three is re-indexed here.
 -/
 import WasmGemmGnaf.Wasm.Binary
+import WasmGemmGnaf.Wasm.CoreFrontEnd
 import WasmGemmGnaf.Wasm.Declarative
 import WasmGemmGnaf.Wasm.Validate
 import WasmGemmGnaf.Wasm.Step
@@ -66,39 +67,50 @@ set_option autoImplicit false
 
 namespace WasmGemmGnaf.Theorems
 
-/-! ## Binary format: decode/encode round trip -/
+/-! ## The SUBSET codec: decode/encode round trip
+
+These three are about `Wasm.Subset`, the codec of `Wasm/Binary.lean`.  They are
+NOT the SPEC §15 front-end theorems: `Artifact/Emit.lean` and the competitor
+universe of `Universal/` are built on this codec, so its properties are still
+load-bearing, but they say nothing about the pinned Core 3.0 format. -/
 
 /-- **Round trip.**  Decoding an encoded module returns exactly that module. -/
-theorem encode_decode_roundtrip (m : Wasm.Module) :
-    Wasm.decode (Wasm.encode m) = .ok m :=
-  Wasm.encode_decode_roundtrip m
+theorem subset_encode_decode_roundtrip (m : Wasm.Module) :
+    Wasm.Subset.decode (Wasm.Subset.encode m) = .ok m :=
+  Wasm.Subset.encode_decode_roundtrip m
 
-/-- **Decoder soundness.**  A byte string that decodes at all is the encoding of
-the module it decodes to, so a malformed input never yields a wrong module. -/
-theorem decode_is_encode {b : ByteArray} {m : Wasm.Module}
-    (h : Wasm.decode b = .ok m) : b = Wasm.encode m :=
-  Wasm.decode_is_encode h
+/-- **Subset decoder soundness.**  A byte string that decodes at all is the
+encoding of the module it decodes to, so a malformed input never yields a wrong
+module. -/
+theorem subset_decode_is_encode {b : ByteArray} {m : Wasm.Module}
+    (h : Wasm.Subset.decode b = .ok m) : b = Wasm.Subset.encode m :=
+  Wasm.Subset.decode_is_encode h
 
-/-- **Decoder totality.**  Every byte string either produces a typed fault or
-produces the unique module whose encoding it is. -/
-theorem decode_error_or_encode (b : ByteArray) :
-    (∃ f : Wasm.DecodeFault, Wasm.decode b = .error f) ∨
-    (∃ m : Wasm.Module, Wasm.decode b = .ok m ∧ b = Wasm.encode m) :=
-  Wasm.decode_error_or_encode b
+/-- **Subset decoder totality.**  Every byte string either produces a typed
+fault or produces the unique module whose encoding it is. -/
+theorem subset_decode_error_or_encode (b : ByteArray) :
+    (∃ f : Wasm.DecodeFault, Wasm.Subset.decode b = .error f) ∨
+    (∃ m : Wasm.Module, Wasm.Subset.decode b = .ok m ∧ b = Wasm.Subset.encode m) :=
+  Wasm.Subset.decode_error_or_encode b
 
-/-! ## Binary format: the declarative grammar -/
+/-! ## Binary format: the pinned Core 3.0 grammar
 
-/-- **SPEC §15, `Wasm.decode_sound`.**  Everything the executable decoder
-accepts is derivable in `Wasm.DeclarativeBinaryRelation`, the relational reading
-of the pinned binary grammar defined in `Wasm/Declarative.lean`. -/
-theorem decode_sound {b : ByteArray} {m : Wasm.Module}
+`Wasm.decode` is the Core 3.0 decoder of `Wasm/Core/Decode.lean` and
+`Wasm.DeclarativeBinaryRelation` is the pinned binary grammar
+`Wasm.Core.Binary.Bmodule`; see `Wasm/CoreFrontEnd.lean` for why the names
+moved. -/
+
+/-- **SPEC §15, `Wasm.decode_sound`.**  Everything the executable Core 3.0
+decoder accepts is derivable in `Wasm.DeclarativeBinaryRelation`, the pinned
+binary grammar transcribed in `Wasm/Core/BinaryGrammar/`. -/
+theorem decode_sound {b : ByteArray} {m : Wasm.Core.Module}
     (h : Wasm.decode b = .ok m) : Wasm.DeclarativeBinaryRelation b m :=
   Wasm.decode_sound h
 
 /-- **SPEC §15, `Wasm.decode_complete`.**  Everything derivable in
-`Wasm.DeclarativeBinaryRelation` the executable decoder accepts, returning
-exactly the module the derivation synthesized. -/
-theorem decode_complete {b : ByteArray} {m : Wasm.Module}
+`Wasm.DeclarativeBinaryRelation` the executable Core 3.0 decoder accepts,
+returning exactly the module the derivation synthesized. -/
+theorem decode_complete {b : ByteArray} {m : Wasm.Core.Module}
     (h : Wasm.DeclarativeBinaryRelation b m) : Wasm.decode b = .ok m :=
   Wasm.decode_complete h
 

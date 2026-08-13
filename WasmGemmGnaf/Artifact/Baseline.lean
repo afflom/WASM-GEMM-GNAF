@@ -29,8 +29,8 @@
   **`Artifact.baseline_profileValid`** proves conjunct (a) for it, outright and
   with no hypothesis:
 
-  * `Wasm.decode baselineBytes = .ok baselineModule` — `Artifact.decode_emit`,
-    which is `Wasm.encode_decode_roundtrip`;
+  * `Wasm.Subset.decode baselineBytes = .ok baselineModule` — `Artifact.decode_emit`,
+    which is `Wasm.Subset.encode_decode_roundtrip`;
   * `Universal.validateUnder Release.wasmProfile baselineModule = true` — the
     release validator from `GNAF.gemmWitness_compiles`, and the profile's
     first-order limit table by `decide` (every count in the emitted module is
@@ -162,13 +162,13 @@ A closed term of type `ByteArray`: no parameter, no choice, no axiom. -/
 def baselineBytes : ByteArray := emit baselineModule
 
 /-- The baseline bytes decode back to the baseline module. -/
-theorem baseline_decode : Wasm.decode baselineBytes = .ok baselineModule :=
+theorem baseline_decode : Wasm.Subset.decode baselineBytes = .ok baselineModule :=
   decode_emit baselineModule
 
 /-- The baseline bytes are the *only* bytes that decode to the baseline module,
 so "the baseline artifact" names one byte string and not a class of them. -/
 theorem baseline_bytes_unique {b : ByteArray}
-    (h : Wasm.decode b = .ok baselineModule) : b = baselineBytes :=
+    (h : Wasm.Subset.decode b = .ok baselineModule) : b = baselineBytes :=
   emit_bytes_unique h baseline_decode
 
 /--
@@ -178,12 +178,35 @@ theorem baseline_bytes_unique {b : ByteArray}
   theorem here.  For orientation only, and explicitly **not** a theorem:
   `#eval baselineBytes.size` reports `3798`, so the term is genuinely
   executable rather than a phantom — but the kernel does not reduce
-  `Wasm.encode`, `by rfl` on that equation fails, and no declaration in this
+  `Wasm.Subset.encode`, `by rfl` on that equation fails, and no declaration in this
   file depends on the number.
 -/
 theorem baseline_magicPrefix :
     ∃ t : List UInt8, baselineBytes.toList = Wasm.magicBytes ++ t :=
   emit_prefix baselineModule
+
+/-!
+### The baseline bytes are NOT pinned Core 3.0 bytes — a measurement, not a theorem
+
+The preamble above is the only thing `baselineBytes` shares with the pinned
+binary format.  `#eval Wasm.decode baselineBytes` — the decoder of the complete
+Core 3.0 grammar, from `Wasm/CoreFrontEnd.lean` — reports
+`.error Wasm.Core.Decode.Fault.opcode`: `Wasm.Subset.encode` writes its own
+section payloads, and the pinned grammar does not recognize them.
+
+That is recorded here as a **measurement** and deliberately not as a theorem.
+The kernel does not reduce `Wasm.Subset.encode` (the same reason
+`baselineBytes.size = 3798` is not provable by `rfl` above), so no `rfl` or
+`decide` closes the corresponding equation, and nothing in this file depends on
+it.
+
+It is recorded because it prices the migration: moving `Universal.ProfileValid`
+onto `Wasm.decode` would not merely re-type the predicate, it would make the
+current baseline artifact fall out of the competitor universe entirely.
+`Release.coreArtifactBytes` in `Artifact/Release.lean` is the byte string that
+*is* in the pinned format, together with the released profile's verdict on the
+module it denotes.
+-/
 
 /-! ## 2. The baseline module passes release validation under the profile -/
 
@@ -284,7 +307,7 @@ theorem baseline_profileValid :
 /-- The same fact in the unpacked form `Universal.profileValid_module` returns. -/
 theorem baseline_profileValid_module :
     ∃ module : Wasm.Module,
-      Wasm.decode baselineBytes = .ok module ∧
+      Wasm.Subset.decode baselineBytes = .ok module ∧
       Universal.validateUnder Release.wasmProfile module = true ∧
       module.imports = [] ∧
       Universal.HasExactGemmExports Release.wasmProfile module :=

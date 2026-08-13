@@ -20,7 +20,7 @@ use std::process::Command;
 
 use crate::json::Value;
 use crate::spec::{Outcome, Result, SpecError};
-use crate::{firewall, json, lean, manifest, repo, required, sha256, vendor};
+use crate::{amendment, firewall, json, lean, manifest, repo, required, sha256, vendor};
 
 const CLAUSE: &str = "20.2";
 
@@ -137,6 +137,21 @@ pub fn run(root: &Path, no_mutation: bool) -> Result<Outcome> {
         "Lean vendored-tree literals match the vendored content",
         binding.is_ok(),
         &clip(&binding.findings.join("; "), 200),
+    );
+
+    // SPEC 7.3, AMD-005 / DEV-006: the same discipline for the recorded grammar
+    // amendment. `Wasm/Core/ProfileAmendment.lean` discharges every property the
+    // record claims that Lean can state; this checks the half Lean cannot -- the
+    // digest of the vendored SpecTec source the defect is in, the SHA256SUMS
+    // entry for it, that the pin was NOT advanced to upstream's repair, and that
+    // the amended module declares the recorded relation and inflates no coverage
+    // inventory.
+    let amended = amendment::binding(root)?;
+    g.check(
+        "1",
+        "the recorded grammar amendment matches the pinned source and the pin",
+        amended.is_ok(),
+        &clip(&amended.findings.join("; "), 200),
     );
 
     // ---- 2. claim graph -----------------------------------------------------

@@ -226,7 +226,7 @@ variable [Foundation.Fintype (Gemm.RawInvocation P)]
 /--
   **Evaluation uniqueness.**  `SystemEvaluation S bytes` is a subsingleton.
 
-  `module` is pinned by `decodeEq` because `Wasm.decode` is a function;
+  `module` is pinned by `decodeEq` because `Wasm.Subset.decode` is a function;
   `perInput` is pinned pointwise by `inputEvaluation_subsingleton` and
   `funext`; `observationsComplete` and `costExact` are proofs, hence
   proof-irrelevant; and `cost` is pinned by `Cost.exact_unique` applied to the

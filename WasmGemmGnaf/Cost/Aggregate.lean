@@ -255,7 +255,7 @@ theorem le_fullDomainMax {Raw : Type} [Foundation.Fintype Raw]
 /--
   SPEC 9.1, `Cost.ExactAggregateCost`.
 
-  `decodes` stands for the decode equation `Wasm.decode bytes = .ok module`,
+  `decodes` stands for the decode equation `Wasm.Subset.decode bytes = .ok module`,
   and `decodeSteps`, `validationSteps`, `staticDataBytes` stand for
   `Wasm.decodeCost P.costTableBody bytes`,
   `Wasm.validationCost P.costTableBody module` and

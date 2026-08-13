@@ -240,7 +240,7 @@ theorem compile_body_reachable (c : CheckedPlan s t) (raw : Wasm.RawInvocation)
 /-- The emitted artifact of a compiled plan decodes back to exactly the
 compiled module. -/
 theorem compile_decode_emit (c : CheckedPlan s t) :
-    Wasm.decode (Artifact.emit (compile c)) = .ok (compile c) :=
+    Wasm.Subset.decode (Artifact.emit (compile c)) = .ok (compile c) :=
   Artifact.decode_emit _
 
 /-- Compiled modules with distinct emitted bytes are distinct modules, and
@@ -254,7 +254,7 @@ theorem compile_emit_injective {c c' : CheckedPlan s t}
 release validation. -/
 theorem compile_emit_decodes_valid (c : CheckedPlan s t) :
     ∃ m : Wasm.Module,
-      Wasm.decode (Artifact.emit (compile c)) = .ok m ∧ Wasm.validate m = true :=
+      Wasm.Subset.decode (Artifact.emit (compile c)) = .ok m ∧ Wasm.validate m = true :=
   ⟨compile c, compile_decode_emit c, compile_validates c⟩
 
 /-! ## The anti-vacuity GEMM witness (SPEC §8.3)
@@ -481,7 +481,7 @@ theorem gemmWitness_no_unreachable :
 /-- The emitted artifact of the witness decodes back to a module that passes
 release validation. -/
 theorem gemmWitness_emit_decodes_valid :
-    Wasm.decode (Artifact.emit (compile gemmWitnessChecked)) =
+    Wasm.Subset.decode (Artifact.emit (compile gemmWitnessChecked)) =
         .ok (compile gemmWitnessChecked) ∧
       Wasm.validate (compile gemmWitnessChecked) = true :=
   ⟨compile_decode_emit _, gemmWitness_compiles⟩

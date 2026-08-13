@@ -82,10 +82,20 @@ def HasExactGemmExports (_P : Wasm.Profile) (m : Wasm.Module) : Prop :=
   Wasm.Module.checkGemmExport m = true ∧
   ∀ e ∈ m.exports, e.name = Wasm.gemmExportName ∨ e.name = Wasm.memoryExportName
 
-/-- **SPEC §10.1**, `Universal.ProfileValid`.  Quantifier-for-quantifier. -/
+/-- **SPEC §10.1**, `Universal.ProfileValid`.  Quantifier-for-quantifier.
+
+SCOPE, and it is load-bearing for every "universal" claim downstream: the
+decoder here is `Wasm.Subset.decode`, the codec of `Wasm/Binary.lean`, not the
+pinned Core 3.0 decoder `Wasm.decode` of `Wasm/CoreFrontEnd.lean`.  The
+competitor universe is therefore the byte strings that decode under the SUBSET
+grammar into the subset syntax of `Wasm/Syntax.lean`.  That was already true
+before the front-end migration; what changed is that the type now says so
+instead of the name `Wasm.decode` implying the pinned format.  Migrating this
+predicate to the Core decoder is a separate step and would change what the
+release theorem quantifies over. -/
 def ProfileValid (P : Wasm.Profile) (bytes : ByteArray) : Prop :=
   ∃ module : Wasm.Module,
-    Wasm.decode bytes = .ok module ∧
+    Wasm.Subset.decode bytes = .ok module ∧
     validateUnder P module = true ∧
     module.imports = [] ∧
     HasExactGemmExports P module
@@ -289,7 +299,7 @@ structure SystemEvaluation (S : Setting P) (bytes : ByteArray) where
   /-- The decoded module. -/
   module : Wasm.Module
   /-- It is exactly what `bytes` decodes to. -/
-  decodeEq : Wasm.decode bytes = .ok module
+  decodeEq : Wasm.Subset.decode bytes = .ok module
   /-- One input evaluation for *every* raw invocation. -/
   perInput : ∀ raw : Gemm.RawInvocation P, InputEvaluation S module raw
   /-- Each of them covers every maximal execution. -/
@@ -298,7 +308,7 @@ structure SystemEvaluation (S : Setting P) (bytes : ByteArray) where
   cost : Cost.CompleteSystemCost
   /-- It is the exact aggregate of SPEC §9.1. -/
   costExact :
-    Cost.ExactAggregateCost bytes (Wasm.decode bytes = .ok module)
+    Cost.ExactAggregateCost bytes (Wasm.Subset.decode bytes = .ok module)
       (P.body.costTableBody.decodeCost bytes)
       (S.semantics.validationSteps module)
       (S.semantics.staticDataBytes module)
@@ -350,7 +360,7 @@ def StartsCostedInvocation (S : Setting P) (bytes : ByteArray)
     (initialization : InitializationObservation P) (initial : Wasm.Config) :
     Prop :=
   ∃ module : Wasm.Module,
-    Wasm.decode bytes = .ok module ∧
+    Wasm.Subset.decode bytes = .ok module ∧
     validateUnder P module = true ∧
     S.machine.initialGemmInvocationCosted module (toWasmInvocation raw) =
       .ok initialization ∧
@@ -566,14 +576,14 @@ theorem semanticWithinResourcesAt_charge {S : Setting P} {bytes : ByteArray}
 theorem profileValid_module {P : Wasm.Profile} {bytes : ByteArray}
     (h : ProfileValid P bytes) :
     ∃ module : Wasm.Module,
-      Wasm.decode bytes = .ok module ∧ validateUnder P module = true ∧
+      Wasm.Subset.decode bytes = .ok module ∧ validateUnder P module = true ∧
       module.imports = [] ∧ HasExactGemmExports P module :=
   h
 
 /-- `ProfileValid` is decode-functional: the module it names is unique. -/
 theorem profileValid_module_unique {bytes : ByteArray}
-    {a b : Wasm.Module} (ha : Wasm.decode bytes = .ok a)
-    (hb : Wasm.decode bytes = .ok b) : a = b := by
+    {a b : Wasm.Module} (ha : Wasm.Subset.decode bytes = .ok a)
+    (hb : Wasm.Subset.decode bytes = .ok b) : a = b := by
   rw [ha] at hb
   exact (Except.ok.injEq _ _ ▸ hb).symm ▸ rfl
 

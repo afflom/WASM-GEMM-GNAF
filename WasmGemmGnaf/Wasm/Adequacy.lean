@@ -69,7 +69,22 @@
      environment, but Lean cannot check --- without metaprogramming, which this
      development does not use --- that the *string* `"Step.nop"` names the
      declaration `Step.nop`.  That correspondence is by review.
-  3. **NARROWED, NOT CLOSED --- coverage is relative to this enumeration.**
+  3. **THE MAP IS NOT MIGRATED --- one row of it is.**  `binary-module` maps to
+     `WasmGemmGnaf.Wasm.decode`, which since the front-end migration IS the
+     pinned Core 3.0 decoder of `Wasm/Core/Decode.lean`.  Every OTHER row still
+     names a declaration of the i32 subset model (`InstrTyping.*`, `Step.*`,
+     `Store.*`, `TableInst.*`, `V128.*`), which is a strictly narrower language
+     than the pinned one.  So `profile_matches_pinned_revision` is, today, a
+     one-to-one property of a map from pinned rule identifiers to declarations
+     that are mostly NOT the mechanized Core 3.0 rules of `Wasm/Core/`.  It says
+     what it says --- the map is total, injective and identity-bound to the
+     vendored revision on the enabled set --- and it does not say that the
+     mapped declarations are the Core 3.0 semantics.  Re-pointing the remaining
+     rows is a migration step, not an edit: each row needs the Core declaration
+     that actually transcribes its vendored rule, and guessing one would be
+     worse than the disclosure.
+
+  4. **NARROWED, NOT CLOSED --- coverage is relative to this enumeration.**
      Every "total" and "complete" theorem below quantifies over
      `PinnedCoreRuleId`, which is the list written in this file.  Each enabled
      identifier now also records the reStructuredText anchor of the vendored
@@ -92,6 +107,7 @@
   Every declaration in this file is proved.  Nothing is assumed.
 -/
 import WasmGemmGnaf.Wasm.Binary
+import WasmGemmGnaf.Wasm.CoreFrontEnd
 import WasmGemmGnaf.Wasm.Run
 import WasmGemmGnaf.Wasm.Table
 import WasmGemmGnaf.Wasm.Vector

@@ -72,6 +72,7 @@
   reads, rather than looking like a binding somebody forgot to write.  Neither
   can inflate a number: only `spec-signature` counts.
 -/
+import WasmGemmGnaf.Wasm.CoreFrontEnd
 import WasmGemmGnaf.Wasm.Declarative
 import WasmGemmGnaf.Wasm.Soundness
 import WasmGemmGnaf.Wasm.Step
@@ -114,10 +115,20 @@ theorem decode_sound
 
 No deviation: `bytes` and `module` are auto-bound implicits in SPEC's spelling
 and explicit implicits here.
+
+TYPE OF `module`, disclosed because it MOVED.  SPEC leaves `module` auto-bound
+and states no type for it; §7.2 fixes the reading — "The decoder SHALL recognize
+the complete pinned Core 3.0 binary grammar" — so `module` is a
+`Wasm.Core.Module` and `Wasm.decode` is the Core 3.0 decoder of
+`Wasm/Core/Decode.lean`.  Until this tranche both denoted the SUBSET codec of
+`Wasm/Binary.lean`, and `xtask independence` demoted this name as CIRCULAR
+because the subset proof routed through the subset encoder.  The subset codec
+survives as `Wasm.Subset.*`; nothing in the import graph of this theorem
+contains an encoder.
 -/
 -- spec-signature: Wasm.decode_sound
 theorem decode_sound_signature :
-    ∀ {bytes : ByteArray} {module : Wasm.Module},
+    ∀ {bytes : ByteArray} {module : Wasm.Core.Module},
       Wasm.decode bytes = .ok module → Wasm.DeclarativeBinaryRelation bytes module :=
   @Wasm.decode_sound
 
@@ -130,11 +141,12 @@ theorem decode_complete
   Wasm.decode bytes = .ok module
 ```
 
-No deviation.
+No deviation.  `module` is a `Wasm.Core.Module` for the reason recorded on
+`decode_sound_signature` above.
 -/
 -- spec-signature: Wasm.decode_complete
 theorem decode_complete_signature :
-    ∀ {bytes : ByteArray} {module : Wasm.Module},
+    ∀ {bytes : ByteArray} {module : Wasm.Core.Module},
       Wasm.DeclarativeBinaryRelation bytes module → Wasm.decode bytes = .ok module :=
   @Wasm.decode_complete
 
@@ -738,12 +750,27 @@ theorem normalize_cost_le_signature :
 theorem decode_emit : Wasm.decode (Artifact.emit m) = .ok m
 ```
 
-No deviation: `m` is auto-bound in SPEC's spelling and universally quantified
-here.
+WEAKER, and this is a DEMOTION recorded rather than repaired.  `m` is auto-bound
+in SPEC's spelling and universally quantified here.  The gap is `Wasm.decode`:
+SPEC §7.2 fixes it as the decoder of the complete pinned Core 3.0 binary
+grammar, and since this tranche `Wasm.decode` IS that decoder.  `Artifact.emit`
+is `Wasm.Subset.encode`, a canonical encoder for the SUBSET syntax of
+`Wasm/Syntax.lean`, so the equation this file can bind is the one about
+`Wasm.Subset.decode`.
+
+Why not repair it here: `Wasm.decode (Artifact.emit m) = .ok m` over the Core
+decoder needs a Core 3.0 ENCODER with a `Bmodule` derivation for every module,
+and this repository has none — `Wasm/Core/` contains no encoder at all, which is
+also what makes `Wasm.decode_sound` and `Wasm.decode_complete` non-circular.
+`Wasm/CoreGap.lean` proves in addition that no total map
+`Wasm.Module → Wasm.Core.Module` exists, so the subset emitter cannot be
+transported along one either.  Writing that encoder is the next step; asserting
+the equation without it, or quietly rebinding SPEC's `Wasm.decode` to the subset
+decoder, would be the padding this binding exists to prevent.
 -/
--- spec-signature: Artifact.decode_emit
+-- spec-signature-weaker: Artifact.decode_emit
 theorem decode_emit_signature :
-    ∀ (m : Wasm.Module), Wasm.decode (Artifact.emit m) = .ok m :=
+    ∀ (m : Wasm.Module), Wasm.Subset.decode (Artifact.emit m) = .ok m :=
   @Artifact.decode_emit
 
 /-! ## 5. Universal (SPEC §15, twelve declarations) -/

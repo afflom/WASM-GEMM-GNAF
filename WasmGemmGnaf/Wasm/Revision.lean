@@ -360,4 +360,228 @@ theorem core3VendoredTree_identity_eq_iff (t : VendoredTreeBody) :
       t = core3VendoredTree :=
   VendoredTreeBody.identity_eq_iff
 
+/-! ## The grammar amendment carried against the pinned revision
+
+SPEC section 7.3 and amendment `AMD-005` record that the pinned Core 3.0
+`Instrs_ok/seq` cannot type `i32.const c; i32.add`, that the repository
+validates against an AMENDED sequence judgment instead, and that the pin is
+deliberately NOT advanced past upstream's repair.  Left as prose, "we validate
+against an amendment" is unfalsifiable; `GrammarAmendmentBody` gives it the same
+treatment `VendoredTreeBody` gives the vendored tree --- a first-order body, a
+canonical identity, and a literal --- so that a drifting amendment changes an
+identity rather than a paragraph.
+
+Three boundaries, stated rather than glossed, exactly as for the vendored tree:
+
+* Lean does not read the amended source file.  `pinnedSource` and
+  `pinnedSourceSha256` name the vendored SpecTec file the defect is IN, and
+  `xtask amendment` recomputes that digest from `vendor/wasm-spec/SHA256SUMS`
+  and from the bytes on disk, failing the gate when the literal has drifted.
+* Lean CAN check the rest.  `pinAdvanced`, `noRegression`, `strictlyWider` and
+  `arityPreserved` are not decoration: each is bound to a theorem about the
+  amended relation itself in `Wasm/Core/ProfileAmendment.lean`, so a record
+  claiming a property the amendment does not have fails to compile.
+* No count of rules or premises is stored.  "One modified premise and no new
+  rule" is a statement about the SHAPE of a Lean inductive, which Lean cannot
+  state about itself; storing it as data would be prose wearing a field name.
+  What is stored are the properties that can be discharged. -/
+
+/-- The identity of a recorded amendment to a pinned grammar or judgment.
+First-order: no functions, no proofs (SPEC section 6.2). -/
+structure GrammarAmendmentBody where
+  /-- The deviation this amendment answers, e.g. `DEV-006`. -/
+  deviationId : String
+  /-- The SPEC amendment that records it, e.g. `AMD-005`. -/
+  amendmentId : String
+  /-- The SPEC section the amendment modifies, e.g. `7.3`. -/
+  specSection : String
+  /-- The pinned commit the amendment is stated AGAINST.  It is the pin, and
+  the amendment does not advance it. -/
+  pinnedCommit : String
+  /-- Repository-relative path of the vendored source carrying the defect. -/
+  pinnedSource : String
+  /-- Lowercase-hex SHA-256 of that vendored source, as listed in the vendored
+  tree's digest manifest. -/
+  pinnedSourceSha256 : String
+  /-- The pinned rule the amendment modifies, in the source's own naming. -/
+  judgment : String
+  /-- The fully qualified Lean name of the amended relation. -/
+  amendedRelation : String
+  /-- The upstream issue number reporting the same defect. -/
+  upstreamIssue : Nat
+  /-- The upstream pull request number repairing it. -/
+  upstreamPullRequest : Nat
+  /-- The upstream merge commit of that repair.  Recorded, and NOT pinned. -/
+  upstreamRepairCommit : String
+  /-- Whether the pin was advanced on account of the defect.  SPEC section 7.3:
+  it SHALL NOT be. -/
+  pinAdvanced : Bool
+  /-- Whether the amendment accepts everything the pinned rules accept. -/
+  noRegression : Bool
+  /-- Whether the amendment accepts something the pinned rules do not. -/
+  strictlyWider : Bool
+  /-- Whether the pinned arity discipline is re-proved against the amended
+  relation. -/
+  arityPreserved : Bool
+  deriving DecidableEq, Repr, Inhabited
+
+namespace GrammarAmendmentBody
+
+/-- The string fields, in declaration order. -/
+def toStrings (a : GrammarAmendmentBody) : List String :=
+  [ a.deviationId, a.amendmentId, a.specSection, a.pinnedCommit
+  , a.pinnedSource, a.pinnedSourceSha256, a.judgment, a.amendedRelation
+  , a.upstreamRepairCommit ]
+
+/-- The natural-number fields, in declaration order. -/
+def toNats (a : GrammarAmendmentBody) : List Nat :=
+  [a.upstreamIssue, a.upstreamPullRequest]
+
+/-- The boolean fields, in declaration order. -/
+def toBools (a : GrammarAmendmentBody) : List Bool :=
+  [a.pinAdvanced, a.noRegression, a.strictlyWider, a.arityPreserved]
+
+/-- Prefix-free encoding of a list of booleans. -/
+def boolsBytes (l : List Bool) : List UInt8 := Bytes.listBytes Bytes.boolBytes l
+
+theorem boolsBytes_prefixFree : Bytes.PrefixFree boolsBytes :=
+  Bytes.listBytes_prefixFree Bytes.boolBytes_prefixFree
+
+/-- Prefix-free canonical encoding. -/
+def bytes (a : GrammarAmendmentBody) : List UInt8 :=
+  Enc.stringsBytes (toStrings a) ++
+    (Enc.natsBytes (toNats a) ++ boolsBytes (toBools a))
+
+theorem bytes_prefixFree : Bytes.PrefixFree bytes := by
+  intro x y r s h
+  simp only [bytes, List.append_assoc] at h
+  obtain ⟨h1, h⟩ := Enc.stringsBytes_prefixFree _ _ _ _ h
+  obtain ⟨h2, h⟩ := Enc.natsBytes_prefixFree _ _ _ _ h
+  obtain ⟨h3, h⟩ := boolsBytes_prefixFree _ _ _ _ h
+  refine ⟨?_, h⟩
+  cases x
+  cases y
+  simp only [toStrings, toNats, toBools, List.cons.injEq, and_true] at h1 h2 h3
+  simp_all
+
+theorem bytes_injective : Function.Injective bytes :=
+  bytes_prefixFree.injective
+
+/-- The frozen canonical schema of a recorded grammar amendment (SPEC section
+6.2). -/
+def identitySchema : CanonicalSchema GrammarAmendmentBody :=
+  CanonicalSchema.ofPrefixFree 1 .authority
+    (TypeTag.leaf (Enc.nameBytes "wasm.grammar.amendment.body/1"))
+    (TypeTag.leaf_size_pos _)
+    bytes bytes_prefixFree
+
+/-- The erased canonical identity of a recorded grammar amendment. -/
+def identity (a : GrammarAmendmentBody) : CanonicalObjectId :=
+  CanonicalObjectId.ofTyped (Identity identitySchema a)
+
+theorem identity_eq_iff {a b : GrammarAmendmentBody} :
+    identity a = identity b ↔ a = b :=
+  CanonicalObjectId.ofTyped_Identity_eq_iff identitySchema
+
+end GrammarAmendmentBody
+
+/-- The SHA-256 of `vendor/wasm-spec/specification/wasm-3.0/
+2.3-validation.instructions.spectec`, the vendored file whose `Instrs_ok/seq`
+carries the defect.  `xtask amendment` recomputes it from the bytes on disk and
+cross-checks it against the line `vendor/wasm-spec/SHA256SUMS` carries. -/
+def core3InstrSeqAmendmentSourceSha256 : String :=
+  "a83d9b3ea01740f86c966ad256d6b484779ac40722a9568de021514537506bc1"
+
+/-- The upstream merge commit that repaired the instruction-sequence typing
+defect: WebAssembly/spec PR #2197, nine months AFTER the pinned commit.  It is
+recorded here as data and is deliberately NOT the pin --- advancing to it would
+change the vendored blob set and the Core 3.0 rule inventory, which SPEC
+section 4 makes a new-profile event. -/
+def core3InstrSeqRepairCommit : String :=
+  "bd4633aced30b720ff62b44cf00c03ece792f008"
+
+/--
+**The amendment this repository validates against, as a checked literal.**
+
+`Instrs_ok/seq` of the pinned `2.3-validation.instructions.spectec` types the
+head instruction with `Instr_ok` and requires the tail's domain to be EXACTLY
+the head's codomain, so a head producing fewer operands than the tail consumes
+can never be composed.  `Wasm/Core/Validation/InstructionsAmended.lean` carries
+the frame inside the composition instead; this record is that amendment's
+identity.
+-/
+def core3InstrSeqAmendment : GrammarAmendmentBody :=
+  { deviationId := "DEV-006"
+    amendmentId := "AMD-005"
+    specSection := "7.3"
+    pinnedCommit := core3RevisionCommit
+    pinnedSource :=
+      "vendor/wasm-spec/specification/wasm-3.0/2.3-validation.instructions.spectec"
+    pinnedSourceSha256 := core3InstrSeqAmendmentSourceSha256
+    judgment := "Instrs_ok/seq"
+    amendedRelation := "WasmGemmGnaf.Wasm.Core.Instrs_ok'"
+    upstreamIssue := 2194
+    upstreamPullRequest := 2197
+    upstreamRepairCommit := core3InstrSeqRepairCommit
+    pinAdvanced := false
+    noRegression := true
+    strictlyWider := true
+    arityPreserved := true }
+
+/-- **The amendment is stated against the pinned revision**, not against some
+other one. -/
+theorem core3InstrSeqAmendment_pinnedCommit :
+    core3InstrSeqAmendment.pinnedCommit = core3Revision.commit := rfl
+
+/-- **The pin is not advanced** (SPEC section 7.3: it SHALL NOT be). -/
+theorem core3InstrSeqAmendment_pin_not_advanced :
+    core3InstrSeqAmendment.pinAdvanced = false := rfl
+
+/-- ... and the repair commit really is a different commit from the pin, so the
+previous theorem is not true by the two being the same string. -/
+theorem core3InstrSeqAmendment_repair_ne_pin :
+    core3InstrSeqAmendment.upstreamRepairCommit ≠
+      core3InstrSeqAmendment.pinnedCommit := by decide
+
+theorem core3InstrSeqRepairCommit_isDigest :
+    RevisionBody.IsCommitDigest core3InstrSeqRepairCommit = true := by decide
+
+theorem core3InstrSeqAmendmentSourceSha256_isDigest :
+    VendoredTreeBody.IsSha256Digest core3InstrSeqAmendmentSourceSha256 = true := by
+  decide
+
+/-- The amended source lies inside the vendored tree this repository pins, so
+the digest above is a digest of a file `xtask vendor` already walks. -/
+theorem core3InstrSeqAmendment_source_in_vendoredTree :
+    core3VendoredTree.root.toList.isPrefixOf
+      core3InstrSeqAmendment.pinnedSource.toList = true := by
+  decide
+
+theorem core3InstrSeqAmendment_deviationId :
+    core3InstrSeqAmendment.deviationId = "DEV-006" := rfl
+
+theorem core3InstrSeqAmendment_amendmentId :
+    core3InstrSeqAmendment.amendmentId = "AMD-005" := rfl
+
+theorem core3InstrSeqAmendment_judgment :
+    core3InstrSeqAmendment.judgment = "Instrs_ok/seq" := rfl
+
+theorem core3InstrSeqAmendment_upstream :
+    core3InstrSeqAmendment.upstreamIssue = 2194 ∧
+    core3InstrSeqAmendment.upstreamPullRequest = 2197 := ⟨rfl, rfl⟩
+
+/--
+Distinct recorded amendments have distinct canonical identities.
+
+This is what makes the binding in `Wasm/Core/ProfileAmendment.lean` a binding:
+changing which judgment is amended, which pinned source it sits in, which
+upstream repair it corresponds to, or any of the four proved flags changes this
+identity, so a silently different amendment cannot wear the same name.
+-/
+theorem core3InstrSeqAmendment_identity_eq_iff (a : GrammarAmendmentBody) :
+    GrammarAmendmentBody.identity a =
+        GrammarAmendmentBody.identity core3InstrSeqAmendment ↔
+      a = core3InstrSeqAmendment :=
+  GrammarAmendmentBody.identity_eq_iff
+
 end WasmGemmGnaf.Wasm

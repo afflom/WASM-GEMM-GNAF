@@ -77,9 +77,19 @@
       `validate m = true <-> Module.frag m = true /\ exists mt, Module_ok' m mt`
 
   with no hypothesis --- the fragment condition is a conjunct, because
-  `validate` decides it.  What is still outside that fragment is imports, tags,
-  tables and element segments, and what they cost is a decision procedure for
-  `Heaptype_sub`.
+  `validate` decides it.
+
+  WHAT `Module.frag` STILL EXCLUDES, AND WHAT IT NO LONGER DOES.  IMPORTS and
+  TAGS are now INSIDE the decided fragment: neither carries an expression, so
+  neither needs the instruction algorithm, and every judgment they reach
+  (`Typeuse_ok`, `Expand_use`, `Valtype_ok`, `Limits_ok`, `Reftype_ok`) is
+  decided outright below.  The guard on them is per entry, not per section: a
+  `FUNC` or `TAG` writes its function type as a type index, a `TABLE` its
+  element type as an abstract heap type or a type index, and a `GLOBAL` --- which
+  the module's own `GLOBAL.GET` reads --- has a value type of the instruction
+  fragment.  What remains excluded outright is the TABLE and ELEMENT sections,
+  and the reason is exact: both carry an initialiser of REFERENCE type, so both
+  need reference instructions, and those need `Heaptype_sub`.
 
   SPEC 15's `Wasm.validate_iff_declarative` is a different declaration, in
   `Wasm/Declarative.lean`, over the i32-subset model; it stays OUTSTANDING
@@ -103,9 +113,22 @@ namespace Validate
 /-! ## The module fragment
 
 The instruction fragment of `Core/ValidateInstr.lean` fixes which instructions
-the algorithm decides; these are the module-level consequences.  Imports, tags,
-tables and element segments are outside it, because every one of them needs
-`Heaptype_sub`. -/
+the algorithm decides; these are the module-level consequences.  Tables and
+element segments are outside it, because both carry an initialiser of REFERENCE
+type and every reference instruction needs `Heaptype_sub`.
+
+TAGS AND IMPORTS ARE INSIDE IT.  Neither carries an expression: a tag is a
+`typeuse`, an import is an `externtype`, and the only judgments they reach are
+`Typeuse_ok`, `Expand_use`, `Valtype_ok`, `Limits_ok` and `Reftype_ok` --- all
+of them decidable without any subtyping.  What they DO carry into the module is
+context: an imported global is a `C.GLOBALS` entry the function bodies may read
+and an imported function is a `C.FUNCS` entry they may call, so the residual
+restriction on them is exactly `Context.frag`'s, and it is stated per entry
+rather than by excluding the section.
+
+The residual guard is therefore a per-entry admissibility test on the tag and
+import sections, and `isEmpty` only on the two sections whose initialisers are
+reference-typed. -/
 
 /-- A type section entry of the fragment: one final, supertype-free function
 type over `numtype`s and `vectype`s. -/
@@ -115,9 +138,47 @@ def TypeDef.frag (td : TypeDef) : Bool :=
       nvs (ValTypes.toList dom) && nvs (ValTypes.toList cod)
   | _ => false
 
+/-- A tag section entry of the fragment: the tag type is written as a type
+index.  A tag type written as an explicit `deftype` needs `Deftype_ok`, hence
+`Comptype_sub`, hence `Heaptype_sub`; a tag type written as a `REC` variable
+cannot occur in a module's tag section at all, because `C.RECS` is empty
+outside `Rectype_ok/_rec2`. -/
+def Tag.frag (tg : Tag) : Bool :=
+  match tg.tagtype with
+  | .idx _ => true
+  | _ => false
+
+/-- A heap type of the fragment: abstract, or a type index.  A heap type
+written as an explicit `deftype` needs `Deftype_ok`. -/
+def HeapType.frag : HeapType → Bool
+  | .abs _ => true
+  | .use (.idx _) => true
+  | .use _ => false
+
+/-- An external type of the fragment.  The restriction is on the CONTEXT an
+import of it contributes, not on the external type itself:
+
+* a `FUNC` or `TAG` names its function type by a type index, and a `TABLE` its
+  element type by an abstract heap type or a type index, for the reason
+  `Tag.frag` gives;
+* a `GLOBAL` is read by `GLOBAL.GET` in the module's own expressions, so its
+  value type must be one the instruction fragment decides;
+* a `MEM` is unrestricted --- a `memtype` carries no type at all. -/
+def ExternType.frag : ExternType → Bool
+  | .func (.idx _) => true
+  | .tag (.idx _) => true
+  | .global gt => ValType.nv gt.valtype
+  | .mem _ => true
+  | .table tt => match tt.elem with | .ref _ ht => HeapType.frag ht
+  | _ => false
+
+/-- An import of the fragment. -/
+def Import.frag (i : Import) : Bool := ExternType.frag i.externtype
+
 /-- The modules the algorithm decides. -/
 def Module.frag (m : Module) : Bool :=
-  m.imports.isEmpty && m.tags.isEmpty && m.tables.isEmpty && m.elems.isEmpty &&
+  m.imports.all Import.frag && m.tags.all Tag.frag &&
+  m.tables.isEmpty && m.elems.isEmpty &&
   m.types.all TypeDef.frag &&
   m.globals.all (fun g => ValType.nv g.globaltype.valtype && InstrSeq.frag g.init) &&
   m.funcs.all (fun f =>
@@ -172,6 +233,59 @@ def checkLimits (lim : Limits) (k : Nat) : Bool :=
   (match lim.max with
    | none => true
    | some mx => decide (lim.min.val ≤ mx.val) && decide (mx.val ≤ k))
+
+/-! ## Type uses, heap types and external types
+
+None of these judgments mentions an expression and none of them mentions
+subtyping, so each is decided outright on the `typeuse`s the fragment admits: a
+type index in range.  `Deftype_ok`, which an explicitly written `deftype` would
+need, is the one that would require `Comptype_sub`. -/
+
+/-- A `deftype` whose expansion is a function type: the `Expand` premise of
+`Tagtype_ok` and of `Externtype_ok/func`, decided.  Weaker than `funcTypeOf`,
+which also constrains the value types --- neither rule does. -/
+def isFuncDt (dt : DefType) : Bool :=
+  match expandDt dt with
+  | some (.func _ _) => true
+  | _ => false
+
+/-- `Typeuse_ok: C |- typeuse : OK` together with
+`Expand_use: typeuse ~~_C FUNC t_1* -> t_2*`, decided on the `typeuse`s of the
+fragment.  This is exactly the premise pair of `Tagtype_ok` and of
+`Externtype_ok/func`. -/
+def checkFuncTypeUse (C : Context) : TypeUse → Bool
+  | .idx x =>
+      match C.types[x.val]? with
+      | some dt => isFuncDt dt
+      | none => false
+  | _ => false
+
+/-- `Heaptype_ok: C |- heaptype : OK`, decided on the heap types of the
+fragment: `Heaptype_ok/abs` has no premise at all, and a type index needs only
+to be in range. -/
+def checkHeapType (C : Context) : HeapType → Bool
+  | .abs _ => true
+  | .use (.idx x) => (C.types[x.val]?).isSome
+  | .use _ => false
+
+/-- `Reftype_ok: C |- reftype : OK`, decided. -/
+def checkRefType (C : Context) : RefType → Bool
+  | .ref _ ht => checkHeapType C ht
+
+/-- `Externtype_ok: C |- externtype : OK`, decided on the external types of the
+fragment.  The `GLOBAL` case is `Valtype_ok` restricted to the value types the
+instruction fragment decides, because an imported global is a `C.GLOBALS` entry
+the module's own expressions read. -/
+def checkExternType (C : Context) : ExternType → Bool
+  | .tag jt => checkFuncTypeUse C jt
+  | .global gt => ValType.nv gt.valtype
+  | .mem mt => checkLimits mt.lim (2 ^ 16)
+  | .table tt => checkLimits tt.lim (2 ^ 32 - 1) && checkRefType C tt.elem
+  | .func tu => checkFuncTypeUse C tu
+
+/-- `Tag_ok: C |- tag : $clos_tagtype(C, tagtype)`, decided.  The tag type it
+assigns is determined by the context, so the check is on the premise alone. -/
+def checkTag (C : Context) (tg : Tag) : Bool := checkFuncTypeUse C tg.tagtype
 
 /-- `Externidx_ok: C |- externidx : externtype`, as a validity test on the
 index; the external type it produces is determined by the context. -/
@@ -233,25 +347,51 @@ def checkStart (C : Context) (s : Start) : Bool :=
 
 /-! ## The module validator -/
 
-/-- The two staged contexts of `Module_ok`: `C'` types the globals and
-memories, `C` types the functions, data segments, start function and exports.
-`none` when a function names a type index the type section does not define. -/
+/-- `{TYPES dt'*}`: the context `Module_ok` types the import section in --- the
+type section and nothing else.  It is the ONLY context of the rule that does not
+depend on what the imports themselves contribute, which is why the imports can
+be typed before either staged context exists. -/
+def Module.typeContext (m : Module) : Context := { types := rollTypes [] m.types }
+
+/-- `xt_I*`: the external types the import section denotes.  `Import_ok` assigns
+each import `$clos_externtype(C, xt)` in `Module.typeContext`, so the sequence
+is determined by the module alone. -/
+def Module.importTypes (m : Module) : List ExternType :=
+  m.imports.map (fun i => (Module.typeContext m).closExternType i.externtype)
+
+/-- The two staged contexts of `Module_ok`: `C'` types the tags, globals,
+memories and tables, `C` types the functions, data segments, start function and
+exports.  The imported components come first in every one of `C`'s sequences,
+exactly as `jt_I* jt*`, `mt_I* mt*` and `tt_I* tt*` say.
+
+`none` when a function names a type index the type section does not define, or
+when a `FUNC` import's `typeuse` does not close to a `deftype` --- which is
+`$funcsxt`'s partiality, and is why the rule writes `$funcsxt(xt_I*) = dt_I*`
+as a premise rather than as an abbreviation. -/
 def Module.contexts (m : Module) : Option (Context × Context) :=
-  let dts := rollTypes [] m.types
-  match m.funcs.mapM (fun f => dts[f.typeidx.val]?) with
+  match funcsXt (Module.importTypes m) with
   | none => none
-  | some fdts =>
-      let C' : Context :=
-        { types := dts, funcs := fdts,
-          refs := funcidxNonfuncs m.globals m.mems m.tables m.elems }
-      match checkGlobals C' m.globals with
+  | some dtsI =>
+      match m.funcs.mapM (fun f => (rollTypes [] m.types)[f.typeidx.val]?) with
       | none => none
-      | some gts =>
-          some (C',
-            Context.append C'
-              { globals := gts,
-                mems := m.mems.map Mem.memtype,
-                datas := m.datas.map (fun _ => DataType.ok) })
+      | some fdts =>
+          let C' : Context :=
+            { types := rollTypes [] m.types,
+              globals := ExternType.globals (Module.importTypes m),
+              funcs := dtsI ++ fdts,
+              refs := funcidxNonfuncs m.globals m.mems m.tables m.elems }
+          match checkGlobals C' m.globals with
+          | none => none
+          | some gts =>
+              some (C',
+                Context.append C'
+                  { tags := ExternType.tags (Module.importTypes m) ++
+                            m.tags.map (fun tg => C'.closTagType tg.tagtype),
+                    globals := gts,
+                    mems := ExternType.mems (Module.importTypes m) ++
+                            m.mems.map Mem.memtype,
+                    tables := ExternType.tables (Module.importTypes m),
+                    datas := m.datas.map (fun _ => DataType.ok) })
 
 /-- **The validator.**  `validate m = true` means the algorithm of
 `appendix/algorithm.rst` accepts `m` under the module-level checks of
@@ -262,7 +402,9 @@ def validate (m : Module) : Bool :=
   Module.frag m &&
   (match Module.contexts m with
    | none => false
-   | some (_, C) =>
+   | some (C', C) =>
+       m.imports.all (fun i => checkExternType (Module.typeContext m) i.externtype) &&
+       m.tags.all (checkTag C') &&
        m.mems.all (fun mem => checkLimits mem.memtype.lim (2 ^ 16)) &&
        m.funcs.all (checkFunc C) &&
        m.datas.all (checkData C) &&
@@ -419,6 +561,96 @@ example :
         (.func .nil (ValTypes.ofList [ValType.v128]))) .nil) }]
       [fn 0 [] [.vconst .v128 default,
                .vunop { lane := .num .i32, dim := .d4 } (.int .popcnt)]]) = false := by
+  decide
+
+/-! ### Imports and tags
+
+These are the sections the fragment gained.  Every module below is rejected
+outright by the previous `Module.frag`, which required `imports` and `tags` to
+be EMPTY; each of them is now decided, and the imported components appear in the
+staged contexts where `Module_ok` puts them --- `jt_I* jt*`, `gt_I*`,
+`dt_I* dt*`, `mt_I* mt*`, `tt_I* tt*`. -/
+
+/-- A module with an import and a tag section. -/
+private def modImp (tds : List TypeDef) (is : List Import) (tgs : List Tag)
+    (fs : List Func) (exs : List Export) : Module :=
+  { types := tds, imports := is, tags := tgs, globals := [], mems := [],
+    tables := [], funcs := fs, datas := [], elems := [], start := none,
+    exports := exs }
+
+/-- An import, named `"" ""`; the names matter only to `$disjoint_`, which is a
+condition on EXPORT names. -/
+private def imp (xt : ExternType) : Import :=
+  { moduleName := default, itemName := default, externtype := xt }
+
+/-- AN IMPORTED FUNCTION IS CALLABLE.  `(import (func (type 0)))` puts the
+closed `deftype` at `C.FUNCS[0]`, so `CALL 0` in the module's own function ---
+which is `C.FUNCS[1]` --- reaches it. -/
+example :
+    validate (modImp [ty2i32] [imp (.func (.idx default))] []
+      [fn 0 [] [.localGet default, .localGet ⟨1, by decide⟩, .call default]] []) = true := by
+  decide
+
+/-- ... at the imported function's own type: calling it with one operand where
+it takes two is rejected. -/
+example :
+    validate (modImp [ty2i32] [imp (.func (.idx default))] []
+      [fn 0 [] [.localGet default, .call default]] []) = false := by
+  decide
+
+/-- AN IMPORTED GLOBAL IS READABLE.  `Module_ok` puts `$globalsxt(xt_I*)` at the
+front of `C'.GLOBALS`, before the module's own globals. -/
+example :
+    validate (modImp [{ rectype := .recr (.cons (.sub (some .final) .nil
+        (.func .nil (ValTypes.ofList [ValType.i32]))) .nil) }]
+      [imp (.global { mutability := none, valtype := ValType.i32 })] []
+      [fn 0 [] [.globalGet default]] []) = true := by
+  decide
+
+/-- AN IMPORTED MEMORY IS ADDRESSABLE: `$memsxt(xt_I*)` lands in `C.MEMS`, so
+`I32.LOAD` finds a memory in a module that declares none. -/
+example :
+    validate (modImp [{ rectype := .recr (.cons (.sub (some .final) .nil
+        (.func .nil (ValTypes.ofList [ValType.i32]))) .nil) }]
+      [imp (.mem { addr := .i32, lim := ⟨⟨1, by decide⟩, none⟩ })] []
+      [fn 0 [] [.const .i32 default, .load .i32 none default default]] []) = true := by
+  decide
+
+/-- A TAG SECTION VALIDATES, and the tag it declares is exportable: with an
+empty `C.TAGS` --- which is what every module of the previous fragment had ---
+`Externidx_ok/tag` could never apply. -/
+example :
+    validate (modImp [ty0] [] [{ tagtype := .idx default }] []
+      [{ name := default, externidx := .tag default }]) = true := by
+  decide
+
+/-- ... and a tag whose type index the type section does not define is
+rejected. -/
+example : validate (modImp [] [] [{ tagtype := .idx default }] [] []) = false := by
+  decide
+
+/-- A tag whose type index names a NON-function type is rejected: `Tagtype_ok`
+requires `Expand_use: typeuse ~~ FUNC t_1* -> t_2*`. -/
+example :
+    validate (modImp [{ rectype := .recr (.cons (.sub (some .final) .nil
+        (.array (.mk none (.val ValType.i32)))) .nil) }] []
+      [{ tagtype := .idx default }] [] []) = false := by
+  decide
+
+/-- OUTSIDE THE FRAGMENT, STILL.  A `FUNC` import whose `typeuse` is written as
+an explicit `deftype` rather than as a type index needs `Deftype_ok`, hence
+`Comptype_sub`, hence `Heaptype_sub`; `Module.frag` says so. -/
+example :
+    Module.frag (modImp [ty0]
+      [imp (.func (.defd (.defd (.recr .nil) 0)))] [] [] []) = false := by
+  decide
+
+/-- ... as does an imported global of reference type, which the instruction
+fragment cannot read. -/
+example :
+    Module.frag (modImp [ty0]
+      [imp (.global { mutability := none, valtype := .ref (.ref none (.abs .func)) })]
+      [] [] []) = false := by
   decide
 
 /-- LOCALS.  Reading a local that the type section does not give the function

@@ -1,6 +1,6 @@
 # Conformance
 
-**Inventory:** 141 Lean modules, 95,196 lines, 4,020 proved theorems.
+**Inventory:** 147 Lean modules, 98,586 lines, 4,165 proved theorems.
 Generated live; prose documents cite this table rather than repeating counts.
 
 Generated from `model/claims.json` by `just docs`. Do not edit by hand.
@@ -61,6 +61,9 @@ words "proved", "theorem", or "globally optimal".
 | `WS-004` | formalProof | discharged | SPEC 15 Wasm.profile_matches_pinned_revision, at the meaning SPEC 7.1 gives the name: the concrete model an... | `WasmGemmGnaf.Wasm.profile_matches_pinned_revision` |
 | `CM-006` | buildEvidence | verified | The Lean literals Wasm.profile_matches_pinned_revision stands on are recomputed from the vendored CONTENT: ... | `—` |
 | `UV-004` | formalProof | discharged | Constructive duplicate-free enumeration of every lawful raw invocation, with a global choice-free Fintype i... | `WasmGemmGnaf.Gemm.raw_input_finite` |
+| `WS-005` | formalProof | discharged | The released module has PINNED Core 3.0 BYTES: a 53-byte literal that the complete Core 3.0 decoder accepts... | `WasmGemmGnaf.Release.coreArtifact_validUnder` |
+| `BI-009` | formalProof | discharged | GNAF.compile emits an i32 literal the pinned Core 3.0 syntax cannot hold, so no total map from the release ... | `WasmGemmGnaf.GNAF.no_i32const_preserving_map` |
+| `BI-010` | open | outstanding | GNAF.compile emits Wasm.Core.Module: CompileEnv carries a < 2^32 bound on its layout, envOf establishes it ... | `—` |
 
 ## Axiom closure
 
@@ -97,6 +100,8 @@ Every `formalProof` claim's transitive axioms, from `#print axioms`:
 - `BI-008` — `propext`, `Quot.sound`
 - `WS-004` — `propext`, `Classical.choice`, `Quot.sound`
 - `UV-004` — `propext`, `Quot.sound`
+- `WS-005` — `propext`, `Classical.choice`, `Quot.sound`
+- `BI-009` — `propext`, `Quot.sound`
 
 Permitted: `propext`, `Quot.sound`, `Classical.choice` (Lean core logical
 axioms, SPEC 4). Any `sorryAx` or project-declared axiom fails the gate.
@@ -114,7 +119,7 @@ Recorded so they are not silently re-asserted:
 
 ## Outstanding obligations
 
-12 outstanding. Terminal answer for `GO-001`: `WorkloadIncomplete`
+13 outstanding. Terminal answer for `GO-001`: `WorkloadIncomplete`
 (UOR-GNAF v1-draft.2 section 10.9). See `CERTIFICATION.md`.
 
 - `WS-001` (O-6) — Mechanized WebAssembly Core 3.0 semantics (GC, exception handling, fixed SIMD, tail calls) with deco
@@ -129,3 +134,4 @@ Recorded so they are not silently re-asserted:
 - `BI-006` (O-6) — Every branch of the compiled GEMM baseline terminates within the released 2^320 step bound, so explo
 - `GO-009` (O-6) — A module that is BOTH evaluable (SystemEvaluation inhabited) AND SemanticCorrect for the release GEM
 - `WS-003` (O-6) — Release.wasmProfile is backed by the completed pinned Core 3.0 semantics rather than the i32 witness
+- `BI-010` (O-6) — GNAF.compile emits Wasm.Core.Module: CompileEnv carries a < 2^32 bound on its layout, envOf establis

@@ -40,6 +40,9 @@ import WasmGemmGnaf.Wasm.Core.Instructions
 import WasmGemmGnaf.Wasm.Core.Modules
 import WasmGemmGnaf.Wasm.Core.Numerics
 import WasmGemmGnaf.Wasm.Core.Operators
+import WasmGemmGnaf.Wasm.Core.Profile
+import WasmGemmGnaf.Wasm.Core.ProfileAmendment
+import WasmGemmGnaf.Wasm.Core.ProfileBinary
 import WasmGemmGnaf.Wasm.Core.Runtime
 import WasmGemmGnaf.Wasm.Core.Subst
 import WasmGemmGnaf.Wasm.Core.Types
@@ -55,6 +58,8 @@ import WasmGemmGnaf.Wasm.Core.Validation.Modules
 import WasmGemmGnaf.Wasm.Core.Validation.ModulesAmended
 import WasmGemmGnaf.Wasm.Core.Validation.Types
 import WasmGemmGnaf.Wasm.Core.Values
+import WasmGemmGnaf.Wasm.CoreArtifact
+import WasmGemmGnaf.Wasm.CoreFrontEnd
 import WasmGemmGnaf.Wasm.CoreGap
 import WasmGemmGnaf.Wasm.Costed
 import WasmGemmGnaf.Wasm.CostedExplore
@@ -104,6 +109,7 @@ import WasmGemmGnaf.Gemm.Shape
 -- GNAF
 import WasmGemmGnaf.GNAF.Compile
 import WasmGemmGnaf.GNAF.CompileCorrect
+import WasmGemmGnaf.GNAF.CoreGap
 import WasmGemmGnaf.GNAF.Edge
 import WasmGemmGnaf.GNAF.Normalize
 import WasmGemmGnaf.GNAF.Object

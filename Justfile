@@ -7,7 +7,7 @@ default: vv
 xtask := "cargo run --quiet --release -p xtask --"
 
 # The whole gate. Expected to FAIL at step 9 while WGG-GO-1 is outstanding.
-vv: tools root-check firewall manifest-check releasepath build vendor core required signature schema claims axioms docs-check
+vv: tools root-check firewall manifest-check releasepath build vendor amendment core required signature schema claims axioms docs-check
     @{{xtask}} gate
 
 bootstrap:
@@ -93,6 +93,16 @@ releasepath: tools
 # the tree; this is what stops a drifted literal from elaborating past the gate.
 vendor: tools
     @{{xtask}} vendor --list
+
+# SPEC 7.3 / AMD-005 / DEV-006: the recorded grammar amendment, checked against
+# the tree. `Wasm/Core/ProfileAmendment.lean` proves everything about the
+# amendment Lean can state about itself; Lean cannot read a file, so this
+# recomputes the digest of the vendored SpecTec source the defect is in, checks
+# it against the SHA256SUMS entry, checks that the pin was NOT advanced to
+# upstream's repair, and checks that the amended module declares the recorded
+# relation and carries no Core 3.0 coverage marker.
+amendment: tools
+    @{{xtask}} amendment
 
 # SPEC 7.3: a reflection theorem's declarative side must not be defined or
 # proved through its executable side. Four audits called decode_sound,

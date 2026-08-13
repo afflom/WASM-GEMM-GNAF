@@ -102,7 +102,7 @@
       "status": "outstanding",
       "obligation": "O-6",
       "releaseApplicable": true,
-      "note": "Absent, not stubbed. SPEC 19 forbids axiomatizing or sorry-ing an undischarged obligation."
+      "note": "Absent, not stubbed. SPEC 19 forbids axiomatizing or sorry-ing an undischarged obligation. PARTIAL, and the claim stays open: the front end is mechanized and migrated -- Wasm.decode is the pinned Core 3.0 decoder and Wasm.decode_sound / Wasm.decode_complete are stated over Wasm.Core.Binary.Bmodule with xtask independence passing -- but progress, preservation and the all-branch bounded explorer are still stated over the i32 subset model, and Wasm/Core/ has no configuration typing judgment and no successor enumerator."
     },
     {
       "id": "UV-001",
@@ -677,7 +677,7 @@
       "dependsOn": [
         "WS-001"
       ],
-      "note": "Raised by external audit. `def wasmProfile := Wasm.unitWitnessProfile`, and the cost table is Wasm.canonicalCostTableUnits rather than SPEC 7.5's Release.wasmCostTableBody. The file discloses both, and wasmProfile_body : wasmProfile.body = wasmProfileBody holds by rfl, but the SEMANTICS backing the profile is the i32 subset. So the syntactic 'for all ByteArray' in GlobalOptimal does not yet range over the authority-required Core 3.0 competitor universe."
+      "note": "Raised by external audit. `def wasmProfile := Wasm.unitWitnessProfile`, and the cost table is Wasm.canonicalCostTableUnits rather than SPEC 7.5's Release.wasmCostTableBody. The file discloses both, and wasmProfile_body : wasmProfile.body = wasmProfileBody holds by rfl, but the SEMANTICS backing the profile is the i32 subset. So the syntactic 'for all ByteArray' in GlobalOptimal does not yet range over the authority-required Core 3.0 competitor universe. UPDATE (release-path migration tranche): two things changed and neither of them closes this. (1) Release.wasmProfile is no longer SPELLED as somebody else's non-vacuity witness -- it now names its own body, and Release.wasmProfile_eq_unitWitnessProfile states the identity by rfl so the rename is disclosed rather than mistaken for a strengthening. (2) The released profile now has a Core 3.0 module and BYTES to be applied to: WS-005. What is UNCHANGED is the thing this claim is about -- Universal.ProfileValid still decodes with Wasm.Subset.decode, so the competitor universe is still the subset one, and the cost table still has no vendored conformance map behind it. Migrating Universal.ProfileValid onto Wasm.decode is blocked on the Core execution layer: Universal.SystemEvaluation, Universal.StartsCostedInvocation and Universal.Setting.machine all name Wasm.Module, and Wasm/Core/ has no Config, no Store, no successors and no initialGemmInvocationCosted. Moving ProfileValid alone would leave the release conjunction naming two different modules for the same bytes, which is worse than the disclosed gap."
     },
     {
       "id": "WS-004",
@@ -725,6 +725,60 @@
       "status": "discharged",
       "releaseApplicable": true,
       "note": "Closes three SPEC 15 declarations: Gemm.raw_input_finite, Gemm.valid_input_finite, Universal.input_enumerator_complete. the SPEC 15 inventory 22 -> 25 of 58, verified independently. raw_input_finite and input_enumerator_complete are CHOICE-FREE ([propext, Quot.sound]); the instance is global with no hypothesis. Achieving that required reproving List.nodup_range, because the toolchain's goes through List.range_eq_range' and depends on Classical.choice. valid_input_finite DOES carry Classical.choice, inherited from Gemm.classify/refValid in committed code (omega discharges Iff/And/Or classically); no enumeration of the VALID carrier can be choice-free while the classifier is not. Recorded rather than glossed."
+    },
+    {
+      "id": "WS-005",
+      "level": "formalProof",
+      "statement": "The released module has PINNED Core 3.0 BYTES: a 53-byte literal that the complete Core 3.0 decoder accepts, returning exactly Wasm.Core.releaseBaselineModule, which is valid under Release.wasmProfile -- well typed in the amended Core 3.0 judgment and admitted by the profile's own feature matrix, limits, closed import policy and exported ABI.",
+      "leanDeclaration": "WasmGemmGnaf.Release.coreArtifact_validUnder",
+      "sourceModule": "WasmGemmGnaf/Wasm/CoreArtifact.lean",
+      "axioms": [
+        "propext",
+        "Classical.choice",
+        "Quot.sound"
+      ],
+      "specSection": "7.2",
+      "status": "discharged",
+      "releaseApplicable": true,
+      "dependsOn": [
+        "WS-004"
+      ],
+      "note": "The release path is byte indexed and until now nothing on the Core 3.0 side had bytes at all: Wasm/Core/Profile.lean built releaseBaselineModule as abstract syntax and proved it admitted, but no byte string was shown to BE that module under the pinned decoder. Wasm.Core.decode_releaseArtifactBytes is that equation, by kernel computation on a hand-written literal; there is no encoder anywhere in its import graph, and Wasm.Core.releaseArtifactBytes_declarative reaches the pinned grammar Bmodule through Wasm.decode_sound, which xtask independence checks. Anti-vacuity runs in both directions: Wasm.Core.decode_mutatedArtifactBytes shows the decoder still accepts the same literal with the `gemm` export renamed to `gemn`, and Wasm.Core.mutatedArtifactModule_not_admitted shows the released profile then REJECTS it, so admission is doing work rather than passing everything the decoder returns.",
+      "scopeLimitation": "THREE limits, all stated in the Lean doc comments. (1) These are NOT the bytes the release path selects: Release.artifactBytes does not exist, selection is open (GO-004), and Artifact.baselineBytes is the subset codec's output -- `#eval Wasm.decode Artifact.baselineBytes` reports .error Fault.opcode, recorded as a MEASUREMENT in Artifact/Baseline.lean because the kernel does not reduce Wasm.Subset.encode. (2) Wasm.Core.releaseBaselineModule computes no GEMM: its body is `local.get 0`. It is the released ABI SHAPE. (3) Universal.ProfileValid does NOT range over these bytes; Release.coreArtifact_profileValid_spec_reading states SPEC 10.1's own reading, whose decoder is Wasm.decode, and discharges it on this artifact, and it is explicitly not offered as a discharge of Universal.ProfileValid. WS-003 stays open."
+    },
+    {
+      "id": "BI-009",
+      "level": "formalProof",
+      "statement": "GNAF.compile emits an i32 literal the pinned Core 3.0 syntax cannot hold, so no total map from the release path's instructions to the pinned ones preserves i32 constants: migrating the compiler to Wasm.Core.Module is a change to the COMPILER, not a translation of its output.",
+      "leanDeclaration": "WasmGemmGnaf.GNAF.no_i32const_preserving_map",
+      "sourceModule": "WasmGemmGnaf/GNAF/CoreGap.lean",
+      "axioms": [
+        "propext",
+        "Quot.sound"
+      ],
+      "specSection": "11.4",
+      "status": "discharged",
+      "releaseApplicable": true,
+      "dependsOn": [
+        "WS-001"
+      ],
+      "note": "A negative result, priced so the next migration step does not discover it by finding a proof that stops closing. GNAF.constI n = Wasm.Instr.i32Const (Int.ofNat n) and Wasm.Instr.i32Const : Int -> Instr, so the release path's i32 literal is UNBOUNDED; 2-syntax.values.spectec fixes syntax iN(N) = uN(N), so a Core 3.0 i32 literal is a u32 (GNAF.no_core_i32_lit_two_pow_32). The gap is reachable from the compiler and not merely present in the type: GNAF.bodyCode appends loadAt e.statusAddr to EVERY compiled body (GNAF.compile_body_mem_statusAddr), CompileEnv.pages is clamped to the hard page limit but the ADDRESSES are not, and GNAF.gapChecked -- the plan `nop`, typed by HasType.nop at an interface declaring 2^30 memory cells -- compiles to a body containing i32.const (2^32) (GNAF.compile_gapChecked_emits_two_pow_32). This is the instruction-level counterpart of Wasm/CoreGap.lean's module-level no_typeidx_preserving_map and no_name_preserving_map, stated about the compiler's own output."
+    },
+    {
+      "id": "BI-010",
+      "level": "open",
+      "statement": "GNAF.compile emits Wasm.Core.Module: CompileEnv carries a < 2^32 bound on its layout, envOf establishes it from the plan's interface, and every address lemma and correctness theorem of GNAF/CompileCorrect.lean is re-proved over the pinned Core 3.0 instruction typing.",
+      "leanDeclaration": null,
+      "sourceModule": "WasmGemmGnaf/GNAF/Compile.lean",
+      "specSection": "11.4",
+      "status": "outstanding",
+      "obligation": "O-6",
+      "releaseApplicable": true,
+      "dependsOn": [
+        "BI-009",
+        "WS-001"
+      ],
+      "note": "The obligation BI-009 prices. Two halves, and the second is the expensive one. (a) REPRESENTABILITY: Sig.mem, Sig.scratch and Sig.tables are unbounded Nats and CompileEnv.statusAddr scales them, so envOf cannot manufacture the bound -- either CompileEnv gains a proof field and GNAF.compile gains a hypothesis, or the layout is clamped and every address lemma changes. Clamping by wrapping modulo 2^32 is NOT available: a wrapped address can land inside the declared memory and then the access succeeds at the wrong place, which is a semantic change and not a representation change. (b) TYPING: GNAF.compile_validates is proved against Wasm/Validate.lean's checker; the Core counterpart needs Wasm.Core.validate to accept the emitted body, which needs Core instruction-typing lemmas for every emitted combinator (countLoop, dispatchOn, classifyCode, layoutCode, ...). Wasm/CoreArtifact.lean shows the released ABI SHAPE is expressible and admitted, so the obstruction is the compiler's numeric representation and its proof layer, not the target syntax."
     }
   ],
   "refutedFramings": [

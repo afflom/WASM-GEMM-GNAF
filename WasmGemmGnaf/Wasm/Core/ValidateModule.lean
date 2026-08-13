@@ -219,6 +219,104 @@ theorem checkStart_sound {C : Context} {s : Start} (h : checkStart C s = true) :
               | cons _ _ => simp only [hexp] at h; exact absurd h (by simp)
           | _ => simp only [hexp] at h; exact absurd h (by simp)
 
+/-! ## Type uses, heap types, external types, tags and imports
+
+None of the five judgments below reaches an expression or a subtyping relation,
+so each check discharges its rule's premises outright. -/
+
+/-- `isFuncDt` is the `Expand` premise of `Tagtype_ok` and `Externtype_ok/func`,
+read as a decision. -/
+theorem isFuncDt_iff {dt : DefType} :
+    isFuncDt dt = true ↔ ∃ dom cod : ValTypes, expandDt dt = some (.func dom cod) := by
+  unfold isFuncDt
+  constructor
+  · intro h
+    split at h
+    · rename_i dom cod heq
+      exact ⟨dom, cod, heq⟩
+    · exact absurd h (by simp)
+  · rintro ⟨dom, cod, heq⟩
+    rw [heq]
+
+/-- `checkFuncTypeUse` discharges both premises of `Tagtype_ok` and of
+`Externtype_ok/func` at once. -/
+theorem checkFuncTypeUse_sound {C : Context} {tu : TypeUse}
+    (h : checkFuncTypeUse C tu = true) :
+    Typeuse_ok C tu ∧ ∃ dom cod : ValTypes, Expand_use C tu (.func dom cod) := by
+  cases tu with
+  | recu i => exact absurd h (by simp [checkFuncTypeUse])
+  | defd dt => exact absurd h (by simp [checkFuncTypeUse])
+  | idx x =>
+      cases hx : C.types[x.val]? with
+      | none => rw [checkFuncTypeUse, hx] at h; exact absurd h (by simp)
+      | some dt =>
+          rw [checkFuncTypeUse, hx] at h
+          obtain ⟨dom, cod, hexp⟩ := isFuncDt_iff.mp h
+          exact ⟨.typeidx hx, dom, cod, .typeidx hx (.mk hexp)⟩
+
+theorem checkHeapType_sound {C : Context} {ht : HeapType}
+    (h : checkHeapType C ht = true) : Heaptype_ok C ht := by
+  cases ht with
+  | abs a => exact .abs
+  | use tu =>
+      cases tu with
+      | recu i => exact absurd h (by simp [checkHeapType])
+      | defd dt => exact absurd h (by simp [checkHeapType])
+      | idx x =>
+          cases hx : C.types[x.val]? with
+          | none => rw [checkHeapType, hx] at h; exact absurd h (by simp)
+          | some dt => exact .typeuse (.typeidx hx)
+
+theorem checkRefType_sound {C : Context} {rt : RefType}
+    (h : checkRefType C rt = true) : Reftype_ok C rt := by
+  cases rt with
+  | ref nul ht => exact .mk (checkHeapType_sound h)
+
+theorem checkExternType_sound {C : Context} {xt : ExternType}
+    (h : checkExternType C xt = true) : Externtype_ok C xt := by
+  cases xt with
+  | tag jt =>
+      obtain ⟨hok, _, _, hexp⟩ := checkFuncTypeUse_sound (C := C) (tu := jt) h
+      exact .tag (.mk hok hexp)
+  | func tu =>
+      obtain ⟨hok, _, _, hexp⟩ := checkFuncTypeUse_sound (C := C) (tu := tu) h
+      exact .func hok hexp
+  | global gt =>
+      have h' : ValType.nv gt.valtype = true := h
+      exact .global (.mk (valtype_ok_of_nvb (ValType.nvb_of_nv h')))
+  | mem mt =>
+      have h' : checkLimits mt.lim (2 ^ 16) = true := h
+      exact .mem (.mk (checkLimits_sound h'))
+  | table tt =>
+      have h' : (checkLimits tt.lim (2 ^ 32 - 1) && checkRefType C tt.elem) = true := h
+      rw [Bool.and_eq_true] at h'
+      exact .table (.mk (checkLimits_sound h'.1) (checkRefType_sound h'.2))
+
+/-- `Tag_ok` back from `checkTag`, at the tag type the context determines. -/
+theorem checkTag_sound {C : Context} {tg : Tag} (h : checkTag C tg = true) :
+    Tag_ok C tg (C.closTagType tg.tagtype) := by
+  obtain ⟨hok, _, _, hexp⟩ := checkFuncTypeUse_sound (C := C) (tu := tg.tagtype) h
+  exact .mk (.mk hok hexp)
+
+/-- The tag section, typed lockstep with the tag types the context determines. -/
+theorem tags_ok {C : Context} (tgs : List Tag) (h : tgs.all (checkTag C) = true) :
+    SeqAll₂ (Tag_ok C) tgs (tgs.map (fun tg => C.closTagType tg.tagtype)) := by
+  intro i a b ha hb
+  rw [List.getElem?_map, ha] at hb
+  simp only [Option.map_some, Option.some.injEq] at hb
+  subst hb
+  exact checkTag_sound (List.all_eq_true.mp h a (List.mem_of_getElem? ha))
+
+/-- The import section, typed lockstep with `$clos_externtype` of each. -/
+theorem imports_ok {C : Context} (is : List Import)
+    (h : is.all (fun i => checkExternType C i.externtype) = true) :
+    SeqAll₂ (Import_ok C) is (is.map (fun i => C.closExternType i.externtype)) := by
+  intro i a b ha hb
+  rw [List.getElem?_map, ha] at hb
+  simp only [Option.map_some, Option.some.injEq] at hb
+  subst hb
+  exact .mk (checkExternType_sound (List.all_eq_true.mp h a (List.mem_of_getElem? ha)))
+
 theorem checkExternIdx_sound {C : Context} {xi : ExternIdx}
     (h : checkExternIdx C xi = true) : ∃ xt : ExternType, Externidx_ok C xi xt := by
   cases xi with
@@ -347,10 +445,8 @@ theorem validate_sound {m : Module} (h : Validate.validate m = true) :
   simp only [Validate.validate, Bool.and_eq_true] at h
   obtain ⟨hfrag, hrest⟩ := h
   simp only [Module.frag, Bool.and_eq_true] at hfrag
-  obtain ⟨⟨⟨⟨⟨⟨⟨him, htg⟩, htb⟩, hel⟩, htys⟩, hglob⟩, hfun⟩, hdat⟩ := hfrag
-  -- the module's sections outside the decided fragment are empty
-  have him' : m.imports = [] := List.isEmpty_iff.mp him
-  have htg' : m.tags = [] := List.isEmpty_iff.mp htg
+  obtain ⟨⟨⟨⟨⟨⟨⟨_him, _htg⟩, htb⟩, hel⟩, htys⟩, hglob⟩, hfun⟩, hdat⟩ := hfrag
+  -- the two sections outside the decided fragment are empty
   have htb' : m.tables = [] := List.isEmpty_iff.mp htb
   have hel' : m.elems = [] := List.isEmpty_iff.mp hel
   cases hctx : Module.contexts m with
@@ -358,15 +454,21 @@ theorem validate_sound {m : Module} (h : Validate.validate m = true) :
   | some p =>
       obtain ⟨C', C⟩ := p
       simp only [hctx, Bool.and_eq_true] at hrest
-      obtain ⟨⟨⟨⟨⟨hmem, hfuncs⟩, hdatas⟩, hstart⟩, hexp⟩, hdisj⟩ := hrest
+      obtain ⟨⟨⟨⟨⟨⟨⟨himp, htags⟩, hmem⟩, hfuncs⟩, hdatas⟩, hstart⟩, hexp⟩, hdisj⟩ := hrest
       -- unpack `Module.contexts`
       unfold Module.contexts at hctx
+      cases hfx : funcsXt (Module.importTypes m) with
+      | none => simp only [hfx] at hctx; exact absurd hctx (by simp)
+      | some dtsI =>
+      simp only [hfx] at hctx
       cases hmap : m.funcs.mapM (fun f => (rollTypes [] m.types)[f.typeidx.val]?) with
       | none => simp only [hmap] at hctx; exact absurd hctx (by simp)
       | some fdts =>
           simp only [hmap] at hctx
           cases hgl : checkGlobals
-              { types := rollTypes [] m.types, funcs := fdts,
+              { types := rollTypes [] m.types,
+                globals := ExternType.globals (Module.importTypes m),
+                funcs := dtsI ++ fdts,
                 refs := funcidxNonfuncs m.globals m.mems m.tables m.elems } m.globals with
           | none => simp only [hgl] at hctx; exact absurd hctx (by simp)
           | some gts =>
@@ -379,18 +481,30 @@ theorem validate_sound {m : Module} (h : Validate.validate m = true) :
                 have : (Context.empty).types = ([] : List DefType) := rfl
                 rw [this] at hroll
                 simpa using hroll
+              have htc : Module.typeContext m = { Context.empty with types := ds } := by
+                rw [Module.typeContext, hdts]; rfl
               refine ⟨_, Module_ok'.mk (C := C) (C' := C') (dts' := ds)
-                (xtsI := []) (xtsE := xts) (jts := []) (gts := gts)
+                (xtsI := Module.importTypes m) (xtsE := xts)
+                (jts := m.tags.map (fun tg => C'.closTagType tg.tagtype)) (gts := gts)
                 (mts := m.mems.map Mem.memtype) (tts := []) (dts := fdts)
                 (oks := m.datas.map (fun _ => DataType.ok)) (rts := [])
-                (nms := m.exports.map Export.name) (jtsI := []) (gtsI := []) (mtsI := [])
-                (ttsI := []) (dtsI := []) (xs := funcidxNonfuncs m.globals m.mems m.tables m.elems)
+                (nms := m.exports.map Export.name)
+                (jtsI := ExternType.tags (Module.importTypes m))
+                (gtsI := ExternType.globals (Module.importTypes m))
+                (mtsI := ExternType.mems (Module.importTypes m))
+                (ttsI := ExternType.tables (Module.importTypes m)) (dtsI := dtsI)
+                (xs := funcidxNonfuncs m.globals m.mems m.tables m.elems)
                 htyok ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ hxlen hxall hdisj
-                ?_ ?_ rfl rfl rfl rfl rfl rfl⟩
-              · rw [him']; rfl
-              · rw [him']; intro i a b ha _; simp at ha
-              · rw [htg']; rfl
-              · rw [htg']; intro i a b ha _; simp at ha
+                ?_ ?_ rfl rfl rfl rfl rfl ?_⟩
+              · -- SeqLen₂ m.imports xt_I*
+                simp only [SeqLen₂, Module.importTypes, List.length_map]
+              · -- Import_ok
+                rw [← htc]
+                exact imports_ok m.imports himp
+              · -- SeqLen₂ m.tags jt*
+                simp only [SeqLen₂, List.length_map]
+              · -- Tag_ok
+                exact tags_ok m.tags htags
               · -- Globals_ok'
                 rw [← hC']
                 exact checkGlobals_sound m.globals _ gts hgl
@@ -431,8 +545,9 @@ theorem validate_sound {m : Module} (h : Validate.validate m = true) :
                 intro s hs
                 simp only [hs] at hstart
                 exact checkStart_sound hstart
-              · rw [← hC, ← hC']; rfl
-              · rw [← hC', hdts]; rfl
+              · rw [← hC, ← hC']; simp
+              · rw [← hC', hdts]
+              · exact hfx
 
 end Validate
 
@@ -458,10 +573,14 @@ The statement it would have is
     `Module_ok' m mt -> Module.frag m = true -> Wasm.Core.validate m = true`
 
 --- the `Module.frag` hypothesis is not a weakening but a fact about the
-checker: `validate` rejects every module with an import, a tag, a table or an
-element segment outright, because each of those needs `Heaptype_sub`, whose
-decidability this development does not have.  `Module.frag` is the checker's own
-statement of which modules it decides.
+checker.  When this paragraph was written `validate` rejected every module with
+an import, a tag, a table or an element segment outright; IMPORTS and TAGS have
+since been brought inside, with a per-entry guard rather than a per-section one
+(`checkExternType`, `checkTag`, `imports_ok` and `tags_ok` above are the
+soundness half).  What `Module.frag` still excludes outright is the TABLE and
+ELEMENT sections, whose initialisers are reference-typed and therefore need
+`Heaptype_sub`.  `Module.frag` is the checker's own statement of which modules it
+decides.
 
 Every instruction-level ingredient is in place.  `checkSeq_complete` and
 `checkExpr_complete` of `Core/ValidateSeq.lean` are proved, over exactly the
@@ -491,8 +610,9 @@ both theorems are there: `Wasm.Core.validate_complete` and
 `Wasm.Core.validate_iff_declarative`.  The `Module.frag` premise is still
 present and is still not a weakening --- the equivalence carries it as a
 CONJUNCT on both sides and so has no hypothesis at all --- but it is now the
-only thing separating this equivalence from all of Core, and what it costs is
-exactly a decision procedure for `Heaptype_sub`.
+only thing separating this equivalence from all of Core, and what its two
+remaining excluded sections cost is exactly a decision procedure for
+`Heaptype_sub`.
 
 SPEC 15's required name `Wasm.validate_iff_declarative` is a DIFFERENT
 declaration, in `Wasm/Declarative.lean`, still bound to the i32-subset model;

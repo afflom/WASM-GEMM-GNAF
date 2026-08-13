@@ -8,6 +8,7 @@
 //! Every failure names the SPEC section it enforces, so a red gate says WHICH
 //! promise broke rather than merely that something did.
 
+mod amendment;
 mod axioms;
 mod core;
 mod docs;
@@ -57,6 +58,13 @@ SOURCE CHECKS (read the tree)
                                pinned commit, and every vendored rule anchor cited by
                                `Wasm/Adequacy.lean`. --list adds the coverage
                                arithmetic and the SpecTec scope limit.
+    amendment                  The recorded grammar amendment (SPEC 7.3, AMD-005 /
+                               DEV-006), checked against the tree: the digest of the
+                               vendored SpecTec source the defect is in, the entry
+                               SHA256SUMS lists for it, that the pin was NOT advanced
+                               to upstream's repair, that the amended Lean module
+                               declares the recorded relation, and that it carries no
+                               Core 3.0 coverage marker.
     core [--list]              How much of the PINNED Core 3.0 front end the Lean
                                tree covers (SPEC 7.1). The checklist is EXTRACTED
                                from the vendored SpecTec sources -- every opcode
@@ -161,6 +169,7 @@ fn dispatch(args: &[String]) -> Result<Outcome> {
         "schema" => schema::run(&root),
         "signature" => signature::run(&root),
         "vendor" => vendor::run(has(rest, "--list")),
+        "amendment" => amendment::run(),
         "core" => core::run(&root, has(rest, "--list"), has(rest, "--check")),
         "independence" => independence::run(&root),
         "manifest" => manifest::run(has(rest, "--check")),

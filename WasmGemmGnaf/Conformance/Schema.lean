@@ -96,7 +96,7 @@ theorem profileValid_matches_authority_schema
     (profile : Wasm.Profile) (bytes : ByteArray) :
     ProfileValid profile bytes ↔
       (∃ module : Wasm.Module,
-        Wasm.decode bytes = .ok module ∧
+        Wasm.Subset.decode bytes = .ok module ∧
         Universal.validateUnder profile module = true ∧
         module.imports = [] ∧
         Universal.HasExactGemmExports profile module) :=
@@ -120,7 +120,7 @@ theorem semanticCorrect_matches_authority_schema
            ∃ initial : Wasm.Config,
            ∃ execution : Wasm.MaximalExecution initial,
              (∃ module : Wasm.Module,
-               Wasm.decode bytes = .ok module ∧
+               Wasm.Subset.decode bytes = .ok module ∧
                Universal.validateUnder P module = true ∧
                S.machine.initialGemmInvocationCosted module
                    (Universal.toWasmInvocation raw) = .ok initialization ∧
@@ -129,7 +129,7 @@ theorem semanticCorrect_matches_authority_schema
          ∀ (initialization : InitializationObservation P)
            (initial : Wasm.Config) (execution : Wasm.MaximalExecution initial),
            ((∃ module : Wasm.Module,
-               Wasm.decode bytes = .ok module ∧
+               Wasm.Subset.decode bytes = .ok module ∧
                Universal.validateUnder P module = true ∧
                S.machine.initialGemmInvocationCosted module
                    (Universal.toWasmInvocation raw) = .ok initialization ∧
@@ -157,7 +157,7 @@ theorem semanticWithinResources_matches_authority_schema
             ∃ initial : Wasm.Config,
             ∃ pre : RelationalPrefix initial (S.problem.maxSteps + 1),
               (∃ module : Wasm.Module,
-                Wasm.decode bytes = .ok module ∧
+                Wasm.Subset.decode bytes = .ok module ∧
                 Universal.validateUnder P module = true ∧
                 S.machine.initialGemmInvocationCosted module
                     (Universal.toWasmInvocation raw) = .ok initialization ∧
@@ -165,7 +165,7 @@ theorem semanticWithinResources_matches_authority_schema
          (∀ (initialization : InitializationObservation P)
             (initial : Wasm.Config) (execution : Wasm.MaximalExecution initial),
             ((∃ module : Wasm.Module,
-                Wasm.decode bytes = .ok module ∧
+                Wasm.Subset.decode bytes = .ok module ∧
                 Universal.validateUnder P module = true ∧
                 S.machine.initialGemmInvocationCosted module
                     (Universal.toWasmInvocation raw) = .ok initialization ∧
@@ -194,14 +194,14 @@ theorem systemEvaluation_matches_authority_schema [Foundation.Fintype (Gemm.RawI
     (S : Setting P) (bytes : ByteArray) (E : SystemEvaluation S bytes) :
     E = SystemEvaluation.mk
       (module := (E.module : Wasm.Module))
-      (decodeEq := (E.decodeEq : Wasm.decode bytes = .ok E.module))
+      (decodeEq := (E.decodeEq : Wasm.Subset.decode bytes = .ok E.module))
       (perInput := (E.perInput :
         ∀ raw : Gemm.RawInvocation P, InputEvaluation S E.module raw))
       (observationsComplete := (E.observationsComplete :
         ∀ raw : Gemm.RawInvocation P, (E.perInput raw).CoversEveryMaximalExecution))
       (cost := (E.cost : Cost.CompleteSystemCost))
       (costExact := (E.costExact :
-        Cost.ExactAggregateCost bytes (Wasm.decode bytes = .ok E.module)
+        Cost.ExactAggregateCost bytes (Wasm.Subset.decode bytes = .ok E.module)
           (P.body.costTableBody.decodeCost bytes)
           (S.semantics.validationSteps E.module)
           (S.semantics.staticDataBytes E.module)

@@ -1,7 +1,29 @@
 /-
-  Wasm/Declarative.lean --- the *relational* reading of the pinned binary
-  grammar, and the three SPEC section 15 declarations that are stated against
-  it: `Wasm.decode_sound`, `Wasm.decode_complete`, `Wasm.validate_iff_declarative`.
+  Wasm/Declarative.lean --- the *relational* reading of the SUBSET binary
+  grammar, and `Wasm.validate_iff_declarative`.
+
+  ## STATUS: two of the three SPEC section 15 names have LEFT this file
+
+  `Wasm.decode_sound` and `Wasm.decode_complete` are no longer here.  They are
+  in `Wasm/CoreFrontEnd.lean`, stated over the pinned Core 3.0 decoder and the
+  pinned grammar `Wasm.Core.Binary.Bmodule`.  `xtask independence` had demoted
+  the versions below as CIRCULAR --- `declarativeBinaryRelation_iff_encode`
+  equates the "declarative" side with `bytes = Subset.encode module`, so both
+  directions were round-trip lemmas about one codec and its own inverse --- and
+  that finding was correct.  What is below is the same pair of theorems, still
+  proved, under `Wasm.Subset.decode_sound` and `Wasm.Subset.decode_complete`,
+  where the names say which language they are about.
+
+  `Wasm.validate_iff_declarative` is still here, still stated over the subset
+  validator, and `xtask independence` still reports it CIRCULAR --- the ledger
+  carries it as outstanding for that reason.  It cannot be re-pointed at
+  `Wasm.Core` yet: `Wasm.Core.validate_iff_declarative` carries the residual
+  guard `Validate.Module.frag`, which excludes tables and element segments, and
+  removing that guard needs a decision procedure for `Heaptype_sub` that does
+  not exist in this repository.  Stating the biconditional over Core without the
+  guard would be stating something false; stating it WITH the guard would put a
+  checker-side boolean back into the declarative side, which is the exact defect
+  the independence check exists to catch.
 
   Normative source: the vendored Core 3.0 sources under `vendor/wasm-spec/`,
   pinned at commit `9d36019973201a19f9c9ebb0f10828b2fe2374aa`, specifically
@@ -11,22 +33,22 @@
 
   ## What this file adds
 
-  `Wasm/Binary.lean` proves an *intrinsic* inverse pair --- `encode` and
-  `decode` invert each other --- and is explicit that this is not a statement
-  about the pinned grammar.  This file supplies the missing side: a relation
+  `Wasm/Binary.lean` proves an *intrinsic* inverse pair --- `Subset.encode` and
+  `Subset.decode` invert each other --- and is explicit that this is not a
+  statement about the pinned grammar.  This file supplies the missing side for
+  the subset language: a relation
 
-      `Wasm.DeclarativeBinaryRelation : ByteArray -> Module -> Prop`
+      `Wasm.Subset.DeclarativeBinaryRelation : ByteArray -> Module -> Prop`
 
   defined by grammar productions, with no reference anywhere in its *definition*
-  to `Wasm.decode`, `Wasm.decULEB`, `Wasm.decSLEB`, `Wasm.decInstr` or any other
-  decoding function, and then proves both halves against it:
+  to `Wasm.Subset.decode`, `Wasm.decULEB`, `Wasm.decSLEB`, `Wasm.decInstr` or any
+  other decoding function, and then proves both halves against it:
 
-  * `Wasm.decode_sound`    --- everything the decoder accepts is derivable;
-  * `Wasm.decode_complete` --- everything derivable the decoder accepts.
+  * `Wasm.Subset.decode_sound`    --- everything the decoder accepts is derivable;
+  * `Wasm.Subset.decode_complete` --- everything derivable the decoder accepts.
 
-  Completeness is the direction that rules out a decoder which silently rejects
-  a well-formed module, and it is the one an intrinsic round-trip theorem cannot
-  give.
+  The DEFINITION is independent of the decoder; the PROOFS are not, and that is
+  why these two carry the `Subset` name rather than SPEC section 15's.
 
   ## Honest scope: what the relation does and does not cover
 
@@ -1160,7 +1182,7 @@ def BModule (m : Module) : Deriv :=
                         (section_ 11 (list BData m.datas))))))))))))
 
 set_option maxHeartbeats 1000000 in
-theorem gen_BModule (m : Module) : Gen (BModule m) (encodeList m) :=
+theorem gen_BModule (m : Module) : Gen (BModule m) (Subset.encodeList m) :=
   gen_cat (gen_lit magicBytes)
     (gen_cat (gen_section 1 (gen_list (P := BRecType) (f := recTypeC.enc) gen_recType m.types))
       (gen_cat (gen_section 2 (gen_list (P := BImport) (f := importC.enc) gen_import m.imports))
@@ -1177,10 +1199,26 @@ theorem gen_BModule (m : Module) : Gen (BModule m) (encodeList m) :=
 
 end BinaryGrammar
 
-/-! ## SPEC section 15: the three declarations -/
+/-! ## The SUBSET reflection theorems
 
-/-- **SPEC section 7.3 / 15.**  The declarative reading of the pinned binary
-grammar, for the modelled subset: `DeclarativeBinaryRelation bytes m` holds
+These three used to wear the SPEC section 15 names `Wasm.decode_sound` and
+`Wasm.decode_complete`.  They no longer do, and the demotion is deliberate:
+`xtask independence` proved them circular, because
+`declarativeBinaryRelation_iff_encode` below equates the "declarative" side
+with `bytes = Subset.encode module`, and a decoder proved inverse to its own
+encoder says nothing about the pinned Core 3.0 format.
+
+The SPEC section 15 names now denote the Core 3.0 statements of
+`Wasm/CoreFrontEnd.lean`, which are proved against the vendored binary grammar
+`Wasm.Core.Bmodule` and mention no encoder anywhere in their import graph.
+What survives here is what was always true of these theorems: the subset codec
+is internally consistent with the subset grammar of this file. -/
+
+namespace Subset
+
+/-- **The subset grammar's reflection relation.**  The declarative reading of
+this file's binary grammar, for the modelled subset:
+`DeclarativeBinaryRelation bytes m` holds
 exactly when the grammar of `Wasm/Declarative.lean` derives `bytes` with
 synthesized attribute `m`.
 
@@ -1191,7 +1229,9 @@ def DeclarativeBinaryRelation (bytes : ByteArray) (module : Module) : Prop :=
   BinaryGrammar.BModule module bytes.toList
 
 /-- The grammar derives, for a given module, exactly the byte sequence that
-`Wasm.encode` produces --- no more and no fewer. -/
+`Wasm.Subset.encode` produces --- no more and no fewer.  This equation is what
+`xtask independence` names as the circularity: it is the reason the two
+theorems below are no longer credited under SPEC section 15's names. -/
 theorem declarativeBinaryRelation_iff_encode (bytes : ByteArray) (module : Module) :
     DeclarativeBinaryRelation bytes module ↔ bytes = encode module := by
   constructor
@@ -1203,16 +1243,15 @@ theorem declarativeBinaryRelation_iff_encode (bytes : ByteArray) (module : Modul
   · rintro rfl
     exact (BinaryGrammar.gen_BModule module (encode module).toList).mpr (toList_encode module)
 
-/-- **SPEC section 7.3 / 15, `Wasm.decode_sound`.**  Whatever the executable
-decoder accepts, the declarative grammar derives. -/
+/-- **Subset soundness (NOT SPEC section 15's `Wasm.decode_sound`).**  Whatever
+the subset decoder accepts, the subset grammar derives. -/
 theorem decode_sound {bytes : ByteArray} {module : Module}
     (h : decode bytes = .ok module) : DeclarativeBinaryRelation bytes module :=
   (declarativeBinaryRelation_iff_encode bytes module).mpr (decode_is_encode h)
 
-/-- **SPEC section 7.3 / 15, `Wasm.decode_complete`.**  Whatever the declarative
-grammar derives, the executable decoder accepts --- and returns exactly the
-module the derivation synthesized.  This is the direction that rules out a
-decoder which silently rejects a well-formed module. -/
+/-- **Subset completeness (NOT SPEC section 15's `Wasm.decode_complete`).**
+Whatever the subset grammar derives, the subset decoder accepts --- and returns
+exactly the module the derivation synthesized. -/
 theorem decode_complete {bytes : ByteArray} {module : Module}
     (h : DeclarativeBinaryRelation bytes module) : decode bytes = .ok module := by
   rw [(declarativeBinaryRelation_iff_encode bytes module).mp h]
@@ -1223,6 +1262,8 @@ grammar. -/
 theorem decode_iff_declarative (bytes : ByteArray) (module : Module) :
     decode bytes = .ok module ↔ DeclarativeBinaryRelation bytes module :=
   ⟨decode_sound, decode_complete⟩
+
+end Subset
 
 /--
 **SPEC section 7.3 / 15, `Wasm.validate_iff_declarative`.**  The executable
@@ -1316,6 +1357,8 @@ theorem not_BuN_noncanonical_three : ¬ BinaryGrammar.BuN 3 [0x83, 0x00] := by
   rw [encodeULEB_three] at h2
   exact absurd h2 (by decide)
 
+namespace Subset
+
 /-- The relation holds of the empty module and its encoding. -/
 theorem declarative_encode_empty :
     DeclarativeBinaryRelation (encode Module.empty) Module.empty :=
@@ -1328,5 +1371,7 @@ theorem not_declarative_empty :
   have hd := decode_complete h
   rw [decode_empty] at hd
   exact absurd hd (by simp)
+
+end Subset
 
 end WasmGemmGnaf.Wasm
