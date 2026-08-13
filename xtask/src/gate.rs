@@ -125,6 +125,20 @@ pub fn run(root: &Path, no_mutation: bool) -> Result<Outcome> {
         ),
     );
 
+    // SPEC 5.1: the tool CHECKS what the kernel proved; it never decides it.
+    // `Wasm.profile_matches_pinned_revision` stands on literals in
+    // `Wasm/Revision.lean` -- the digest of `SHA256SUMS`, the file count, the
+    // commit -- and Lean cannot read the tree. This is what stops a literal that
+    // has drifted from the vendored bytes from elaborating its way past the gate,
+    // and it checks the vendored-anchor map of `Wasm/Adequacy.lean` the same way.
+    let binding = vendor::binding(Path::new("vendor/wasm-spec"), root)?;
+    g.check(
+        "1",
+        "Lean vendored-tree literals match the vendored content",
+        binding.is_ok(),
+        &clip(&binding.findings.join("; "), 200),
+    );
+
     // ---- 2. claim graph -----------------------------------------------------
     let registry = read_json("model/claims.json")?;
     let claims = registry

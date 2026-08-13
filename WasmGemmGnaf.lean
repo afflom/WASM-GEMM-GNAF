@@ -29,6 +29,7 @@ import WasmGemmGnaf.Wasm.Numeric
 import WasmGemmGnaf.Wasm.Profile
 import WasmGemmGnaf.Wasm.Revision
 import WasmGemmGnaf.Wasm.Run
+import WasmGemmGnaf.Wasm.Soundness
 import WasmGemmGnaf.Wasm.Step
 import WasmGemmGnaf.Wasm.Store
 import WasmGemmGnaf.Wasm.Syntax

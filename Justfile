@@ -7,7 +7,7 @@ default: vv
 xtask := "cargo run --quiet --release -p xtask --"
 
 # The whole gate. Expected to FAIL at step 9 while WGG-GO-1 is outstanding.
-vv: tools root-check firewall manifest-check releasepath build required schema claims axioms
+vv: tools root-check firewall manifest-check releasepath build vendor required schema claims axioms
     @{{xtask}} gate
 
 bootstrap:
@@ -80,6 +80,12 @@ manifest-check: tools
 # SPEC 19/6.3: no noncomputable definition on the release path.
 releasepath: tools
     @{{xtask}} sources releasepath
+
+# SPEC 5: the vendored WebAssembly Core tree, recomputed from CONTENT, against
+# the literals `Wasm.profile_matches_pinned_revision` stands on. Lean cannot read
+# the tree; this is what stops a drifted literal from elaborating past the gate.
+vendor: tools
+    @{{xtask}} vendor --list
 
 # SPEC 15: required declarations, checked against the compiled environment.
 required: tools

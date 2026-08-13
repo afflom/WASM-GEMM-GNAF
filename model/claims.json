@@ -235,6 +235,39 @@
       "note": "Discharges the finiteness half of SPEC 10.3. Does NOT discharge UV-001: enumerability is not coverage, and the enumeration is physically unrunnable (256^u exceeds the holographic bound at u>51 bytes)."
     },
     {
+      "id": "UV-006",
+      "level": "formalProof",
+      "statement": "SPEC 10.3: possible_winner_within_sublevel -- an evaluated competitor whose score does not exceed the baseline's lies within the objective's declared resource bound for that sublevel, and its module byte count is within that bound's module-size coordinate.",
+      "leanDeclaration": "WasmGemmGnaf.Universal.possible_winner_within_sublevel",
+      "sourceModule": "WasmGemmGnaf/Universal/Sublevel.lean",
+      "axioms": [
+        "propext",
+        "Quot.sound"
+      ],
+      "specSection": "10.3",
+      "status": "discharged",
+      "releaseApplicable": true,
+      "scopeLimitation": "This CONFINES a competitor given an evaluation of it. It does not produce that evaluation (system_evaluation_rel_complete, outstanding), does not claim every competitor has one, and does not claim the sublevel has been searched (universal_sublevel_coverage, outstanding). Only the score hypothesis is used: Universal.withinSublevel_of_score_le proves the same conclusion without SPEC's five other premises, which is stated so that carrying them verbatim cannot be mistaken for needing them. The bound is the objective's OWN boundOfScore field, so nothing here invents a bound; for Cost.canonicalObjective that field is uniformBounds, making the sublevel genuinely finite in every one of the 36 charged coordinates.",
+      "note": "The first of SPEC 10.3's six numbered obligations, and the only one this repository discharges. It is what makes the search for a winner a search over a bounded carrier rather than over all of ByteArray -- contrapositively, a module outside the sublevel cannot beat the baseline. It is NOT progress on UV-001: bounding the carrier and covering it are different propositions, and the gap between them is the attained universal lower bound of UOR-GNAF 19.3."
+    },
+    {
+      "id": "UV-005",
+      "level": "formalProof",
+      "statement": "SPEC 10.4: partition_cover_complete -- every byte string a root partition cell denotes is resolved by one of the three terminal verdicts (enumerated exactly, refuted as not profile valid, or dominated by a lower bound the incumbent strictly beats), or the strategy is exhibited reporting a coverage gap on a cell that denotes it.",
+      "leanDeclaration": "WasmGemmGnaf.Universal.partition_cover_complete",
+      "sourceModule": "WasmGemmGnaf/Universal/Partition.lean",
+      "axioms": [
+        "propext",
+        "Classical.choice",
+        "Quot.sound"
+      ],
+      "specSection": "10.4",
+      "status": "discharged",
+      "releaseApplicable": true,
+      "scopeLimitation": "Conditional on root.Denotes bytes. A root cell that denotes almost nothing satisfies this theorem while covering almost no competitor, and Universal.coverLeaves_covers_scope proves such roots exist. There is NO hypothesis on the strategy -- a strategy that gives up is caught in the conclusion, not excluded -- but that is a statement about detection, not about coverage. The dominated disjunct's body is the universal lower bound of UOR-GNAF 19.3 verbatim; this repository builds no inhabitant of PartitionResult.dominated for the release scope, and the theorem only transports whatever a strategy supplies.",
+      "note": "Strictly stronger than the pre-existing coverLeaves_covers, which reached a leaf without saying what happened there. Turning this into UV-001 (universal_sublevel_coverage) needs two further things this repository does not have: a root cell PROVED to denote every profile-valid byte string of the sublevel, and a strategy with no incomplete leaf -- and the only way to seal a cell too large to enumerate is dominated. Both outstanding."
+    },
+    {
       "id": "CM-002",
       "level": "formalProof",
       "statement": "Decode faults and instantiation faults are disjoint: no machine fault is both.",
@@ -645,6 +678,38 @@
         "WS-001"
       ],
       "note": "Raised by external audit. `def wasmProfile := Wasm.unitWitnessProfile`, and the cost table is Wasm.canonicalCostTableUnits rather than SPEC 7.5's Release.wasmCostTableBody. The file discloses both, and wasmProfile_body : wasmProfile.body = wasmProfileBody holds by rfl, but the SEMANTICS backing the profile is the i32 subset. So the syntactic 'for all ByteArray' in GlobalOptimal does not yet range over the authority-required Core 3.0 competitor universe."
+    },
+    {
+      "id": "WS-004",
+      "level": "formalProof",
+      "statement": "SPEC 15 Wasm.profile_matches_pinned_revision, at the meaning SPEC 7.1 gives the name: the concrete model and conformance map are identity-bound to the VENDORED revision, and every enabled vendored rule has exactly one mapped Lean declaration.",
+      "leanDeclaration": "WasmGemmGnaf.Wasm.profile_matches_pinned_revision",
+      "sourceModule": "WasmGemmGnaf/Wasm/Adequacy.lean",
+      "axioms": [
+        "propext",
+        "Classical.choice",
+        "Quot.sound"
+      ],
+      "specSection": "7.1",
+      "status": "discharged",
+      "releaseApplicable": true,
+      "note": "Two conjuncts, exactly as SPEC 7.1 defines the name. (1) IDENTITY BINDING TO THE VENDORED REVISION: every lawful Wasm.Profile, core3AdequacyMap and Wasm.core3VendoredTree carry one commit; the map carries the vendored tree record whose manifestSha256 is the SHA-256 of vendor/wasm-spec/SHA256SUMS, itself the list of digests of all forty vendored files; and RevisionBody.identity and VendoredTreeBody.identity are both injective (structural canonical identity from prefix-free encoding -- no collision-resistance assumption anywhere), so a different revision, or a single different vendored byte, gives a different identity. (2) EXACTLY ONE MAPPED DECLARATION PER ENABLED RULE: one fully qualified Lean name, one map row and one vendored anchor per enabled identifier; no declaration shared by two identifiers; nothing at all for a rejected one. Re-indexed as WasmGemmGnaf.Theorems.profile_matches_pinned_revision.",
+      "axiomNote": "Classical.choice is permitted by SPEC 4 as a Lean core logical axiom; SPEC 4's restriction is that it SHALL NOT produce executable witnesses. It enters through Lean core's String.ofList_toList, used by Wasm.string_append_left_cancel to cancel the `WasmGemmGnaf.Wasm.` namespace prefix when qualifying a mapped declaration name. This is a Prop-level theorem, not an executable witness, so the restriction is not triggered.",
+      "boundaryNote": "Lean does not read vendor/wasm-spec/. The content binding rests on the literals core3VendorManifestSha256, core3VendoredTree.fileCount and core3RevisionCommit; CM-006 is the tooling claim that recomputes them from CONTENT. What is NOT established, and why WS-001/O-6 stay open: the enumeration cites 73 distinct vendored anchors of the 835 rule-shaped labels the vendored tree defines, so PinnedCoreRuleId is a declared SUBSET of the pinned rule set and is not proved to be all of it; and 320 unexpanded SpecTec ${rule: ...} references remain in the vendored sources, whose .watsup bodies are not vendored, so the anchor check tests rule IDENTITY and never rule CONTENT. SPEC 7.1 places the transcription on the authority side of the boundary; this theorem claims nothing on the far side of it."
+    },
+    {
+      "id": "CM-006",
+      "level": "buildEvidence",
+      "statement": "The Lean literals Wasm.profile_matches_pinned_revision stands on are recomputed from the vendored CONTENT: the digest of vendor/wasm-spec/SHA256SUMS, the per-file digests of all forty vendored files, the file count, the pinned commit, and every vendored rule anchor the conformance map cites.",
+      "leanDeclaration": null,
+      "sourceModule": "xtask/src/vendor.rs",
+      "specSection": "5",
+      "status": "verified",
+      "releaseApplicable": true,
+      "dependsOn": [
+        "WS-004"
+      ],
+      "note": "SPEC 5.1 boundary: xtask CHECKS whether the kernel discharged an obligation, it never DECIDES one. Lean cannot read the tree, so a drifted literal would still elaborate; `xtask vendor` (release gate step 1, `just vendor`) is what stops it reaching a green gate. It also checks the gap-3 direction the kernel cannot: every anchor Wasm.PinnedCoreRuleId.vendorAnchor? cites must be a label the vendored .rst sources actually DEFINE, so an invented rule identifier fails the gate. 73 of 73 cited anchors found. Falsifier M13 plants a flipped digest, an appended line and a deleted entry on a COPY of the vendored tree and requires the real checker to reject each, with the unmutated copy as control."
     },
     {
       "id": "UV-004",

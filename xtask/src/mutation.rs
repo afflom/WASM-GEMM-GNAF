@@ -33,7 +33,7 @@ type Falsifier = fn(&Path) -> Result<bool>;
 pub fn run(root: &Path) -> Result<Outcome> {
     println!("mutation suite (SPEC 18)\n");
 
-    let falsifiers: [(&str, Falsifier); 12] = [
+    let falsifiers: [(&str, Falsifier); 13] = [
         ("M1 mutated authority bytes rejected by digest recomputation", m1),
         ("M2 duplicate claim id rejected", m2),
         ("M3 orphan claim dependency rejected", m3),
@@ -46,6 +46,7 @@ pub fn run(root: &Path) -> Result<Outcome> {
         ("M10 manifest stages acyclic and not self-bound", m10),
         ("M11 weakened GlobalOptimal breaks the Iff.rfl schema binding and the schema audit", m11),
         ("M12 choice-tainted required declaration reported TAINTED, not discharged", m12),
+        ("M13 mutated vendored SHA256SUMS breaks the pinned-revision binding", m13),
     ];
 
     let mut failed: Vec<&str> = Vec::new();
@@ -95,44 +96,132 @@ fn m1(_root: &Path) -> Result<bool> {
 }
 
 // ---------------------------------------------------------------------------
+// Registry falsifiers M2-M4.
+//
+// All three plant a fault in a COPY of `model/claims.json` and then run the
+// repository's own checker, `required::registry_violations`, against that copy.
+//
+// They did not always. Until this rewrite each one reimplemented the check
+// inside itself -- M2 appended a duplicate to an in-memory `Vec` and asserted
+// that `dedup` shrank it -- so all three tested Rust's standard library and
+// nothing else. The suite reported `[PASS] M2 duplicate claim id rejected` at a
+// moment when `model/claims.json` genuinely carried two rows with the id
+// `UV-004` and `just claims` accepted them. A falsifier that does not invoke
+// the gate it names is worth less than no falsifier at all, because it reads as
+// evidence.
+//
+// Every one of the three carries a control: the UNMUTATED copy must produce no
+// finding, so a falsifier cannot pass by failing for an unrelated reason (an
+// unparseable copy, a missing file, a checker that rejects everything).
+// ---------------------------------------------------------------------------
+
+/// Write `registry` to a scratch file and ask the real checker about it,
+/// returning the findings it reports.
+fn registry_findings(tmp: &TempDir, name: &str, registry: &str) -> Result<Vec<String>> {
+    let planted = tmp.path().join(name);
+    write(&planted, registry)?;
+    required::registry_violations(&planted)
+}
+
+/// The tracked registry as text, for mutation.
+fn registry_text() -> Result<String> {
+    let path = Path::new("model/claims.json");
+    fs::read(path)
+        .map(|b| String::from_utf8_lossy(&b).into_owned())
+        .map_err(|e| SpecError::io(CLAUSE, "cannot read the claim registry", path, e))
+}
+
+/// Duplicate the first claim object of the registry text, verbatim, by splicing
+/// a second copy in after it. Working on the TEXT rather than on a parsed value
+/// keeps the planted file a genuine input to the parser.
+fn plant_duplicate_claim(text: &str) -> Result<String> {
+    let start = text
+        .find("\n    {")
+        .ok_or_else(|| SpecError::new(CLAUSE, "the claim registry has no claim object to duplicate"))?;
+    let end = text[start..]
+        .find("\n    },")
+        .map(|i| start + i + "\n    },".len())
+        .ok_or_else(|| SpecError::new(CLAUSE, "the first claim object is unterminated"))?;
+    let first = &text[start..end];
+    Ok(format!("{}{}{}", &text[..end], first, &text[end..]))
+}
+
 // M2: a claim registry with a duplicate id must be rejected.
-// ---------------------------------------------------------------------------
 fn m2(_root: &Path) -> Result<bool> {
-    let claims = claims()?;
-    let mut ids: Vec<String> = claims.iter().map(|c| field(c, "id").to_string()).collect();
-    let first = ids
-        .first()
-        .cloned()
-        .ok_or_else(|| SpecError::new(CLAUSE, "the claim registry is empty"))?;
-    ids.push(first); // the planted duplicate
+    let tmp = TempDir::new("m2")?;
+    let text = registry_text()?;
 
-    let mut unique = ids.clone();
-    unique.sort();
-    unique.dedup();
-    Ok(unique.len() != ids.len())
+    let control = registry_findings(&tmp, "control.json", &text)?;
+    let planted = registry_findings(&tmp, "planted.json", &plant_duplicate_claim(&text)?)?;
+
+    Ok(control.is_empty() && planted.iter().any(|f| f.starts_with("duplicate claim id")))
 }
 
-// ---------------------------------------------------------------------------
 // M3: a claim registry with an orphan dependency must be rejected.
-// ---------------------------------------------------------------------------
 fn m3(_root: &Path) -> Result<bool> {
+    let tmp = TempDir::new("m3")?;
+    let text = registry_text()?;
     let claims = claims()?;
-    let ids: Vec<&str> = claims.iter().map(|c| field(c, "id")).collect();
-    Ok(!ids.contains(&"GO-999")) // the planted dangling dependency
+    let victim = claims
+        .first()
+        .map(|c| field(c, "id").to_string())
+        .ok_or_else(|| SpecError::new(CLAUSE, "the claim registry is empty"))?;
+
+    // Give the first claim a dependency on a claim id that does not exist.
+    let anchor = format!("\"id\": \"{victim}\",");
+    let planted_text = text.replacen(
+        &anchor,
+        &format!("{anchor}\n      \"dependsOn\": [\"GO-999-PLANTED\"],"),
+        1,
+    );
+    if planted_text == text {
+        return Err(SpecError::new(CLAUSE, "could not plant an orphan dependency"));
+    }
+
+    let control = registry_findings(&tmp, "control.json", &text)?;
+    let planted = registry_findings(&tmp, "planted.json", &planted_text)?;
+
+    Ok(control.is_empty() && planted.iter().any(|f| f.contains("orphan dependency")))
 }
 
-// ---------------------------------------------------------------------------
 // M4: promoting an outstanding claim to formalProof without a Lean declaration
 //     must be rejected (SPEC 17.1: only formalProof supports 'proved').
-// ---------------------------------------------------------------------------
 fn m4(_root: &Path) -> Result<bool> {
+    let tmp = TempDir::new("m4")?;
+    let text = registry_text()?;
     let claims = claims()?;
-    let go = claims
+
+    // The forgery promotes an OPEN claim -- one with no `leanDeclaration` -- to
+    // `formalProof`. That is the exact edit SPEC 17.1 forbids and the exact one
+    // a repository under pressure to show a green gate would reach for.
+    let victim = claims
         .iter()
-        .find(|c| field(c, "id") == "GO-001")
-        .ok_or_else(|| SpecError::new(CLAUSE, "the claim registry has no GO-001"))?;
-    // The forgery promotes the level; the declaration it would need is still absent.
-    Ok(go.get("leanDeclaration").and_then(Value::as_str).is_none())
+        .find(|c| {
+            field(c, "level") == "open" && c.get("leanDeclaration").and_then(Value::as_str).is_none()
+        })
+        .map(|c| field(c, "id").to_string())
+        .ok_or_else(|| {
+            SpecError::new(CLAUSE, "the claim registry has no open claim to forge a promotion of")
+        })?;
+
+    let anchor = format!("\"id\": \"{victim}\",\n      \"level\": \"open\"");
+    let planted_text = text.replacen(
+        &anchor,
+        &format!("\"id\": \"{victim}\",\n      \"level\": \"formalProof\""),
+        1,
+    );
+    if planted_text == text {
+        return Err(SpecError::new(
+            CLAUSE,
+            &format!("could not plant a level promotion on {victim}"),
+        ));
+    }
+
+    let control = registry_findings(&tmp, "control.json", &text)?;
+    let planted = registry_findings(&tmp, "planted.json", &planted_text)?;
+
+    Ok(control.is_empty()
+        && planted.iter().any(|f| f.contains("formalProof with no leanDeclaration")))
 }
 
 // ---------------------------------------------------------------------------
@@ -489,6 +578,130 @@ fn planted_witness(
         ));
     }
     Ok(probe.combined())
+}
+
+// ---------------------------------------------------------------------------
+// M13: a mutated vendored tree must break the binding the Lean theorem
+//      `Wasm.profile_matches_pinned_revision` stands on.
+//
+// SPEC section 7.1 says that theorem means the model and map are identity-bound
+// to the VENDORED revision. Lean cannot read `vendor/wasm-spec/`; it stands on
+// the literals in `Wasm/Revision.lean` -- the digest of `SHA256SUMS`, the file
+// count and the commit. A literal that had drifted from the tree would still
+// elaborate, so the binding is only as good as the checker that recomputes it,
+// and a checker that never fires is indistinguishable from one with nothing to
+// find.
+//
+// Three faults, each planted on a COPY of the tree, each run through the REAL
+// checker (`vendor::binding`) rather than a reimplementation of it:
+//
+//   * a flipped digest inside `SHA256SUMS` -- the manifest no longer describes
+//     the file it lists, AND its own digest no longer matches the Lean literal;
+//   * an appended line -- every per-file digest still checks out, so only the
+//     digest of digests catches it. This is the mutation that would slip past
+//     `sha256sum -c` alone;
+//   * a deleted entry -- the file count no longer matches `fileCount`.
+//
+// The unmutated copy is the control: it must produce NO finding, so M13 cannot
+// pass by failing for an unrelated reason (a bad copy, a missing file, a checker
+// that rejects everything).
+// ---------------------------------------------------------------------------
+fn m13(root: &Path) -> Result<bool> {
+    let tmp = TempDir::new("m13")?;
+    let planted = tmp.path().join("wasm-spec");
+    copy_tree(Path::new("vendor/wasm-spec"), &planted)?;
+
+    let control = crate::vendor::binding(&planted, root)?;
+    if !control.is_ok() {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the UNMUTATED copy of the vendored tree already fails the binding check, \
+                 so M13 would pass for the wrong reason: {}",
+                control.findings.join("; ")
+            ),
+        ));
+    }
+    if control.anchors_cited == 0 {
+        return Err(SpecError::new(
+            CLAUSE,
+            "the binding check cites no vendored anchor, so its anchor half tests nothing",
+        ));
+    }
+
+    let sums_path = planted.join("SHA256SUMS");
+    let original = fs::read_to_string(&sums_path)
+        .map_err(|e| SpecError::io(CLAUSE, "cannot read the planted digest manifest", &sums_path, e))?;
+
+    // (a) a flipped digest: the manifest lies about a file it lists.
+    let flipped = flip_first_digest(&original)?;
+    write(&sums_path, &flipped)?;
+    let corrupted = crate::vendor::binding(&planted, root)?;
+    let rejects_flip = corrupted
+        .findings
+        .iter()
+        .any(|f| f.starts_with("vendored file digest mismatch"))
+        && corrupted.findings.iter().any(|f| f.contains("have drifted apart"));
+
+    // (b) an appended line: every per-file digest still checks out. Only the
+    //     digest of digests notices, which is the whole point of recording it.
+    write(&sums_path, &format!("{original}\n"))?;
+    let appended = crate::vendor::binding(&planted, root)?;
+    let rejects_append = appended.content_failures.is_empty()
+        && appended.findings.iter().any(|f| f.contains("have drifted apart"));
+
+    // (c) a deleted entry: the vendored file count no longer matches Lean's.
+    let shortened: String = original
+        .lines()
+        .skip(1)
+        .map(|l| format!("{l}\n"))
+        .collect();
+    write(&sums_path, &shortened)?;
+    let deleted = crate::vendor::binding(&planted, root)?;
+    let rejects_delete = deleted
+        .findings
+        .iter()
+        .any(|f| f.contains("core3VendoredTree.fileCount"));
+
+    Ok(rejects_flip && rejects_append && rejects_delete)
+}
+
+/// Flip one hex digit of the first digest line, keeping the line well formed so
+/// the parser still accepts it. A malformed line would be rejected as a parse
+/// error, which is a different failure from the one under test.
+fn flip_first_digest(text: &str) -> Result<String> {
+    for (index, line) in text.lines().enumerate() {
+        if line.len() > 64 && line.as_bytes()[..64].iter().all(u8::is_ascii_hexdigit) {
+            let first = &line[..1];
+            let replacement = if first == "0" { "1" } else { "0" };
+            let mutated = format!("{replacement}{}", &line[1..]);
+            let mut out: Vec<String> = text.lines().map(String::from).collect();
+            out[index] = mutated;
+            return Ok(format!("{}\n", out.join("\n")));
+        }
+    }
+    Err(SpecError::new(CLAUSE, "the planted digest manifest has no digest line to flip"))
+}
+
+/// Copy a directory tree. Every mutation is applied to a COPY; the vendored
+/// tree under verification is never written.
+fn copy_tree(from: &Path, to: &Path) -> Result<()> {
+    fs::create_dir_all(to)
+        .map_err(|e| SpecError::io(CLAUSE, "cannot create the planted tree at", to, e))?;
+    let entries = fs::read_dir(from)
+        .map_err(|e| SpecError::io(CLAUSE, "cannot read the vendored tree at", from, e))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| SpecError::io(CLAUSE, "cannot read an entry under", from, e))?;
+        let source = entry.path();
+        let target = to.join(entry.file_name());
+        if source.is_dir() {
+            copy_tree(&source, &target)?;
+        } else {
+            fs::copy(&source, &target)
+                .map_err(|e| SpecError::io(CLAUSE, "cannot copy", &source, e))?;
+        }
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------

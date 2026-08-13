@@ -22,6 +22,7 @@ mod required;
 mod root;
 mod scan;
 mod schema;
+mod sha1;
 mod sha256;
 mod spec;
 mod vendor;
@@ -46,6 +47,13 @@ SOURCE CHECKS (read the tree)
                                (SPEC 5).
     sources releasepath        No noncomputable definition on the release path
                                (SPEC 19 / 6.3).
+    vendor [--list]            The vendored WebAssembly Core tree, recomputed from
+                               CONTENT (SPEC 5), against the literals the Lean
+                               theorem `Wasm.profile_matches_pinned_revision` stands
+                               on: the digest of SHA256SUMS, the file count, the
+                               pinned commit, and every vendored rule anchor cited by
+                               `Wasm/Adequacy.lean`. --list adds the coverage
+                               arithmetic and the SpecTec scope limit.
 
 ENVIRONMENT CHECKS (question the compiled Lean environment)
     claims required [--list] [--check]
@@ -71,7 +79,7 @@ RELEASE
     gate [--no-mutation]       The normative release gate: SPEC 20.2's thirteen
                                conditions. --no-mutation is for the M6 falsifier,
                                which would otherwise recurse back into this suite.
-    mutation                   Planted falsifiers M1-M12 (SPEC 18). Every mutation is
+    mutation                   Planted falsifiers M1-M13 (SPEC 18). Every mutation is
                                applied to a COPY, never to the repository.
 
 Requires `lake build` first for the environment checks.
@@ -133,6 +141,7 @@ fn dispatch(args: &[String]) -> Result<Outcome> {
         }
         "axioms" => axioms::run(&root),
         "schema" => schema::run(&root),
+        "vendor" => vendor::run(has(rest, "--list")),
         "manifest" => manifest::run(has(rest, "--check")),
         "docs" => docs::run(),
         "gate" => gate::run(&root, has(rest, "--no-mutation")),

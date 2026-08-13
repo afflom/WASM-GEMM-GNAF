@@ -71,11 +71,90 @@ impl Report {
     }
 }
 
-/// `xtask claims list` -- the claim registry as a table.
+/// Every registry integrity violation SPEC section 17.1 forbids, as a list of
+/// human-readable findings. Empty means the registry is well formed.
+///
+/// This takes a PATH rather than reading the tracked file directly, because the
+/// mutation suite must be able to run it against a planted copy. A falsifier
+/// that reimplements the check instead of calling it tests its own arithmetic
+/// and nothing else; `M2`/`M3`/`M4` did exactly that before this existed, and
+/// reported PASS while `model/claims.json` genuinely carried a duplicate id.
+pub fn registry_violations(path: &Path) -> Result<Vec<String>> {
+    let text = std::fs::read(path)
+        .map(|b| String::from_utf8_lossy(&b).into_owned())
+        .map_err(|e| SpecError::io("17.1", "cannot read the claim registry", path, e))?;
+    let registry = crate::json::parse("17.1", &text)?;
+    let claims = registry
+        .get("claims")
+        .and_then(crate::json::Value::as_array)
+        .ok_or_else(|| SpecError::new("17.1", "the claim registry has no `claims` array"))?;
+
+    let field = |claim: &crate::json::Value, key: &str| -> String {
+        claim.get(key).and_then(crate::json::Value::as_str).unwrap_or("").to_string()
+    };
+
+    let mut findings = Vec::new();
+
+    if claims.is_empty() {
+        findings.push("the claim registry is empty".to_string());
+    }
+
+    // SPEC 20.2 condition 2: claim ids are unique.
+    let ids: Vec<String> = claims.iter().map(|c| field(c, "id")).collect();
+    let mut seen: Vec<&String> = Vec::new();
+    let mut duplicates: Vec<&String> = Vec::new();
+    for id in &ids {
+        if seen.contains(&id) {
+            if !duplicates.contains(&id) {
+                duplicates.push(id);
+            }
+        } else {
+            seen.push(id);
+        }
+    }
+    for id in duplicates {
+        findings.push(format!("duplicate claim id: {id}"));
+    }
+
+    // SPEC 20.2 condition 2: no `dependsOn` names a claim that is not present.
+    for claim in claims {
+        for dep in claim.get("dependsOn").and_then(crate::json::Value::as_array).unwrap_or(&[]) {
+            if let Some(dep) = dep.as_str() {
+                if !ids.iter().any(|id| id == dep) {
+                    findings.push(format!(
+                        "orphan dependency: {} depends on {dep}, which is not a claim",
+                        field(claim, "id")
+                    ));
+                }
+            }
+        }
+    }
+
+    // SPEC 17.1: only `formalProof` supports "proved"/"theorem"/"globally
+    // optimal", and a `formalProof` row without a Lean declaration is exactly
+    // the promotion that word discipline forbids.
+    for claim in claims {
+        if field(claim, "level") == "formalProof" && field(claim, "leanDeclaration").is_empty() {
+            findings.push(format!(
+                "claim {} is level formalProof with no leanDeclaration",
+                field(claim, "id")
+            ));
+        }
+    }
+
+    Ok(findings)
+}
+
+/// `xtask claims list` -- the claim registry as a table, and its integrity.
 ///
 /// SPEC section 17.1 makes the LEVEL load-bearing: only `formalProof` supports
 /// the words "proved", "theorem" or "globally optimal". Printing the level next
 /// to every status is what stops a `documented` row being read as a proof.
+///
+/// It also VALIDATES. `VERIFICATION.md` has always described this command as
+/// checking that the registry is nonempty, its ids unique and its dependencies
+/// resolved; until now only `xtask gate` did any of that, so a duplicate id
+/// survived `just claims` and was reported only at the very end of `just vv`.
 pub fn list_registry() -> Result<Outcome> {
     let path = Path::new("model/claims.json");
     let text = std::fs::read(path)
@@ -98,7 +177,17 @@ pub fn list_registry() -> Result<Outcome> {
         };
         println!("  {:<8} {:<13} {}", field("id"), field("level"), field("status"));
     }
-    Ok(Outcome::Pass)
+
+    let findings = registry_violations(path)?;
+    if findings.is_empty() {
+        println!("\nregistry integrity: ids unique, dependencies resolved, levels backed");
+        Ok(Outcome::Pass)
+    } else {
+        for finding in &findings {
+            println!("  REGISTRY VIOLATION: {finding}");
+        }
+        Ok(Outcome::Fail)
+    }
 }
 
 pub fn run(root: &Path, list: bool, check: bool) -> Result<Outcome> {

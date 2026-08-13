@@ -13,10 +13,13 @@
   | SPEC §15 name                     | discharged by                             |
   |-----------------------------------|-------------------------------------------|
   | `Wasm.mem_successors_iff_step`    | `Theorems.mem_successors_iff_step`        |
+  | `Wasm.bounded_tree_covers_every_branch` | `Theorems.bounded_tree_covers_every_branch` |
   | `Wasm.costed_erase_iff_plain_run` | `Theorems.costed_erase_iff_plain_run`     |
   | `Wasm.decode_sound`               | `Theorems.decode_sound`                   |
   | `Wasm.decode_complete`            | `Theorems.decode_complete`                |
   | `Wasm.validate_iff_declarative`   | `Theorems.validate_iff_declarative`       |
+  | `Wasm.profile_matches_pinned_revision` | `Theorems.profile_matches_pinned_revision` |
+  | `Wasm.validation_progress`        | `Theorems.validation_progress`            |
 
   `Wasm.costed_erase_iff_plain_run` is discharged in the amended form recorded
   as `DEV-001` in `model/spec-deviations.json`: the literal SPEC §7.5
@@ -29,16 +32,17 @@
   `encode_decode_roundtrip`, `decode_is_encode`, `decode_error_or_encode`,
   `validate_bool_iff`, `successors_nodup`, `fault_decoding_ne_instantiation`
   (with the two injectivity halves), `costed_run_iff_plain_run`,
-  `wasm_cost_table_total`.
+  `wasm_cost_table_total`, `terminal_iff_halt_trap_or_throw`,
+  `validation_preservation`, `initialConfig_configWellTyped`,
+  `initialConfig_instantiates`.
+
+  `validation_preservation` is SPEC §7.3's name carrying the invariant
+  hypothesis `hwelltyped` that SPEC's literal signature omits; without it the
+  statement is false.  It is not on the §15 required list.
 
   ## SPEC §15 Wasm declarations that remain OUTSTANDING
 
-  * `Wasm.validation_progress` — no progress theorem exists for the modelled
-    subset.  Blocking obligation: `O-6`.
-  * `Wasm.bounded_tree_covers_every_branch` — absent.  Blocking obligation:
-    `O-6`.
-  * `Wasm.profile_matches_pinned_revision` — absent.  Blocking obligation:
-    `O-6`.
+  None.
 
   `Wasm.runFuel_sound` and `Wasm.runFuel_complete_with_bound` exist at their
   §15 names in `WasmGemmGnaf/Wasm/Fuel.lean`, and
@@ -52,8 +56,11 @@ import WasmGemmGnaf.Wasm.Binary
 import WasmGemmGnaf.Wasm.Declarative
 import WasmGemmGnaf.Wasm.Validate
 import WasmGemmGnaf.Wasm.Step
+import WasmGemmGnaf.Wasm.Soundness
 import WasmGemmGnaf.Wasm.Fault
+import WasmGemmGnaf.Wasm.Fuel
 import WasmGemmGnaf.Wasm.Erasure
+import WasmGemmGnaf.Wasm.Adequacy
 
 set_option autoImplicit false
 
@@ -122,6 +129,86 @@ distinct reducts. -/
 theorem successors_nodup (c : Wasm.Config) : (Wasm.successors c).Nodup :=
   Wasm.successors_nodup c
 
+/-! ## The bounded explorer covers every maximal branch -/
+
+/-- **SPEC §15, `Wasm.bounded_tree_covers_every_branch`.**  When
+`Wasm.exploreAll` answers `complete`, the observations it carries contain
+*every* finite execution of the initial configuration — with no hypothesis on
+the trace length.  This is strictly stronger than
+`Wasm.runFuel_complete_with_bound`, whose conclusion is conditional on
+`observation.trace.length ≤ bound`: the `complete` constructor is reachable only
+when no branch of `initial` is still running after `bound + 1` steps, which
+makes the bound a proved property of `initial` rather than a restriction on the
+runs being covered. -/
+theorem bounded_tree_covers_every_branch {bound : Nat} {initial : Wasm.Config}
+    {obs : List Wasm.ExecutionObservation}
+    {cov : Wasm.CoversEveryMaximalFiniteBranch bound initial obs}
+    (hcomplete : Wasm.exploreAll bound initial = .complete obs cov)
+    {o : Wasm.ExecutionObservation} (hrun : Wasm.FiniteExecution initial o) :
+    o ∈ obs :=
+  Wasm.bounded_tree_covers_every_branch hcomplete hrun
+
+/-! ## Progress and preservation for the modelled machine -/
+
+/-- **SPEC §15, `Wasm.validation_progress`.**  A well-typed configuration of a
+valid module has halted, trapped, thrown, or can still take a step.
+
+`Wasm.ConfigWellTyped` is the syntactic typing invariant of
+`WasmGemmGnaf/Wasm/Soundness.lean`, stated in the declarative judgment of
+`Wasm/Validate.lean`; it mentions neither `Wasm.Step` nor `Wasm.successors` nor
+`Config.status`, so it cannot smuggle this conclusion in.  It is preserved by
+reduction (`validation_preservation`) and established by `Wasm.initialConfig`
+(`initialConfig_configWellTyped`).  The scope is the modelled subset, and the
+one restriction the modelled `Wasm.Step` forces — a branch to a function's
+implicit outermost label has no reduction rule, so the invariant admits only
+frame-local branches — is stated in that file's header. -/
+theorem validation_progress {module : Wasm.Module} {config : Wasm.Config}
+    (hvalid : Wasm.DeclarativelyValid module)
+    (hconfig : Wasm.ConfigInstantiates module config)
+    (hwelltyped : Wasm.ConfigWellTyped config) :
+    (∃ outcome, Wasm.Halt config outcome) ∨
+    (∃ trap, Wasm.Trapped config trap) ∨
+    (∃ exceptionValue, Wasm.Thrown config exceptionValue) ∨
+    (Wasm.successors config).Nonempty :=
+  Wasm.validation_progress hvalid hconfig hwelltyped
+
+/-- **SPEC §7.1.**  A configuration is terminal exactly when it has halted,
+trapped, or thrown, so the first three disjuncts of `validation_progress` really
+are "the machine has stopped" and the fourth really is "it has not". -/
+theorem terminal_iff_halt_trap_or_throw (config : Wasm.Config) :
+    config.IsTerminal ↔
+      ((∃ outcome, Wasm.Halt config outcome) ∨
+        (∃ trap, Wasm.Trapped config trap) ∨
+        (∃ exceptionValue, Wasm.Thrown config exceptionValue)) :=
+  Wasm.isTerminal_iff_halt_trapped_thrown config
+
+/-- **SPEC §7.3, `Wasm.validation_preservation`**, with the invariant hypothesis
+SPEC's literal signature omits.  Without `hwelltyped` the statement is false, so
+this is the honest reading rather than the literal one; it is not on the SPEC
+§15 required list. -/
+theorem validation_preservation {module : Wasm.Module} {config : Wasm.Config}
+    {event : Wasm.Event} {next : Wasm.Config}
+    (hvalid : Wasm.DeclarativelyValid module)
+    (hstep : Wasm.Step config event next)
+    (hconfig : Wasm.ConfigInstantiates module config)
+    (hwelltyped : Wasm.ConfigWellTyped config) :
+    Wasm.ConfigWellTyped next :=
+  Wasm.validation_preservation hvalid hstep hconfig hwelltyped
+
+/-- **The invariant is reachable, not empty.**  The configuration the machine
+starts in is well typed. -/
+theorem initialConfig_configWellTyped {m : Wasm.Module} {raw : Wasm.RawInvocation}
+    {c : Wasm.Config} (h : Wasm.initialConfig m raw = .ok c)
+    (hstart : Wasm.StartFrameLocal m) : Wasm.ConfigWellTyped c :=
+  Wasm.initialConfig_configWellTyped h hstart
+
+/-- The configuration the machine starts in instantiates the module it was built
+from. -/
+theorem initialConfig_instantiates {m : Wasm.Module} {raw : Wasm.RawInvocation}
+    {c : Wasm.Config} (h : Wasm.initialConfig m raw = .ok c)
+    (hlocal : Wasm.GemmFrameLocal m) : Wasm.ConfigInstantiates m c :=
+  Wasm.initialConfig_instantiates h hlocal
+
 /-! ## Fault disjointness -/
 
 /-- The two failure domains of `Wasm.Fault` are disjoint: a decoding failure can
@@ -177,5 +264,71 @@ theorem wasm_cost_table_total (t : Wasm.CostTableBody) (event : Wasm.CostedEvent
         ∀ other : Cost.DynamicVector,
           Wasm.EventContribution t event other → other = contribution :=
   Wasm.wasm_cost_table_total t event
+
+/-! ## The pinned revision and the conformance map -/
+
+/-- **SPEC §15, `Wasm.profile_matches_pinned_revision`.**  Exactly the
+conjunction SPEC §7.1 defines the name to mean: the concrete model and map are
+identity-bound to the *vendored* revision, and every enabled vendored rule has
+exactly one mapped Lean declaration.
+
+The first conjunct binds the profile, the conformance map and the vendored tree
+record of `Wasm/Revision.lean` to one commit, carries the digest of
+`vendor/wasm-spec/SHA256SUMS` — the digest of digests over all forty vendored
+files — and supplies the injectivity of both canonical identities, so a
+different revision, or a single different vendored byte, gives a different
+identity.  Lean does not read the tree: `xtask vendor` recomputes that digest
+from the bytes on disk and fails the gate if the literal has drifted, and `M13`
+plants a mutated `SHA256SUMS` on a copy and requires the check to reject it.
+
+The remaining conjuncts are the one-to-one property: each enabled identifier has
+exactly one fully qualified Lean declaration name, exactly one row in the map and
+exactly one vendored anchor; distinct enabled identifiers never share a
+declaration; and a rejected identifier has no declaration, no anchor and no row.
+
+It does **not** claim that Lean derives the vendored rule bodies from bytes.
+SPEC §7.1 calls that the disclosed authority boundary; the header of
+`Wasm/Adequacy.lean` states what remains open on the far side of it. -/
+theorem profile_matches_pinned_revision (profile : Wasm.Profile) :
+    (profile.body.revisionCommit = Wasm.core3AdequacyMap.revisionCommit ∧
+      Wasm.core3AdequacyMap.revisionCommit = Wasm.core3Revision.commit ∧
+      Wasm.core3AdequacyMap.vendorTree = Wasm.core3VendoredTree ∧
+      Wasm.core3AdequacyMap.vendorTree.commit =
+        Wasm.core3AdequacyMap.revisionCommit ∧
+      Wasm.core3AdequacyMap.vendorTree.manifestSha256 =
+        Wasm.core3VendorManifestSha256 ∧
+      (∀ r : Wasm.RevisionBody,
+        Wasm.RevisionBody.identity r =
+            Wasm.RevisionBody.identity Wasm.core3Revision ↔
+          r = Wasm.core3Revision) ∧
+      (∀ t : Wasm.VendoredTreeBody,
+        Wasm.VendoredTreeBody.identity t =
+            Wasm.VendoredTreeBody.identity Wasm.core3AdequacyMap.vendorTree ↔
+          t = Wasm.core3AdequacyMap.vendorTree)) ∧
+    (∀ id : Wasm.PinnedCoreRuleId, Wasm.PinnedCoreRuleId.RuleEnabled id →
+      (∃ name : String,
+        Wasm.PinnedCoreRuleId.fullDeclaration? id = some name ∧
+        ∀ other : String,
+          Wasm.PinnedCoreRuleId.fullDeclaration? id = some other → other = name) ∧
+      (∃ row : Wasm.AdequacyRow,
+        (row ∈ Wasm.core3AdequacyMap.rows ∧ row.ruleId = id.ruleId) ∧
+        ∀ other : Wasm.AdequacyRow,
+          other ∈ Wasm.core3AdequacyMap.rows →
+            other.ruleId = id.ruleId → other = row) ∧
+      (∃ anchor : String,
+        Wasm.PinnedCoreRuleId.vendorAnchor? id = some anchor ∧
+        ∀ other : String,
+          Wasm.PinnedCoreRuleId.vendorAnchor? id = some other →
+            other = anchor)) ∧
+    (∀ a b : Wasm.PinnedCoreRuleId,
+      Wasm.PinnedCoreRuleId.RuleEnabled a → Wasm.PinnedCoreRuleId.RuleEnabled b →
+        Wasm.PinnedCoreRuleId.fullDeclaration? a =
+            Wasm.PinnedCoreRuleId.fullDeclaration? b →
+          a = b) ∧
+    (∀ id : Wasm.PinnedCoreRuleId, ¬ Wasm.PinnedCoreRuleId.RuleEnabled id →
+      Wasm.PinnedCoreRuleId.leanDeclaration? id = none ∧
+      Wasm.PinnedCoreRuleId.vendorAnchor? id = none ∧
+      id.ruleId ∉ Wasm.core3AdequacyMap.rows.map Wasm.AdequacyRow.ruleId) :=
+  Wasm.profile_matches_pinned_revision profile
 
 end WasmGemmGnaf.Theorems

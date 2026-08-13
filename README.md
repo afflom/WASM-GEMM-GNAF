@@ -77,7 +77,7 @@ throughput measurement, or cross-engine run can discharge it.
 | --- | --- | --- |
 | UOR-GNAF | `UOR-GNAF-v1-draft.2.md`, SHA-256 `5c34…200a` | ✅ by content |
 | Lean | `leanprover/lean4:v4.30.0`, commit `d024af09…c622` | ✅ by toolchain |
-| WebAssembly Core | wg-3.0, commit `9d360199…74aa` | ❌ not vendored |
+| WebAssembly Core | wg-3.0, commit `9d360199…74aa` | ✅ vendored, 40 files, by content |
 | Repository baseline | `fdd58db98edf5b0a28c04bada3e78cef99adece4` | ✅ |
 
 Digests are recomputed from file content by `just claims`, never trusted as strings.

@@ -17,9 +17,11 @@
       "commit": "9d36019973201a19f9c9ebb0f10828b2fe2374aa",
       "vendored": true,
       "vendorPath": "vendor/wasm-spec/",
-      "note": "Vendored from the official WebAssembly/spec repository at the pinned commit. SPEC 5 requires offline verification to recompute pins from CONTENT rather than trust a checksum string, so every vendored file's digest is recorded in SHA256SUMS and rechecked by the gate. Scope: document/core/{binary,valid,exec,syntax,appendix} -- the normative sources the conformance map cites -- plus licences.",
-      "vendoredFiles": 40,
-      "digestManifest": "vendor/wasm-spec/SHA256SUMS"
+      "note": "Vendored from the official WebAssembly/spec repository at the pinned commit. SPEC 5 requires offline verification to recompute pins from CONTENT rather than trust a checksum string. TWO manifests do that, and the second is the stronger one. SHA256SUMS records every vendored file's SHA-256; recomputing it proves the tree has not changed since this repository wrote it down. BLOBS records every vendored file's GIT BLOB OBJECT ID -- sha1(\"blob \" + len + NUL + content), a function of the bytes alone -- which is the identity the pinned commit's own tree lists each file under, so recomputing it proves the bytes are the ones commit 9d36019973201a19f9c9ebb0f10828b2fe2374aa names. Both are rechecked offline by `just vendor`, with no network and no git invocation.",
+      "scope": "THREE parts. (1) specification/wasm-3.0/ -- the 35 normative SpecTec sources, which is where the grammar and typing rule BODIES live: 5.3-binary.instructions.spectec carries the actual opcode bytes, 2.3-validation.instructions.spectec the typing rules including stack polymorphism. (2) document/core/{binary,valid,exec,syntax,appendix} -- the 39 rendered normative sources the conformance map cites by label; these only REFERENCE the rule bodies, as unexpanded $${grammar:} / $${rule:} macros. (3) test/core/ -- the 299 official conformance test files, including the simd, gc, exceptions, bulk-memory, multi-memory, memory64 and relaxed-simd suites. Vendoring (2) alone, which is what this pin held before, left every rule body outside the repository, so no transcription could be checked against anything; an external audit was right to reject the resulting decoder and validator theorems.",
+      "vendoredFiles": 374,
+      "digestManifest": "vendor/wasm-spec/SHA256SUMS",
+      "blobManifest": "vendor/wasm-spec/BLOBS"
     },
     "lean": {
       "toolchain": "leanprover/lean4:v4.30.0",

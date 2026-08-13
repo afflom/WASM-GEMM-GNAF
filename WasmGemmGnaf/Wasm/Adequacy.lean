@@ -28,36 +28,66 @@
     (`adequacy_map_injective_on_enabled`); the same holds for the fully
     qualified names (`fullDeclaration?_injective_on_enabled`) and for the
     identifier spellings themselves (`ruleId_injective`).
-  * the map object `core3AdequacyMap` carries the pinned commit, and that
-    commit is proved equal to the commit every lawful `Wasm.Profile` carries
-    (`adequacy_profile_revision_agree`).  This is the identity binding to the
-    pinned revision.
+  * every enabled identifier records the **vendored anchor** it was transcribed
+    from (`vendorAnchor?`), total on the enabled set and `none` exactly on the
+    rejected one (`vendorAnchor?_isSome_iff_enabled`).
+  * the map object `core3AdequacyMap` carries the pinned commit *and* the
+    vendored tree record of `Wasm/Revision.lean`, whose `manifestSha256` is the
+    digest of `vendor/wasm-spec/SHA256SUMS` --- a digest of digests over the
+    whole vendored tree.  The commit is proved equal to the commit every lawful
+    `Wasm.Profile` carries (`adequacy_profile_revision_agree`) and to the commit
+    the vendored tree carries (`core3AdequacyMap_vendorTree_commit`).
   * `mapped_declarations_referenced` mentions every mapped Lean declaration, so
     renaming or deleting one breaks this file rather than silently invalidating
     the map.
+  * `profile_matches_pinned_revision` is the conjunction SPEC section 7.1 names:
+    the identity binding above, together with the one-to-one property of the
+    map on the enabled rules.
 
   ## The authority boundary --- what this file does NOT establish
 
-  This file does **not** claim that Lean derives English prose from bytes, and
-  it does not prove `profile_matches_pinned_revision` of SPEC section 15.  Three
-  gaps are disclosed explicitly:
+  This file does **not** claim that Lean derives English prose from bytes.  The
+  transcription from normative rules to Lean definitions is the disclosed
+  authority boundary of SPEC section 7.1.  Three gaps were disclosed here; the
+  first is now closed, and the state of each is:
 
-  1. **The pinned tree is not vendored.**  `authority/manifest.json` records
-     `wasmCore.vendored = false` and `vendor/wasm-spec/` contains only a README.
-     The identifier spellings below are therefore a *hand transcription* of the
-     pinned `wg-3.0` rule names, not a list read from a vendored tree, and no
-     theorem here compares them with one.  Release gate step 1 fails until the
-     tree is vendored; that failure is the conforming behaviour.
-  2. **Strings are not reflected.**  `mapped_declarations_referenced` proves
-     that a declaration with each mapped *role* exists in the environment, but
-     Lean cannot check --- without metaprogramming, which this development does
-     not use --- that the *string* `"Step.nop"` names the declaration
-     `Step.nop`.  That correspondence is by review.
-  3. **Coverage is relative to this enumeration.**  Every "total" and "complete"
-     theorem below quantifies over `PinnedCoreRuleId`, which is the list written
-     in this file.  It is evidence that the map has no hole *inside* the
-     declared rule set; it is not evidence that the declared rule set is the
-     whole pinned rule set.
+  1. **CLOSED --- the pinned tree is vendored, and Lean is bound to its
+     content.**  `vendor/wasm-spec/` holds the forty
+     `document/core/{binary,valid,exec,syntax,appendix}` files of the official
+     `wg-3.0` tree at the pinned commit, with a per-file digest manifest at
+     `vendor/wasm-spec/SHA256SUMS` and the commit at
+     `vendor/wasm-spec/PINNED-COMMIT`; `authority/manifest.json` records
+     `wasmCore.vendored = true`.  `Wasm/Revision.lean` records the digest of
+     that manifest as `core3VendorManifestSha256`, and `xtask vendor`
+     recomputes it --- and rechecks `SHA256SUMS` against all forty files ---
+     from the bytes on disk, failing the gate when the Lean literal has
+     drifted.  Lean stands on the literal; the tool is what stops the literal
+     from being a wish.  Falsifier `M13` plants a mutated `SHA256SUMS` on a
+     copy and requires the check to reject it.
+  2. **OPEN --- strings are not reflected.**  `mapped_declarations_referenced`
+     proves that a declaration with each mapped *role* exists in the
+     environment, but Lean cannot check --- without metaprogramming, which this
+     development does not use --- that the *string* `"Step.nop"` names the
+     declaration `Step.nop`.  That correspondence is by review.
+  3. **NARROWED, NOT CLOSED --- coverage is relative to this enumeration.**
+     Every "total" and "complete" theorem below quantifies over
+     `PinnedCoreRuleId`, which is the list written in this file.  Each enabled
+     identifier now also records the reStructuredText anchor of the vendored
+     rule it was transcribed from (`vendorAnchor?`), and `xtask vendor` checks
+     that every one of those anchors is a label actually *defined* in the
+     vendored tree, so an invented rule identifier fails the gate.  What that
+     does **not** establish, and what keeps this gap open:
+     * the converse direction.  The vendored tree defines far more rule labels
+       than this enumeration cites; `xtask vendor --list` prints both counts.
+       The enumeration is a declared *subset* of the pinned rule set and is not
+       proved to be all of it.
+     * that the anchor's *body* says what the Lean declaration does.  The
+       vendored `.rst` sources state most rule bodies as unexpanded SpecTec
+       macro references (`${rule: ...}` / `$${rule: ...}`), whose `.watsup`
+       definitions are **not** in the vendored file set.  A label check is
+       therefore a check on rule *identity*, not on rule *content*, and no
+       tooling in this repository can close that difference from the vendored
+       bytes alone.
 
   Every declaration in this file is proved.  Nothing is assumed.
 -/
@@ -727,6 +757,121 @@ def leanDeclaration? : PinnedCoreRuleId → Option String
   | .rejectRelaxedFma => none
   | .rejectComponentModel => none
 
+/-- The reStructuredText label of the vendored rule this identifier was
+transcribed from, without its leading underscore: `"valid-nop"` is the anchor
+`.. _valid-nop:` of `vendor/wasm-spec/document/core/valid/instructions.rst`.
+`none` is exactly a rejected family, which by definition has no vendored rule
+in the released profile.
+
+`xtask vendor` checks that every anchor here is a label DEFINED in the vendored
+tree, so an invented identifier fails the gate.  Two things this map is not:
+
+* it is not injective, and is not claimed to be.  A vendored rule and its trap
+  case are one label and two Lean declarations (`exec-load-val` covers both
+  `Step.load` and `Step.loadTrap`), and the harness rules specialize the
+  vendored invocation and store rules.
+* it is not a claim about the rule's *body*.  The vendored `.rst` sources carry
+  most rule bodies as unexpanded SpecTec macros whose `.watsup` definitions are
+  not vendored, so the label is checkable and the body is not. -/
+def vendorAnchor? : PinnedCoreRuleId → Option String
+  | .decodeModule => some "binary-module"
+  | .decodeUleb128 => some "binary-uint"
+  | .validUnreachable => some "valid-unreachable"
+  | .validNop => some "valid-nop"
+  | .validI32Const => some "valid-const"
+  | .validDrop => some "valid-drop"
+  | .validIBinOp => some "valid-binop"
+  | .validITestOp => some "valid-testop"
+  | .validIRelOp => some "valid-relop"
+  | .validLocalGet => some "valid-local.get"
+  | .validLocalSet => some "valid-local.set"
+  | .validLocalTee => some "valid-local.tee"
+  | .validGlobalGet => some "valid-global.get"
+  | .validGlobalSet => some "valid-global.set"
+  | .validLoad => some "valid-load-val"
+  | .validStore => some "valid-store-val"
+  | .validMemorySize => some "valid-memory.size"
+  | .validMemoryGrow => some "valid-memory.grow"
+  | .validBlock => some "valid-block"
+  | .validLoop => some "valid-loop"
+  | .validIfThenElse => some "valid-if"
+  | .validBr => some "valid-br"
+  | .validBrIf => some "valid-br_if"
+  | .validThrowTag => some "valid-throw"
+  | .validExprNil => some "valid-instrs"
+  | .validExprCons => some "valid-instrs"
+  | .validModule => some "valid-module"
+  | .validFunc => some "valid-func"
+  | .validMems => some "valid-mem"
+  | .validGemmExport => some "valid-export"
+  | .validClosed => some "valid-import"
+  | .storeAlloc => some "alloc-module"
+  | .storeLoadBytes => some "exec-load-val"
+  | .storeStoreBytes => some "exec-store-val"
+  | .storeMemoryGrow => some "exec-memory.grow"
+  | .execUnreachable => some "exec-unreachable"
+  | .execNop => some "exec-nop"
+  | .execI32Const => some "exec-const"
+  | .execDrop => some "exec-drop"
+  | .execIBinOp => some "exec-binop"
+  | .execIBinOpTrap => some "exec-binop"
+  | .execITestOp => some "exec-testop"
+  | .execIRelOp => some "exec-relop"
+  | .execLocalGet => some "exec-local.get"
+  | .execLocalSet => some "exec-local.set"
+  | .execLocalTee => some "exec-local.tee"
+  | .execGlobalGet => some "exec-global.get"
+  | .execGlobalSet => some "exec-global.set"
+  | .execLoad => some "exec-load-val"
+  | .execLoadTrap => some "exec-load-val"
+  | .execStore => some "exec-store-val"
+  | .execStoreTrap => some "exec-store-val"
+  | .execMemorySize => some "exec-memory.size"
+  | .execMemoryGrowSucceed => some "exec-memory.grow"
+  | .execMemoryGrowRefuse => some "exec-memory.grow"
+  | .execBlock => some "exec-block"
+  | .execLoop => some "exec-loop"
+  | .execIfFalse => some "exec-if"
+  | .execIfTrue => some "exec-if"
+  | .execBrLoop => some "exec-br"
+  | .execBrBlock => some "exec-br"
+  | .execBrIfFalse => some "exec-br_if"
+  | .execBrIfLoop => some "exec-br_if"
+  | .execBrIfBlock => some "exec-br_if"
+  | .execThrowTag => some "exec-throw"
+  | .execExitLabel => some "exec-instrs-exit"
+  | .execReturnGemm => some "exec-invoke-exit"
+  | .execEnterGemm => some "exec-invoke"
+  | .execInstallTrap => some "exec-store-val"
+  | .trapUnreachable => some "syntax-trap"
+  | .trapOutOfBounds => some "syntax-trap"
+  | .trapDivideByZero => some "syntax-trap"
+  | .nondetMemoryGrow => some "exec-memory.grow"
+  | .nondetNanResult => some "syntax-nan"
+  | .tableGet => some "exec-table.get"
+  | .tableSet => some "exec-table.set"
+  | .tableSize => some "exec-table.size"
+  | .tableGrow => some "exec-table.grow"
+  | .tableFill => some "exec-table.fill"
+  | .tableCopy => some "exec-table.copy"
+  | .tableInit => some "exec-table.init"
+  | .tableElemDrop => some "exec-elem.drop"
+  | .vectorExtractLane => some "exec-vextract_lane"
+  | .vectorReplaceLane => some "exec-vreplace_lane"
+  | .vectorSplat => some "exec-vsplat"
+  | .vectorLanewise => some "exec-vbinop"
+  | .vectorShapeWidth => some "syntax-shape"
+  | .refNull => some "exec-ref.null"
+  | .refFunc => some "exec-ref.func"
+  | .rejectMemory64Load => none
+  | .rejectAtomicRmw => none
+  | .rejectRelaxedFma => none
+  | .rejectComponentModel => none
+
+/-- The vendored anchor of an identifier, with the rejected ones collapsed to
+the empty string.  Used to build the map rows as a decidable computation. -/
+def anchorOf (id : PinnedCoreRuleId) : String := (vendorAnchor? id).getD ""
+
 /-- A rule is enabled when the profile does not reject its family. -/
 def RuleEnabled (id : PinnedCoreRuleId) : Prop := status id ≠ .rejectedByProfile
 
@@ -754,6 +899,25 @@ theorem adequacy_map_total_on_enabled (id : PinnedCoreRuleId) :
 theorem leanDeclaration?_eq_none_iff (id : PinnedCoreRuleId) :
     leanDeclaration? id = none ↔ Rejected (family id) := by
   cases id <;> decide
+
+/-- **Every enabled identifier names a vendored anchor**, and every rejected one
+names none.  The anchors themselves are checked against the vendored tree by
+`xtask vendor`, which is outside the kernel; what is proved here is that the
+transcription record has no hole and no entry for a rejected family. -/
+theorem vendorAnchor?_isSome_iff_enabled (id : PinnedCoreRuleId) :
+    (vendorAnchor? id).isSome = true ↔ RuleEnabled id := by
+  cases id <;> decide
+
+theorem vendorAnchor?_eq_none_iff (id : PinnedCoreRuleId) :
+    vendorAnchor? id = none ↔ Rejected (family id) := by
+  cases id <;> decide
+
+theorem exists_vendorAnchor_of_enabled {id : PinnedCoreRuleId}
+    (h : RuleEnabled id) : ∃ anchor, vendorAnchor? id = some anchor := by
+  have hs := (vendorAnchor?_isSome_iff_enabled id).mpr h
+  cases ha : vendorAnchor? id with
+  | none => rw [ha] at hs; exact absurd hs (by simp)
+  | some anchor => exact ⟨anchor, rfl⟩
 
 theorem exists_leanDeclaration_of_enabled {id : PinnedCoreRuleId}
     (h : RuleEnabled id) : ∃ name, leanDeclaration? id = some name := by
@@ -928,6 +1092,9 @@ declaration implementing it, its feature family, and its status. -/
 structure AdequacyRow where
   /-- The vendored rule identifier spelling. -/
   ruleId : String
+  /-- The reStructuredText label of the vendored rule this row was transcribed
+  from, without its leading underscore. -/
+  vendorAnchor : String
   /-- The Lean declaration, relative to the `WasmGemmGnaf.Wasm` namespace. -/
   leanDeclaration : String
   /-- The Core 3.0 feature family. -/
@@ -936,10 +1103,14 @@ structure AdequacyRow where
   status : RuleStatus
   deriving DecidableEq, Repr, Inhabited
 
-/-- The conformance map: the pinned commit it is bound to, and its rows. -/
+/-- The conformance map: the revision and the vendored tree it is bound to, and
+its rows. -/
 structure AdequacyMap where
   /-- The commit of the pinned WebAssembly Core revision. -/
   revisionCommit : String
+  /-- The vendored copy of that revision, carrying the digest of digests over
+  every vendored file (`Wasm/Revision.lean`). -/
+  vendorTree : VendoredTreeBody
   /-- One row per enabled pinned rule identifier. -/
   rows : List AdequacyRow
   deriving DecidableEq, Repr, Inhabited
@@ -947,20 +1118,38 @@ structure AdequacyMap where
 /-- The row of an enabled rule identifier. -/
 def PinnedCoreRuleId.row (id : PinnedCoreRuleId) : AdequacyRow :=
   { ruleId := id.ruleId
+    vendorAnchor := id.anchorOf
     leanDeclaration := id.declarationOf
     family := id.family
     status := id.status }
 
-/-- The released conformance map: the pinned commit together with one row per
-enabled identifier. -/
+/-- The released conformance map: the pinned commit and the vendored tree,
+together with one row per enabled identifier. -/
 def core3AdequacyMap : AdequacyMap :=
   { revisionCommit := core3RevisionCommit
+    vendorTree := core3VendoredTree
     rows := PinnedCoreRuleId.enabledRuleIds.map PinnedCoreRuleId.row }
 
 /-- **Identity binding to the pinned revision.**  The map carries the pinned
 `wg-3.0` commit. -/
 theorem core3AdequacyMap_revisionCommit :
     core3AdequacyMap.revisionCommit = core3Revision.commit := rfl
+
+/-- **Identity binding to the vendored content.**  The map carries the vendored
+tree record, whose `manifestSha256` is the digest of
+`vendor/wasm-spec/SHA256SUMS`, itself the list of digests of all forty vendored
+files.  Changing any vendored byte changes that literal, and `xtask vendor`
+recomputes it from the bytes on disk. -/
+theorem core3AdequacyMap_vendorTree :
+    core3AdequacyMap.vendorTree = core3VendoredTree := rfl
+
+theorem core3AdequacyMap_vendorDigest :
+    core3AdequacyMap.vendorTree.manifestSha256 = core3VendorManifestSha256 := rfl
+
+/-- **The commit and the vendored tree are the same revision.**  The map cannot
+name one revision and vendor another. -/
+theorem core3AdequacyMap_vendorTree_commit :
+    core3AdequacyMap.vendorTree.commit = core3AdequacyMap.revisionCommit := rfl
 
 /-- **The model and the map are bound to the same revision.**  Every lawful
 profile carries the commit the map carries; a profile pinned to a different
@@ -969,12 +1158,29 @@ theorem adequacy_profile_revision_agree (profile : Profile) :
     profile.body.revisionCommit = core3AdequacyMap.revisionCommit :=
   profile.revisionCommit_eq
 
+/-- **Every lawful profile is bound to the vendored content.**  The commit a
+lawful profile carries is the commit of the tree whose digest of digests the map
+records, so a profile cannot be pinned to a revision other than the vendored
+one. -/
+theorem adequacy_profile_vendorTree_agree (profile : Profile) :
+    profile.body.revisionCommit = core3AdequacyMap.vendorTree.commit :=
+  profile.revisionCommit_eq
+
 /-- Distinct revisions have distinct canonical identities, so the binding above
 is a real one. -/
 theorem adequacy_revision_identity_eq_iff (r : RevisionBody) :
     RevisionBody.identity r = RevisionBody.identity core3Revision ↔
       r = core3Revision :=
   RevisionBody.identity_eq_iff
+
+/-- Distinct vendored trees have distinct canonical identities: the content
+binding is a real one too, and is not satisfied by a tree that merely claims the
+same commit. -/
+theorem adequacy_vendorTree_identity_eq_iff (t : VendoredTreeBody) :
+    VendoredTreeBody.identity t =
+        VendoredTreeBody.identity core3AdequacyMap.vendorTree ↔
+      t = core3AdequacyMap.vendorTree :=
+  VendoredTreeBody.identity_eq_iff
 
 theorem core3AdequacyMap_rows_length :
     core3AdequacyMap.rows.length = PinnedCoreRuleId.enabledRuleIds.length := by
@@ -1014,6 +1220,124 @@ theorem core3AdequacyMap_rows_enabled {row : AdequacyRow}
   obtain ⟨id, hid, rfl⟩ := h
   exact (PinnedCoreRuleId.ruleEnabled_iff_family_enabled id).mp
     ((PinnedCoreRuleId.mem_enabledRuleIds_iff id).mp hid)
+
+/-- A witnessed `Option` has exactly one witness.  `∃!` is Mathlib notation and
+this development is Std-only, so uniqueness is written out. -/
+theorem exists_unique_eq_some {α : Type} {o : Option α} {a : α} (h : o = some a) :
+    ∃ b : α, o = some b ∧ ∀ c : α, o = some c → c = b := by
+  refine ⟨a, h, ?_⟩
+  intro c hc
+  rw [h] at hc
+  simpa using hc.symm
+
+/-- **Exactly one row per enabled rule.**  The map has a row for every enabled
+identifier and no identifier has two, so a rule cannot be mapped twice. -/
+theorem core3AdequacyMap_row_unique {id : PinnedCoreRuleId}
+    (h : PinnedCoreRuleId.RuleEnabled id) :
+    ∃ row : AdequacyRow,
+      (row ∈ core3AdequacyMap.rows ∧ row.ruleId = id.ruleId) ∧
+      ∀ other : AdequacyRow,
+        other ∈ core3AdequacyMap.rows → other.ruleId = id.ruleId → other = row := by
+  refine ⟨id.row, ⟨core3AdequacyMap_covers h, rfl⟩, ?_⟩
+  intro other hmem hrule
+  simp only [core3AdequacyMap, List.mem_map] at hmem
+  obtain ⟨other', _, rfl⟩ := hmem
+  have : other' = id := PinnedCoreRuleId.ruleId_injective hrule
+  rw [this]
+
+/-! ## SPEC section 15: `profile_matches_pinned_revision`
+
+SPEC section 7.1 is the definition of this name, verbatim:
+
+> "`profile_matches_pinned_revision` means that the concrete model and map are
+>  identity-bound to the vendored revision and that every enabled vendored rule
+>  has exactly one mapped Lean declaration.  It does not claim that Lean can
+>  derive English prose from bytes.  The reviewed transcription from normative
+>  rules to initial Lean definitions is an explicitly disclosed authority
+>  boundary; all subsequent GEMM, cost, coverage, and optimality reasoning is
+>  kernel checked."
+
+The theorem below is exactly that conjunction, and no more:
+
+* **identity binding to the vendored revision.**  The profile, the map and the
+  vendored tree carry one commit; the map carries the vendored tree record whose
+  `manifestSha256` is the digest of `vendor/wasm-spec/SHA256SUMS`, itself the
+  list of digests of every vendored file; and both identities are injective, so
+  a different revision or a single different vendored byte gives a different
+  identity.  `xtask vendor` recomputes the digest from the bytes on disk and
+  fails the gate if the literal has drifted.
+* **exactly one mapped Lean declaration per enabled vendored rule.**  Each
+  enabled identifier has exactly one fully qualified Lean declaration name,
+  exactly one row in the map, and exactly one vendored anchor; distinct enabled
+  identifiers never share a declaration; and a rejected identifier has no
+  declaration, no anchor and no row.
+
+It does **not** claim the transcription is faithful to the vendored rule bodies.
+That is the disclosed authority boundary of SPEC section 7.1, restated in the
+header of this file together with the two gaps that remain open. -/
+
+/-- **SPEC section 15, `Wasm.profile_matches_pinned_revision`.**
+
+Both conjuncts of SPEC section 7.1: the concrete model and map are
+identity-bound to the vendored revision, and every enabled vendored rule has
+exactly one mapped Lean declaration. -/
+theorem profile_matches_pinned_revision (profile : Profile) :
+    (profile.body.revisionCommit = core3AdequacyMap.revisionCommit ∧
+      core3AdequacyMap.revisionCommit = core3Revision.commit ∧
+      core3AdequacyMap.vendorTree = core3VendoredTree ∧
+      core3AdequacyMap.vendorTree.commit = core3AdequacyMap.revisionCommit ∧
+      core3AdequacyMap.vendorTree.manifestSha256 = core3VendorManifestSha256 ∧
+      (∀ r : RevisionBody,
+        RevisionBody.identity r = RevisionBody.identity core3Revision ↔
+          r = core3Revision) ∧
+      (∀ t : VendoredTreeBody,
+        VendoredTreeBody.identity t =
+            VendoredTreeBody.identity core3AdequacyMap.vendorTree ↔
+          t = core3AdequacyMap.vendorTree)) ∧
+    (∀ id : PinnedCoreRuleId, PinnedCoreRuleId.RuleEnabled id →
+      (∃ name : String,
+        PinnedCoreRuleId.fullDeclaration? id = some name ∧
+        ∀ other : String,
+          PinnedCoreRuleId.fullDeclaration? id = some other → other = name) ∧
+      (∃ row : AdequacyRow,
+        (row ∈ core3AdequacyMap.rows ∧ row.ruleId = id.ruleId) ∧
+        ∀ other : AdequacyRow,
+          other ∈ core3AdequacyMap.rows → other.ruleId = id.ruleId → other = row) ∧
+      (∃ anchor : String,
+        PinnedCoreRuleId.vendorAnchor? id = some anchor ∧
+        ∀ other : String,
+          PinnedCoreRuleId.vendorAnchor? id = some other → other = anchor)) ∧
+    (∀ a b : PinnedCoreRuleId,
+      PinnedCoreRuleId.RuleEnabled a → PinnedCoreRuleId.RuleEnabled b →
+        PinnedCoreRuleId.fullDeclaration? a = PinnedCoreRuleId.fullDeclaration? b →
+          a = b) ∧
+    (∀ id : PinnedCoreRuleId, ¬ PinnedCoreRuleId.RuleEnabled id →
+      PinnedCoreRuleId.leanDeclaration? id = none ∧
+      PinnedCoreRuleId.vendorAnchor? id = none ∧
+      id.ruleId ∉ core3AdequacyMap.rows.map AdequacyRow.ruleId) := by
+  refine ⟨⟨adequacy_profile_revision_agree profile, core3AdequacyMap_revisionCommit,
+      core3AdequacyMap_vendorTree, core3AdequacyMap_vendorTree_commit,
+      core3AdequacyMap_vendorDigest, adequacy_revision_identity_eq_iff,
+      adequacy_vendorTree_identity_eq_iff⟩, ?_, ?_, ?_⟩
+  · intro id h
+    obtain ⟨name, hname⟩ := PinnedCoreRuleId.exists_leanDeclaration_of_enabled h
+    obtain ⟨anchor, hanchor⟩ := PinnedCoreRuleId.exists_vendorAnchor_of_enabled h
+    refine ⟨exists_unique_eq_some (a := PinnedCoreRuleId.declarationNamespace ++ name) ?_,
+      core3AdequacyMap_row_unique h, exists_unique_eq_some hanchor⟩
+    unfold PinnedCoreRuleId.fullDeclaration?
+    rw [hname]
+    rfl
+  · intro a b ha hb h
+    exact PinnedCoreRuleId.fullDeclaration?_injective_on_enabled ha hb h
+  · intro id h
+    -- `RuleEnabled` is decidable, so its double negation is eliminated without
+    -- `Classical.choice`.
+    have hnn : ¬ ¬ (PinnedCoreRuleId.status id = RuleStatus.rejectedByProfile) := h
+    have hrej : Rejected (PinnedCoreRuleId.family id) :=
+      (PinnedCoreRuleId.status_eq_rejected_iff id).mp (Decidable.of_not_not hnn)
+    exact ⟨(PinnedCoreRuleId.leanDeclaration?_eq_none_iff id).mpr hrej,
+      (PinnedCoreRuleId.vendorAnchor?_eq_none_iff id).mpr hrej,
+      core3AdequacyMap_excludes_rejected h⟩
 
 /-! ## Non-vacuity: the mapped declarations exist
 

@@ -1,6 +1,6 @@
 # Conformance
 
-**Inventory:** 98 Lean modules, 57,180 lines, 3,258 proved theorems.
+**Inventory:** 99 Lean modules, 59,282 lines, 3,334 proved theorems.
 Generated live; prose documents cite this table rather than repeating counts.
 
 Generated from `model/claims.json` by `just docs`. Do not edit by hand.
@@ -29,6 +29,8 @@ words "proved", "theorem", or "globally optimal".
 | `GO-002` | formalProof | discharged | GlobalOptimal is stated at full strength: its competitor quantifier ranges over all of ByteArray, and it eq... | `WasmGemmGnaf.Universal.globalOptimal_iff_over_all` |
 | `GO-003` | formalProof | discharged | The competitor universe of GlobalOptimal is inhabited and both universal clauses fire: the released bytes t... | `WasmGemmGnaf.Universal.globalOptimal_lower_bound_fires` |
 | `UV-002` | formalProof | discharged | SPEC 10.3(1): byte strings within a module-size bound are finitely enumerated, and every competitor whose s... | `WasmGemmGnaf.Universal.sublevel_bytes_enumerated` |
+| `UV-006` | formalProof | discharged | SPEC 10.3: possible_winner_within_sublevel -- an evaluated competitor whose score does not exceed the basel... | `WasmGemmGnaf.Universal.possible_winner_within_sublevel` |
+| `UV-005` | formalProof | discharged | SPEC 10.4: partition_cover_complete -- every byte string a root partition cell denotes is resolved by one o... | `WasmGemmGnaf.Universal.partition_cover_complete` |
 | `CM-002` | formalProof | discharged | Decode faults and instantiation faults are disjoint: no machine fault is both. | `WasmGemmGnaf.Wasm.Fault.decoding_ne_instantiation` |
 | `LB-003` | formalProof | discharged | Full-domain aggregation lower bound: if every raw invocation costs at least k on a charged coordinate, the ... | `WasmGemmGnaf.Universal.sum_ge_card_mul` |
 | `LB-004` | formalProof | discharged | The attainment gap: a lower bound L strictly below the released score S does NOT establish minimality; and ... | `WasmGemmGnaf.Universal.lower_bound_below_released_is_not_optimality` |
@@ -56,6 +58,8 @@ words "proved", "theorem", or "globally optimal".
 | `CM-004` | buildEvidence | verified | CI verifies the exact-SHA build: the authority digest step runs from the directory the checksum file names. | `—` |
 | `CM-005` | buildEvidence | verified | The SPEC 15 inventory is derived from SPEC.md and checked against the compiled environment, not from a hand... | `—` |
 | `WS-003` | open | outstanding | Release.wasmProfile is backed by the completed pinned Core 3.0 semantics rather than the i32 witness profil... | `—` |
+| `WS-004` | formalProof | discharged | SPEC 15 Wasm.profile_matches_pinned_revision, at the meaning SPEC 7.1 gives the name: the concrete model an... | `WasmGemmGnaf.Wasm.profile_matches_pinned_revision` |
+| `CM-006` | buildEvidence | verified | The Lean literals Wasm.profile_matches_pinned_revision stands on are recomputed from the vendored CONTENT: ... | `—` |
 | `UV-004` | formalProof | discharged | Constructive duplicate-free enumeration of every lawful raw invocation, with a global choice-free Fintype i... | `WasmGemmGnaf.Gemm.raw_input_finite` |
 
 ## Axiom closure
@@ -72,6 +76,8 @@ Every `formalProof` claim's transitive axioms, from `#print axioms`:
 - `GO-002` — `propext`, `Classical.choice`, `Quot.sound`
 - `GO-003` — `propext`, `Classical.choice`, `Quot.sound`
 - `UV-002` — `propext`, `Classical.choice`, `Quot.sound`
+- `UV-006` — `propext`, `Quot.sound`
+- `UV-005` — `propext`, `Classical.choice`, `Quot.sound`
 - `CM-002` — none
 - `LB-003` — `propext`, `Quot.sound`
 - `LB-004` — none
@@ -89,6 +95,7 @@ Every `formalProof` claim's transitive axioms, from `#print axioms`:
 - `WS-002` — `propext`, `Classical.choice`, `Quot.sound`
 - `BI-007` — `propext`, `Quot.sound`
 - `BI-008` — `propext`, `Quot.sound`
+- `WS-004` — `propext`, `Classical.choice`, `Quot.sound`
 - `UV-004` — `propext`, `Quot.sound`
 
 Permitted: `propext`, `Quot.sound`, `Classical.choice` (Lean core logical

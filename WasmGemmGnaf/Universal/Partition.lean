@@ -26,10 +26,20 @@
   proof of the decisive premise.  The constructor exists (a verifier must be
   able to *accept* one), and nothing here manufactures one.
 
-  It also proves nothing about which byte strings a *particular* partition tree
-  covers.  `coverLeaves_covers` is conditional on the parent's own denotation:
-  it says refinement loses nothing, not that the root denotes everything.  See
-  `coverLeaves_covers_scope` for the machine-checked statement of that limit.
+  It proves `partition_cover_complete` (SPEC §10.4): refinement not only reaches
+  a leaf, it *decides* there.  Every byte string the root denotes is resolved by
+  one of the three terminal verdicts — enumerated, refuted, or dominated — or
+  the strategy is exhibited reporting a coverage gap on a cell that denotes it.
+  The `incomplete` case is a disjunct of the conclusion rather than a hypothesis
+  excluding it, so a strategy that gives up is caught rather than assumed away.
+
+  It still proves nothing about which byte strings a *particular* partition tree
+  covers.  `coverLeaves_covers` and `partition_cover_complete` are both
+  conditional on the root's own denotation: they say refinement loses nothing,
+  not that the root denotes everything.  See `coverLeaves_covers_scope` for the
+  machine-checked statement of that limit.  That gap, plus the absence of any
+  `dominated` inhabitant, is exactly what separates this file from
+  `universal_sublevel_coverage`.
 
   Every declaration in this file is either a definition or a kernel-checked
   theorem.  Nothing is assumed: no placeholder proof, no project axiom, and no
@@ -1149,6 +1159,155 @@ theorem coverLeaves_leaf_size {strategy : PartitionStrategy scope}
     {bytes : ByteArray} (h : q.Denotes bytes) :
     bytes.size ≤ q.bytePrefix.size + q.suffixLengthBound :=
   PartitionBody.size_le_of_denotes h
+
+/-! ## Completeness of a partition cover (SPEC §10.4, §15)
+
+`coverLeaves_covers` says refinement reaches a leaf.  It does not say what
+happens *at* that leaf, and a cover that reaches leaves without resolving them
+is worth nothing.  `partition_cover_complete` closes that: every byte string the
+root denotes is resolved by exactly the evidence SPEC §10.4's four sealable
+constructors carry, **or** the strategy is caught reporting a coverage gap on a
+cell that denotes it.
+
+The disjunct for `incomplete` is in the *conclusion*, not excluded by
+hypothesis.  That is deliberate and it is the stronger statement: it makes SPEC
+§10.4's "`incomplete` propagates to `SolveResult.incomplete` and blocks release"
+a fact the theorem exhibits, rather than a case a hypothesis quietly assumed
+away. -/
+
+/--
+  **What a sealable partition cover establishes about one byte string.**
+
+  Exactly the three terminal verdicts of SPEC §10.4, with their proof content
+  carried, not summarised:
+
+  * `exhausted` — some leaf enumerated its cell exactly and this byte string is
+    one of the recorded members;
+  * `empty` — some leaf proved nothing it denotes is even profile valid, so this
+    byte string is not;
+  * `dominated` — some leaf proved every conforming member of its cell scores at
+    least `lowerBound`, and the incumbent strictly beats that bound.
+
+  The `dominated` disjunct is the undischarged one.  Its body is the universal
+  lower bound of UOR-GNAF §19.3 verbatim; **this repository builds no inhabitant
+  of it for the release scope**, and the theorem below neither needs nor
+  produces one — it only transports whatever a strategy supplies.
+-/
+def Resolved (scope : PartitionScope P) (bytes : ByteArray) : Prop :=
+  (∃ (leaf : PartitionBody scope) (members : CanonicalList CheckedByteResult),
+      (∀ b : ByteArray, leaf.Denotes b ↔ ∃ m ∈ members.elements, m.bytes = b) ∧
+      leaf.Denotes bytes ∧ ∃ m ∈ members.elements, m.bytes = bytes) ∨
+  (¬ ProfileValid P bytes) ∨
+  (∃ lowerBound : Nat,
+      scope.baselineScore < lowerBound ∧
+      (ProfileValid P bytes →
+        SemanticCorrect scope.setting bytes →
+        SemanticWithinResources scope.setting bytes →
+        ∀ evaluation : SystemEvaluation scope.setting bytes,
+          SystemEvaluationRel scope.setting scope.decider bytes evaluation ∧
+          lowerBound ≤ scope.objective.score evaluation.cost))
+
+/-- Auxiliary: resolution below a rank bound.  The recursion is the same
+`decreases`-driven one as `coverLeaves_covers_aux`; only the payload differs. -/
+theorem partition_cover_complete_aux (strategy : PartitionStrategy scope) :
+    ∀ (n : Nat) (p : PartitionBody scope), p.rank ≤ n →
+      ∀ bytes : ByteArray, p.Denotes bytes →
+        Resolved scope bytes ∨
+          ∃ (leaf : PartitionBody scope) (gap : Foundation.CoverageGap),
+            leaf.Denotes bytes ∧ strategy leaf = .incomplete gap := by
+  intro n
+  induction n with
+  | zero =>
+      intro p hrank bytes hden
+      cases hr : strategy p with
+      | split children cover disjoint decreases =>
+          exact absurd (Nat.lt_of_lt_of_le
+            (decreases children.head (by simp [Foundation.NonemptyCanonicalFrontier.elements]))
+            hrank) (Nat.not_lt_zero _)
+      | exhausted members exact =>
+          exact Or.inl (Or.inl ⟨p, members, exact, hden, (exact bytes).mp hden⟩)
+      | dominated lowerBound memberLowerBound strict =>
+          exact Or.inl (Or.inr (Or.inr
+            ⟨lowerBound, strict, fun hpv hsc hsr => memberLowerBound bytes hden hpv hsc hsr⟩))
+      | empty proof => exact Or.inl (Or.inr (Or.inl (proof bytes hden)))
+      | incomplete gap => exact Or.inr ⟨p, gap, hden, hr⟩
+  | succ n ih =>
+      intro p hrank bytes hden
+      cases hr : strategy p with
+      | split children cover disjoint decreases =>
+          obtain ⟨child, hchild, hcden⟩ := cover bytes hden
+          exact ih child
+            (Nat.le_of_lt_succ (Nat.lt_of_lt_of_le (decreases child hchild) hrank))
+            bytes hcden
+      | exhausted members exact =>
+          exact Or.inl (Or.inl ⟨p, members, exact, hden, (exact bytes).mp hden⟩)
+      | dominated lowerBound memberLowerBound strict =>
+          exact Or.inl (Or.inr (Or.inr
+            ⟨lowerBound, strict, fun hpv hsc hsr => memberLowerBound bytes hden hpv hsc hsr⟩))
+      | empty proof => exact Or.inl (Or.inr (Or.inl (proof bytes hden)))
+      | incomplete gap => exact Or.inr ⟨p, gap, hden, hr⟩
+
+/--
+  **SPEC §10.4 / §15**, `Universal.partition_cover_complete`.
+
+  Refinement not only reaches a leaf, it *decides* there.  Every byte string the
+  root cell denotes is either resolved by one of SPEC §10.4's three terminal
+  verdicts, or the strategy is exhibited reporting a coverage gap on a cell that
+  denotes it — in which case `PartitionResult.propagate` turns the sealed answer
+  into `Foundation.SolveResult.incomplete` and release is blocked.
+
+  There is no hypothesis on the strategy: a strategy that gives up is not
+  excluded, it is caught.
+
+  **Scope — this is not universal coverage.**  The conclusion is conditional on
+  `root.Denotes bytes`.  A root cell that denotes almost nothing satisfies this
+  theorem while covering almost no competitor, and `coverLeaves_covers_scope`
+  below proves that such roots exist.  Turning this into
+  `universal_sublevel_coverage` requires a root that provably denotes every
+  profile-valid byte string of the sublevel *and* a strategy with no `incomplete`
+  leaf — and the only way to seal a cell that is too large to enumerate is
+  `dominated`, whose body is the undischarged universal lower bound.  Both are
+  outstanding, and neither is supplied here.
+-/
+theorem partition_cover_complete (strategy : PartitionStrategy scope)
+    (root : PartitionBody scope) (bytes : ByteArray) (hden : root.Denotes bytes) :
+    Resolved scope bytes ∨
+      ∃ (leaf : PartitionBody scope) (gap : Foundation.CoverageGap),
+        leaf.Denotes bytes ∧ strategy leaf = .incomplete gap :=
+  partition_cover_complete_aux strategy root.rank root (Nat.le_refl _) bytes hden
+
+/-- The sealed-certificate corollary: SPEC §10.4 admits only the first four
+constructors in a sealed certificate, and under exactly that restriction the
+cover resolves every byte string the root denotes, with no escape hatch. -/
+theorem partition_cover_complete_of_sealable (strategy : PartitionStrategy scope)
+    (hsealable : ∀ p : PartitionBody scope, (strategy p).isSealable = true)
+    (root : PartitionBody scope) (bytes : ByteArray) (hden : root.Denotes bytes) :
+    Resolved scope bytes := by
+  rcases partition_cover_complete strategy root bytes hden with hres | ⟨leaf, gap, _, hgap⟩
+  · exact hres
+  · have := hsealable leaf
+    rw [hgap] at this
+    exact absurd this (by simp)
+
+/-- **Anti-vacuity of the `empty` verdict.**  The middle disjunct of `Resolved`
+is not free: it asserts a genuine refutation of profile validity, so a resolved
+byte string that *is* profile valid must have been enumerated or dominated. -/
+theorem resolved_of_profileValid {scope : PartitionScope P} {bytes : ByteArray}
+    (h : Resolved scope bytes) (hpv : ProfileValid P bytes) :
+    (∃ (leaf : PartitionBody scope) (members : CanonicalList CheckedByteResult),
+        (∀ b : ByteArray, leaf.Denotes b ↔ ∃ m ∈ members.elements, m.bytes = b) ∧
+        leaf.Denotes bytes ∧ ∃ m ∈ members.elements, m.bytes = bytes) ∨
+    (∃ lowerBound : Nat,
+        scope.baselineScore < lowerBound ∧
+        (SemanticCorrect scope.setting bytes →
+          SemanticWithinResources scope.setting bytes →
+          ∀ evaluation : SystemEvaluation scope.setting bytes,
+            SystemEvaluationRel scope.setting scope.decider bytes evaluation ∧
+            lowerBound ≤ scope.objective.score evaluation.cost)) := by
+  rcases h with henum | hinvalid | ⟨lowerBound, hstrict, hbound⟩
+  · exact Or.inl henum
+  · exact absurd hpv hinvalid
+  · exact Or.inr ⟨lowerBound, hstrict, fun hsc hsr => hbound hpv hsc hsr⟩
 
 /-! ### Anti-vacuity: what recursive coverage does NOT establish
 

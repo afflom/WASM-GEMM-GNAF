@@ -12,11 +12,20 @@
   every charged coordinate, and bounded-length byte strings are finitely
   covered.
 
-  It does NOT prove `possible_winner_within_sublevel`, and it does NOT prove
-  `universal_sublevel_coverage`.  Those need a universal lower bound attained
-  (UOR-GNAF §19.3), which is undischarged.  They are OMITTED, not stubbed and
-  not assumed.  `Artifact.released_wasm_gemm_gnaf_global_optimal` is likewise
-  absent from this repository.
+  It proves `possible_winner_within_sublevel` (SPEC §10.3): an evaluated
+  competitor that does not score worse than the baseline is confined to the
+  sublevel the baseline's score determines.  That is a consequence of
+  properness alone and needs no coverage hypothesis — the objective's own
+  `boundOfScore` supplies the bound and `ProperObjective.sublevelBound` is the
+  field that makes it hold.
+
+  It does NOT prove `universal_sublevel_coverage`.  Confining every *evaluated*
+  competitor to a finite carrier is not the same as having searched that
+  carrier, nor as knowing that every competitor is evaluated; the gap between
+  the two is an attained universal lower bound (UOR-GNAF §19.3), which is
+  undischarged.  `universal_sublevel_coverage` and
+  `Artifact.released_wasm_gemm_gnaf_global_optimal` are OMITTED, not stubbed and
+  not assumed.
 
   Every declaration in this file is either a definition or a proved theorem.
 -/
@@ -392,5 +401,124 @@ theorem sublevel_bytes_enumerated {P : Wasm.Profile}
     (h : O.score evaluation.cost ≤ u) :
     bytes ∈ Enumerate.boundedByteArrays u :=
   Enumerate.mem_boundedByteArrays (sublevel_bytes_size_le O evaluation h)
+
+/-! ## Membership of a score sublevel (SPEC §10.3)
+
+SPEC §10.3 fixes the shape of the sublevel construction:
+
+> Given a proved correct baseline evaluation `bEval`, let `u = O.score bEval.cost`.
+> Properness yields bounds on module bytes, execution steps, memory, instantiated
+> state, and every other charged coordinate for any evaluated competitor with
+> `O.score cEval.cost ≤ u`.
+
+`WithinSublevel` names that conclusion and `possible_winner_within_sublevel`
+proves it.  Both are stated over the objective's **own declared**
+`boundOfScore`, so no bound is invented here: the objective supplies it and
+`ProperObjective.sublevelBound` is the field that makes it hold.
+
+What this is NOT: it is not `universal_sublevel_coverage`.  Nothing below claims
+that every winner is evaluated, that the sublevel is enumerated and checked, or
+that a module *outside* the sublevel cannot beat the baseline.  It is the first
+of the six numbered obligations of §10.3 and it discharges only that one.
+-/
+
+section PossibleWinner
+
+variable {P : Wasm.Profile} [Foundation.Fintype (Gemm.RawInvocation P)]
+  {S : Setting P}
+
+/--
+  **SPEC §10.3.**  An evaluated competitor lies within a score sublevel when its
+  exact aggregate cost is inside the declared resource bound *and* its module
+  byte count is inside that bound's own module-size coordinate.
+
+  The second conjunct is not redundant bookkeeping: it is the hypothesis SPEC
+  §10.3 (1) needs — "byte strings within the module-size bound are finite and
+  exactly enumerable" — stated on the `ByteArray` rather than on the cost
+  vector, which is where `Enumerate.boundedByteArrays` can consume it.  It is
+  *derived* from the first conjunct through the exact aggregate cost equation
+  `cost.static.moduleBytes = bytes.size`, never assumed.
+-/
+def WithinSublevel (bounds : Cost.ResourceBounds) (bytes : ByteArray)
+    (evaluation : SystemEvaluation S bytes) : Prop :=
+  Cost.Within bounds evaluation.cost ∧
+    bytes.size ≤ bounds.coordinateBound Cost.ArtifactCoordinate.staticModuleBytes
+
+/--
+  The core of `possible_winner_within_sublevel`, with **no hypothesis at all
+  beyond the score inequality**.
+
+  It is stated separately so the strength of the §15 theorem below is visible:
+  that theorem carries SPEC's five extra premises verbatim, and this lemma
+  proves none of them is load-bearing.  Properness alone confines a sublevel
+  member; being profile valid, correct or feasible adds nothing to the
+  confinement, which is exactly the property §10.3 needs — a competitor cannot
+  escape the sublevel by being *worse* behaved.
+-/
+theorem withinSublevel_of_score_le (O : Cost.ProperObjective P S.problem)
+    {bytes : ByteArray} (evaluation : SystemEvaluation S bytes) {u : Nat}
+    (h : O.score evaluation.cost ≤ u) :
+    WithinSublevel (O.boundOfScore u) bytes evaluation := by
+  refine ⟨Cost.ProperObjective.within_boundOfScore O h, ?_⟩
+  have hcoord :=
+    Cost.ProperObjective.within_boundOfScore O h Cost.ArtifactCoordinate.staticModuleBytes
+  have hexact := Cost.module_bytes_exact evaluation.costExact
+  show bytes.size ≤ _
+  rw [← hexact]
+  exact hcoord
+
+/--
+  **SPEC §10.3 / §15**, `Universal.possible_winner_within_sublevel`.
+
+  Any evaluated competitor that does not score worse than the baseline lies
+  inside the sublevel the baseline's score determines.  Contrapositively: a
+  module outside that sublevel cannot beat the baseline — which is what makes
+  the *search* for a winner a search over a bounded carrier rather than over all
+  of `ByteArray`.
+
+  The premises are SPEC's, verbatim and in SPEC's order.  Only `hbetter` is
+  used; `withinSublevel_of_score_le` above is the same conclusion without the
+  other five, so this statement is faithful to §10.3 without being weaker than
+  what is actually proved.
+
+  **Scope.**  This bounds a competitor *given* an evaluation of it.  It does not
+  produce that evaluation, does not claim every competitor has one, and does not
+  claim the sublevel has been searched.  Those are
+  `system_evaluation_rel_complete` and `universal_sublevel_coverage`, both
+  outstanding.
+-/
+theorem possible_winner_within_sublevel {D : Decider S}
+    (O : Cost.ProperObjective P S.problem)
+    {baselineBytes competitorBytes : ByteArray}
+    (bEval : SystemEvaluation S baselineBytes)
+    (hc : ProfileValid P competitorBytes)
+    (cEval : SystemEvaluation S competitorBytes)
+    (heval : SystemEvaluationRel S D competitorBytes cEval)
+    (hcorrect : Correct cEval)
+    (hfeasible : Feasible cEval)
+    (hbetter : O.score cEval.cost ≤ O.score bEval.cost) :
+    WithinSublevel (O.boundOfScore (O.score bEval.cost)) competitorBytes cEval := by
+  clear hc heval hcorrect hfeasible
+  exact withinSublevel_of_score_le O cEval hbetter
+
+/-- A sublevel member's bytes are enumerated by the finite carrier of §10.3 (1).
+This is the point of carrying the byte bound in `WithinSublevel`. -/
+theorem withinSublevel_bytes_enumerated (O : Cost.ProperObjective P S.problem)
+    {bytes : ByteArray} {evaluation : SystemEvaluation S bytes} {u : Nat}
+    (h : WithinSublevel (O.boundOfScore u) bytes evaluation) :
+    bytes ∈
+      Enumerate.boundedByteArrays
+        ((O.boundOfScore u).coordinateBound Cost.ArtifactCoordinate.staticModuleBytes) :=
+  Enumerate.mem_boundedByteArrays h.2
+
+/-- Every charged coordinate of a sublevel member is bounded, not merely the
+module size: `WithinSublevel` carries the whole of `Cost.Within`. -/
+theorem withinSublevel_coordinate_le {bounds : Cost.ResourceBounds}
+    {bytes : ByteArray} {evaluation : SystemEvaluation S bytes}
+    (h : WithinSublevel bounds bytes evaluation) (co : Cost.ArtifactCoordinate) :
+    co.value evaluation.cost ≤ bounds.coordinateBound co :=
+  h.1 co
+
+end PossibleWinner
 
 end WasmGemmGnaf.Universal

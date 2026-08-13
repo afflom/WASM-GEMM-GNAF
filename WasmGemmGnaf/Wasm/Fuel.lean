@@ -13,10 +13,20 @@
 
   `exploreTree` recurses over *every* element of `successors`, so a
   configuration with two permitted `memory.grow` outcomes contributes both
-  subtrees.  The two required theorems are proved:
+  subtrees.  The three required theorems are proved:
 
       Wasm.runFuel_sound
       Wasm.runFuel_complete_with_bound
+      Wasm.bounded_tree_covers_every_branch
+
+  The third is the "and that `complete` contains every maximal branch" clause,
+  and it carries NO hypothesis on the trace length.  It is not a restatement of
+  `runFuel_complete_with_bound`: the `complete` constructor is reachable only
+  when `prefixes (bound + 1) [] initial = []`, and `prefixes_complete` (proved
+  here, the converse of `prefixes_sound`) turns that into a proof that every
+  finite execution of that particular `initial` has a trace of length at most
+  `bound + 1`.  On a `nonterminalPrefix` result the unconditional statement is
+  false, so the `complete` hypothesis is load bearing.
 
   Deviation from the SPEC signature, disclosed: SPEC's `complete` constructor
   carries a `NonemptyCanonicalList`, and its `nonterminalPrefix` constructor
@@ -36,6 +46,31 @@ set_option autoImplicit false
 namespace WasmGemmGnaf.Wasm
 
 open WasmGemmGnaf.Foundation
+
+/-! ## Reduction-sequence utilities -/
+
+/-- A reduction sequence that still has an event to emit starts from a running
+configuration. -/
+theorem Reduces.status_running_of_ne_nil {c final : Config} {tr : List Event}
+    (h : Reduces c tr final) (hne : tr ≠ []) : c.status = Status.running := by
+  cases h with
+  | refl _ => exact absurd rfl hne
+  | cons hstep _ => exact hstep.running
+
+/-- A reduction sequence splits at every cut point of its trace. -/
+theorem Reduces.split : ∀ (t₁ : List Event) {c final : Config} {t₂ : List Event},
+    Reduces c (t₁ ++ t₂) final →
+    ∃ mid : Config, Reduces c t₁ mid ∧ Reduces mid t₂ final := by
+  intro t₁
+  induction t₁ with
+  | nil => intro c final t₂ h; exact ⟨c, .refl c, by simpa using h⟩
+  | cons e t ih =>
+    intro c final t₂ h
+    rw [List.cons_append] at h
+    cases h with
+    | cons hstep hrest =>
+      obtain ⟨mid, h₁, h₂⟩ := ih hrest
+      exact ⟨mid, .cons hstep h₁, h₂⟩
 
 /-! ## The explorer -/
 
@@ -202,6 +237,48 @@ theorem prefixes_sound :
       · exact .cons ((mem_successors_iff_step c p.1 p.2).mp (by simpa using hp)) hred
     · simp at hm
 
+theorem prefixes_zero_of_running {c : Config} (tr : List Event)
+    (h : c.status = Status.running) : prefixes 0 tr c = [tr] := by
+  simp [prefixes, h]
+
+theorem prefixes_succ_of_running {c : Config} (n : Nat) (tr : List Event)
+    (h : c.status = Status.running) :
+    prefixes (n + 1) tr c =
+      (successors c).flatMap (fun p => prefixes n (tr ++ [p.1]) p.2) := by
+  simp [prefixes, h]
+
+/-- The converse of `prefixes_sound`: every reduction sequence of exactly `fuel`
+further steps that is still running at its end *is* reported.  Together the two
+make `prefixes fuel tr c = []` equivalent to "no branch survives `fuel` steps",
+which is what turns `exploreAll`'s `complete` constructor into an unconditional
+coverage statement. -/
+theorem prefixes_complete :
+    ∀ (fuel : Nat) (tr suffix : List Event) (c final : Config),
+      Reduces c suffix final →
+      suffix.length = fuel →
+      final.status = Status.running →
+      tr ++ suffix ∈ prefixes fuel tr c := by
+  intro fuel
+  induction fuel with
+  | zero =>
+    intro tr suffix c final hred hlen hrun
+    have hsuf : suffix = [] := List.length_eq_zero_iff.mp hlen
+    subst hsuf
+    have hcf : c = final := hred.length_eq_zero rfl
+    subst hcf
+    rw [prefixes_zero_of_running tr hrun]
+    simp
+  | succ n ih =>
+    intro tr suffix c final hred hlen hrun
+    cases hred with
+    | refl _ => exact Nat.noConfusion hlen
+    | @cons _ e c'' tr'' _ hstep hrest =>
+      have hs : c.status = Status.running := hstep.running
+      rw [prefixes_succ_of_running n tr hs, List.mem_flatMap]
+      refine ⟨(e, c''), (mem_successors_iff_step c e c'').mpr hstep, ?_⟩
+      have hmem := ih (tr ++ [e]) tr'' c'' final hrest (by simpa using hlen) hrun
+      simpa using hmem
+
 theorem mem_of_head? {α : Type} {l : List α} {x : α} (h : l.head? = some x) :
     x ∈ l := by
   cases l with
@@ -303,6 +380,67 @@ theorem runFuel_complete_with_bound {bound : Nat} {initial : Config}
   unfold TreeContains
   rw [observations_exploreAll]
   exact (covers_exploreTree bound initial).2 observation hrun hlen
+
+/-- **SPEC section 7.4.**  The `complete` constructor contains *every* maximal
+finite branch — with no length hypothesis at all.
+
+`runFuel_complete_with_bound` is conditional on `observation.trace.length ≤
+bound`; this is not.  The `complete` constructor is only reachable when
+`prefixes (bound + 1) [] initial = []`, i.e. when *no* branch of `initial` is
+still running after `bound + 1` steps.  `prefixes_complete` turns that into a
+proof that every finite execution of `initial` has a trace of length at most
+`bound + 1`, so on such an `initial` the bound is not a restriction on the
+runs — it is a proved fact about them. -/
+theorem bounded_tree_covers_every_branch {bound : Nat} {initial : Config}
+    {obs : List ExecutionObservation}
+    {cov : CoversEveryMaximalFiniteBranch bound initial obs}
+    (hcomplete : exploreAll bound initial = .complete obs cov)
+    {o : ExecutionObservation} (hrun : FiniteExecution initial o) :
+    o ∈ obs := by
+  -- The recorded observations are exactly the explored tree.
+  have hobsdef : obs = exploreTree (bound + 1) [] initial := by
+    have h := observations_exploreAll bound initial
+    rw [hcomplete] at h
+    simpa [ExecutionTreeResult.observations] using h
+  -- `complete` is returned only when no branch survives `bound + 1` steps.
+  have hnil : prefixes (bound + 1) [] initial = [] := by
+    unfold exploreAll at hcomplete
+    split at hcomplete
+    · exact absurd hcomplete (by simp)
+    · rename_i hp
+      cases hl : prefixes (bound + 1) [] initial with
+      | nil => rfl
+      | cons a t => rw [hl] at hp; simp at hp
+  obtain ⟨final, hred, hobsc⟩ := hrun
+  -- Hence every finite execution of `initial` fits inside `bound + 1` steps.
+  have hlen : o.trace.length ≤ bound + 1 := by
+    cases Nat.lt_or_ge (bound + 1) o.trace.length with
+    | inr hle => exact hle
+    | inl hgt =>
+      exfalso
+      have hsplit :
+          o.trace.take (bound + 1) ++ o.trace.drop (bound + 1) = o.trace :=
+        List.take_append_drop (bound + 1) o.trace
+      have hred' :
+          Reduces initial
+            (o.trace.take (bound + 1) ++ o.trace.drop (bound + 1)) final := by
+        rw [hsplit]; exact hred
+      obtain ⟨mid, hfirst, hrest⟩ := Reduces.split (o.trace.take (bound + 1)) hred'
+      have hdropne : o.trace.drop (bound + 1) ≠ [] := by
+        intro hd
+        have hzero : (o.trace.drop (bound + 1)).length = 0 := by rw [hd]; rfl
+        rw [List.length_drop] at hzero
+        omega
+      have htake : (o.trace.take (bound + 1)).length = bound + 1 := by
+        rw [List.length_take]; omega
+      have hmem :=
+        prefixes_complete (bound + 1) [] (o.trace.take (bound + 1)) initial mid
+          hfirst htake (hrest.status_running_of_ne_nil hdropne)
+      rw [hnil] at hmem
+      simp at hmem
+  rw [hobsdef]
+  exact exploreTree_complete (bound + 1) [] o.trace initial final o hred
+    (by simpa using hobsc) hlen
 
 /-- A reported nonterminal prefix is a real reduction sequence of exactly
 `bound + 1` steps that has not terminated: the module cannot satisfy a smaller

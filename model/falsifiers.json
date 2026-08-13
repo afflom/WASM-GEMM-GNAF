@@ -13,23 +13,26 @@
     {
       "id": "M2",
       "family": "CM",
-      "plants": "duplicate claim id",
-      "expectedRejector": "registry uniqueness check",
-      "status": "rejects"
+      "plants": "a second copy of the registry's first claim object, spliced verbatim into a COPY of model/claims.json so the planted file is a genuine parser input",
+      "expectedRejector": "required::registry_violations, the checker `xtask claims list` and `xtask gate` step 2 both call",
+      "status": "rejects",
+      "note": "REWRITTEN after a real defect. M2, M3 and M4 each used to reimplement their check inside the falsifier -- M2 appended a duplicate to an in-memory Vec and asserted that dedup shrank it -- so all three tested Rust's standard library and never invoked a gate. The suite reported [PASS] M2 at a moment when model/claims.json genuinely carried two rows with the id UV-004 and `just claims` accepted them. Each now plants its fault in a copy and calls the repository's own checker, with the unmutated copy as a control so it cannot pass by failing for an unrelated reason. Meta-falsified: deleting the duplicate rule from registry_violations turns M2 red and leaves M3 and M4 green."
     },
     {
       "id": "M3",
       "family": "CM",
-      "plants": "orphan claim dependency",
-      "expectedRejector": "registry dependency check",
-      "status": "rejects"
+      "plants": "a dependsOn edge to the claim id GO-999-PLANTED, which does not exist, on a COPY of the registry",
+      "expectedRejector": "required::registry_violations orphan-dependency rule",
+      "status": "rejects",
+      "note": "See M2. Carries the unmutated registry as a control."
     },
     {
       "id": "M4",
       "family": "GO",
-      "plants": "formalProof level without a Lean declaration",
-      "expectedRejector": "claim-level rule (SPEC 17.1)",
-      "status": "rejects"
+      "plants": "a level promotion from `open` to `formalProof` on a claim that has no leanDeclaration -- the exact edit a repository under pressure for a green gate would reach for -- on a COPY of the registry",
+      "expectedRejector": "required::registry_violations level rule (SPEC 17.1: only formalProof supports 'proved', and a formalProof row with no Lean declaration is that promotion)",
+      "status": "rejects",
+      "note": "See M2. Carries the unmutated registry as a control."
     },
     {
       "id": "M5",
@@ -92,6 +95,14 @@
       "expectedRejector": "the SPEC 15 inventory, which reports TAINTED and does not count it as discharged",
       "status": "rejects",
       "note": "SPEC 4: Classical.choice SHALL NOT produce executable witnesses. A Fintype instance, an enumerator and a decision procedure are DATA, so a choice-tainted closure disqualifies them however well-named they are. An external audit found a name-only check crediting exactly this shape. The planted witness is elaborated against the real compiled environment, so the axiom closure driving the verdict is Lean's own answer; a choice-free witness under the same name is the control and must still be credited."
+    },
+    {
+      "id": "M13",
+      "family": "WS",
+      "plants": "three mutations of vendor/wasm-spec/SHA256SUMS, each on a COPY of the vendored tree: a flipped hex digit inside a listed digest, an appended line that leaves every per-file digest intact, and a deleted entry",
+      "expectedRejector": "vendor::binding, the checker `xtask vendor` and release gate step 1 both call",
+      "status": "rejects",
+      "note": "SPEC 7.1 says Wasm.profile_matches_pinned_revision means the model and map are identity-bound to the VENDORED revision. Lean cannot read vendor/wasm-spec/; the theorem stands on the literals core3VendorManifestSha256, core3VendoredTree.fileCount and core3RevisionCommit in WasmGemmGnaf/Wasm/Revision.lean, and a literal that had drifted from the tree would still elaborate. The binding is therefore only as good as the checker that recomputes it, and a checker that never fires is indistinguishable from one with nothing to find. The falsifier runs the REAL checker against the planted tree rather than reimplementing it, and carries the unmutated copy as a control so it cannot pass by failing for an unrelated reason. The appended-line mutation is the one that matters most: every per-file digest still checks out, so `sha256sum -c` alone would pass it and only the recorded digest of digests catches it. The repository's own vendored tree is never written."
     }
   ],
   "note": "A mutation suite that merely expects runtime output differences does not test universal-coverage integrity (SPEC 18). M4 and M6 target claim integrity directly."
