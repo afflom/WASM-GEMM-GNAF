@@ -33,7 +33,7 @@ type Falsifier = fn(&Path) -> Result<bool>;
 pub fn run(root: &Path) -> Result<Outcome> {
     println!("mutation suite (SPEC 18)\n");
 
-    let falsifiers: [(&str, Falsifier); 13] = [
+    let falsifiers: [(&str, Falsifier); 14] = [
         ("M1 mutated authority bytes rejected by digest recomputation", m1),
         ("M2 duplicate claim id rejected", m2),
         ("M3 orphan claim dependency rejected", m3),
@@ -47,6 +47,7 @@ pub fn run(root: &Path) -> Result<Outcome> {
         ("M11 weakened GlobalOptimal breaks the Iff.rfl schema binding and the schema audit", m11),
         ("M12 choice-tainted required declaration reported TAINTED, not discharged", m12),
         ("M13 mutated vendored SHA256SUMS breaks the pinned-revision binding", m13),
+        ("M14 fabricated Core coverage marker rejected by the extracted checklist", m14),
     ];
 
     let mut failed: Vec<&str> = Vec::new();
@@ -663,7 +664,25 @@ fn m13(root: &Path) -> Result<bool> {
         .iter()
         .any(|f| f.contains("core3VendoredTree.fileCount"));
 
-    Ok(rejects_flip && rejects_append && rejects_delete)
+    // (d) a file the manifest does not list. This is the direction the checker
+    //     MISSED, and an adversarial review demonstrated the consequence live:
+    //     while `binding` walked only the manifest's own lines, 334 files were
+    //     added to the vendored tree and `xtask vendor` went on reporting
+    //     "40 files rechecked (0 digest failures)" and PASSING. Unlisted bytes
+    //     changed no digest anywhere, so the claim that any vendored byte moves
+    //     `SHA256SUMS` was false. `binding` now enumerates the directory; this
+    //     plant is what keeps it doing so.
+    write(&sums_path, &original)?;
+    let smuggled = planted.join("document").join("core").join("SMUGGLED.rst");
+    write(&smuggled, "planted content nothing has a digest for\n")?;
+    let unlisted = crate::vendor::binding(&planted, root)?;
+    let rejects_unlisted = unlisted
+        .findings
+        .iter()
+        .any(|f| f.contains("not covered by the digest manifest"));
+    fs::remove_file(&smuggled).ok();
+
+    Ok(rejects_flip && rejects_append && rejects_delete && rejects_unlisted)
 }
 
 /// Flip one hex digit of the first digest line, keeping the line well formed so
@@ -681,6 +700,73 @@ fn flip_first_digest(text: &str) -> Result<String> {
         }
     }
     Err(SpecError::new(CLAUSE, "the planted digest manifest has no digest line to flip"))
+}
+
+// ---------------------------------------------------------------------------
+// M14: a fabricated Core coverage marker must be rejected.
+//
+// `xtask core` measures how much of the pinned Core 3.0 front end the Lean tree
+// covers, and the number it prints is what an auditor will read. The whole value
+// of that number rests on one property: the checklist is EXTRACTED from the
+// vendored SpecTec sources, so a marker can claim an item only if the pinned
+// grammar really defines it. Padding the number by inventing a marker must fail
+// rather than inflate the total.
+//
+// The plant goes on a COPY of the Lean tree; `WasmGemmGnaf/` is never written.
+// ---------------------------------------------------------------------------
+fn m14(_root: &Path) -> Result<bool> {
+    let tmp = TempDir::new("m14")?;
+    let planted_lean = tmp.path().join("lean");
+    copy_tree(Path::new("WasmGemmGnaf"), &planted_lean)?;
+
+    let spectec = Path::new("vendor/wasm-spec/specification/wasm-3.0");
+
+    // The control: the unmutated copy must be accepted, so a rejection below
+    // cannot be blamed on the copy itself.
+    let control = crate::core::report(spectec, &planted_lean)?;
+    if !control.is_ok() {
+        return Err(SpecError::new(
+            CLAUSE,
+            "the UNMUTATED copy of the Lean tree already fails the Core coverage check, so \
+             M14 would pass for the wrong reason",
+        ));
+    }
+    let control_total: usize = control.parts.iter().map(super::core::Coverage::covered).sum();
+
+    // (a) an invented opcode. `0xZZ` is not a byte and no such production exists.
+    let plant = planted_lean.join("PlantedCoverage.lean");
+    write(
+        &plant,
+        "-- core-opcode: 0x0C TOTALLY.INVENTED\ntheorem plantedA : True := trivial\n",
+    )?;
+    let invented_opcode = crate::core::report(spectec, &planted_lean)?;
+    let rejects_opcode = !invented_opcode.is_ok();
+
+    // (b) an invented typing rule.
+    write(
+        &plant,
+        "-- core-rule: Instr_ok/no-such-rule\ntheorem plantedB : True := trivial\n",
+    )?;
+    let invented_rule = crate::core::report(spectec, &planted_lean)?;
+    let rejects_rule = !invented_rule.is_ok();
+
+    // (c) an invented syntax production.
+    write(
+        &plant,
+        "-- core-syntax: nosuchtype\ntheorem plantedC : True := trivial\n",
+    )?;
+    let invented_syntax = crate::core::report(spectec, &planted_lean)?;
+    let rejects_syntax = !invented_syntax.is_ok();
+
+    // (d) and the number must not have moved: a fabricated marker must not be
+    //     able to raise the covered count even while it is being rejected.
+    let planted_total: usize =
+        invented_syntax.parts.iter().map(super::core::Coverage::covered).sum();
+    let count_unmoved = planted_total == control_total;
+
+    fs::remove_file(&plant).ok();
+
+    Ok(rejects_opcode && rejects_rule && rejects_syntax && count_unmoved)
 }
 
 /// Copy a directory tree. Every mutation is applied to a COPY; the vendored

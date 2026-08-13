@@ -9,6 +9,7 @@
 //! promise broke rather than merely that something did.
 
 mod axioms;
+mod core;
 mod docs;
 mod firewall;
 mod gate;
@@ -54,6 +55,14 @@ SOURCE CHECKS (read the tree)
                                pinned commit, and every vendored rule anchor cited by
                                `Wasm/Adequacy.lean`. --list adds the coverage
                                arithmetic and the SpecTec scope limit.
+    core [--list]              How much of the PINNED Core 3.0 front end the Lean
+                               tree covers (SPEC 7.1). The checklist is EXTRACTED
+                               from the vendored SpecTec sources -- every opcode
+                               production, typing rule and syntax production --
+                               and Lean claims an item with a `-- core-opcode:` /
+                               `-- core-rule:` / `-- core-syntax:` marker. A
+                               marker naming something the sources do not define
+                               is a hard failure. --list names what is missing.
 
 ENVIRONMENT CHECKS (question the compiled Lean environment)
     claims required [--list] [--check]
@@ -142,6 +151,7 @@ fn dispatch(args: &[String]) -> Result<Outcome> {
         "axioms" => axioms::run(&root),
         "schema" => schema::run(&root),
         "vendor" => vendor::run(has(rest, "--list")),
+        "core" => core::run(has(rest, "--list")),
         "manifest" => manifest::run(has(rest, "--check")),
         "docs" => docs::run(),
         "gate" => gate::run(&root, has(rest, "--no-mutation")),

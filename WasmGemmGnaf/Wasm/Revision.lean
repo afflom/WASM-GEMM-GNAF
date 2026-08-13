@@ -338,10 +338,23 @@ theorem core3VendorManifestSha256_isDigest :
 theorem core3VendorManifestSha256_length :
     core3VendorManifestSha256.toList.length = 64 := by decide
 
-/-- Distinct vendored trees have distinct canonical identities.  Changing any
-vendored byte changes `SHA256SUMS`, hence its digest, hence this identity ---
-which is what makes the binding below a binding to the vendored CONTENT and not
-merely to a commit string. -/
+/--
+Distinct vendored trees have distinct canonical identities.
+
+Changing a byte of a *listed* vendored file changes `SHA256SUMS`, hence its
+digest, hence this identity --- which is what makes the binding below a binding
+to the vendored CONTENT and not merely to a commit string.
+
+**This sentence used to be written without the word "listed", and as written it
+was false.**  An adversarial review demonstrated the consequence live: while
+`xtask vendor` walked only the lines of `SHA256SUMS`, 334 files were added to
+`vendor/wasm-spec/` and the checker went on reporting "40 files rechecked from
+content (0 digest failures)" and passing.  Bytes in an unlisted file changed no
+digest anywhere.  The checker now enumerates the directory and requires the two
+sets to agree in both directions --- an unlisted file and a listed-but-absent
+file are each a finding --- and `M13` plants exactly that fault to keep it doing
+so.  With that half in place the sentence holds for the tree as a whole.
+-/
 theorem core3VendoredTree_identity_eq_iff (t : VendoredTreeBody) :
     VendoredTreeBody.identity t = VendoredTreeBody.identity core3VendoredTree ↔
       t = core3VendoredTree :=

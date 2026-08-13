@@ -9,11 +9,23 @@ proposition exists in this repository.  Where the repository proves something
 *near* a required name but strictly weaker, the required name is recorded as
 OUTSTANDING and the nearer result is named as such — never promoted.
 
-Score: **33 of 58 discharged, 25 outstanding.**
+Score: **36 of 58 discharged, 22 outstanding**, as `xtask claims required`
+reports it against the compiled environment.  This header is prose and can
+drift; that command is the ledger, and where the two disagree the command wins.
 
-One of the 31, `Wasm.costed_erase_iff_plain_run`, is discharged in the `DEV-001`
+One of the 36, `Wasm.costed_erase_iff_plain_run`, is discharged in the `DEV-001`
 amended form because SPEC's literal biconditional is false as written; the row
 says so.
+
+**An external audit grades this repository lower than 36, and is right to.**  Its
+strict count rejects `Wasm.decode_sound`, `Wasm.decode_complete` and
+`Wasm.validate_iff_declarative` — they are proved against a hand-written subset
+codec and an i32-only validator, while the released profile enables SIMD, GC and
+references, tables, bulk memory, tail calls and exception handling.  Those three
+rows below say what they cover; read them as the audit did.  `just core` now
+measures the gap against a checklist **extracted from the vendored SpecTec
+sources** rather than from anything this repository wrote, so the number is no
+longer a matter of opinion.
 
 ## Obligation legend
 
@@ -108,7 +120,7 @@ enumerator and the byte enumerator); `Universal/Argmin.lean` proves the third.
 
 | SPEC §15 name | discharged by / blocked by |
 |---|---|
-| `Universal.possible_winner_within_sublevel` | **OUTSTANDING — `O-4`, `O-6`.**  Needs an attained upper bound, which needs a baseline.  Nearest proved: `WasmGemmGnaf.Universal.sublevel_bytes_size_le`, `sublevel_bytes_enumerated` and `byte_enumerator_covers_sublevel` (`UV-002`) — the finiteness half only. |
+| `Universal.possible_winner_within_sublevel` | `WasmGemmGnaf.Universal.possible_winner_within_sublevel` (`Universal/Sublevel.lean`), at SPEC §10.3's exact statement with its five premises verbatim and in SPEC's order.  `Universal.WithinSublevel` is the conclusion: the exact aggregate cost lies inside the objective's **own** `boundOfScore`, and the module byte count inside that bound's `staticModuleBytes` coordinate — the second conjunct *derived* from the first through `Cost.module_bytes_exact`, never assumed.  Only `hbetter` is used: `Universal.withinSublevel_of_score_le` proves the same conclusion from the score inequality alone, so carrying SPEC's other premises cannot be mistaken for needing them.  Axiom closure `[propext, Quot.sound]`.  **Scope**: this CONFINES a competitor *given* an evaluation of it.  It does not produce that evaluation (`system_evaluation_rel_complete`, outstanding), does not claim every competitor has one, and does not claim the sublevel has been searched (`universal_sublevel_coverage`, outstanding).  Bounding a carrier is not covering it. |
 | `Universal.byte_enumerator_complete` | `WasmGemmGnaf.Universal.byte_enumerator_complete` (`Universal/EnumerateInputs.lean`): every byte sequence of size at most `bound` occurs in `Universal.byteEnumerator bound`, unconditionally.  `Universal.byte_enumerator_exact` is the converse inclusion and `Universal.byte_enumerator_nodup` the duplicate-freedom — proved from `byteListsOfLength_nodup`, `Foundation.Bytes.pack_injective` and a size argument across length blocks, never by decidable equality on `ByteArray`.  Axiom closure `[propext, Quot.sound]`, as SPEC §4 requires of an executable witness.  `Universal.byte_enumerator_covers_sublevel` is the sublevel bridge.  **This is finiteness of the byte carrier and nothing more**: it is not a decoder/validator pipeline over that carrier, and `Universal.execution_checker_sound` remains outstanding. |
 | `Universal.input_enumerator_complete` | `WasmGemmGnaf.Universal.input_enumerator_complete` (`Universal/EnumerateInputs.lean`): every `raw : Gemm.RawInvocation P` occurs in `Universal.inputEnumerator P`, unconditionally — no `Fintype` hypothesis, no sublevel bound, no scope predicate.  `Universal.inputEnumerator_nodup` gives the exactness half. |
 | `Universal.execution_checker_sound` | **OUTSTANDING — `O-3`, `O-6`.**  `Universal/CheckExecution.lean` does not exist. |
@@ -116,7 +128,7 @@ enumerator and the byte enumerator); `Universal/Argmin.lean` proves the third.
 | `Universal.system_evaluation_rel_sound` | **OUTSTANDING — `O-6`.**  SPEC §10.1 states this as the *reflection biconditional* `(Correct ↔ SemanticCorrect) ∧ (Feasible ↔ SemanticWithinResources)` over the implemented `Universal.evaluate`, which does not exist here.  Nearest proved: `WasmGemmGnaf.Universal.correct_of_admissible` and `feasible_of_admissible` (the ⟸ direction of each, from the three extensional predicates).  `Release.systemEvaluationRel_sound` used to be cited here; it is **deleted** along with `Release.decider`. |
 | `Universal.system_evaluation_rel_complete` | **OUTSTANDING — `O-6`.**  SPEC's statement **asserts existence**: profile-valid + semantically correct + within resources ⟹ `∃ evaluation, SystemEvaluationRel …`.  That is exactly the open nonemptiness obligation.  `Release.systemEvaluationRel_complete`, which took the evaluation as an *argument* and was therefore strictly weaker, is **deleted** along with `Release.decider`. |
 | `Universal.system_evaluation_rel_functional` | `WasmGemmGnaf.Universal.system_evaluation_rel_functional` (`Universal/Argmin.lean`), stated in SPEC §10.1's exact shape and **unconditionally**: no `Foundation.Fintype` hypothesis, since `Gemm.raw_input_finite` discharges it (`O-3` closed for this row), and quantified over every `Setting` and every `Decider`, so it holds verbatim of SPEC §10.1's implemented `Universal.evaluate` once that exists.  Proved from `Universal.systemEvaluation_subsingleton`, i.e. from uniqueness of the *codomain*, which is strictly stronger than functionality of the relation; `Universal.systemEvaluation_unique` states that decider-independent half separately. |
-| `Universal.partition_cover_complete` | **OUTSTANDING — `O-5`.**  `Universal/Partition.lean` exists and transcribes SPEC §10.4 in full, including the well-founded `split` recursion.  Nearest proved: `WasmGemmGnaf.Universal.coverLeaves_covers`, which is *conditional on the root cell's own denotation* — refinement loses nothing.  `coverLeaves_covers_scope` proves, machine-checked, that this cannot be read as coverage of all competitor bytes.  No `dominated` instance is constructed: its `memberLowerBound` field is `O-5` itself. |
+| `Universal.partition_cover_complete` | `WasmGemmGnaf.Universal.partition_cover_complete` (`Universal/Partition.lean`): every byte string the root cell denotes is either **resolved** — `Universal.Resolved`, the three terminal verdicts of SPEC §10.4 with their proof content carried, not summarised — or the strategy is *exhibited* reporting a coverage gap on a cell that denotes it.  The `incomplete` case is a disjunct of the **conclusion**, not a hypothesis excluding it, so a strategy that gives up is caught rather than assumed away; `partition_cover_complete_of_sealable` is the sealed-certificate corollary.  Strictly stronger than the pre-existing `coverLeaves_covers`, which reached a leaf without saying what happened there.  **Scope**: conditional on `root.Denotes bytes`, and `coverLeaves_covers_scope` proves machine-checked that roots denoting almost nothing exist.  No `dominated` instance is constructed: its `memberLowerBound` field is `O-5` itself, so the third verdict is transported, never produced. |
 | `Universal.universal_sublevel_coverage` | **OUTSTANDING — `O-5`** (`UV-001`).  SPEC §10.5 requires this to have *no* coverage hypothesis; `Atlas.universalCoverCompleteCheck_scope_blind` proves the recorded seal cover cannot supply it. |
 | `Universal.selected_le_every_sublevel_member` | **OUTSTANDING — `O-4`, `O-5`.** |
 | `Universal.all_competitors_lower_bound` | **OUTSTANDING — `O-5`.**  No known technique.  Nearest proved: `WasmGemmGnaf.Universal.attained_lower_bound_is_optimal` — which says an *attained* bound would suffice, and `lower_bound_below_released_is_not_optimality`, which says an unattained one would not. |

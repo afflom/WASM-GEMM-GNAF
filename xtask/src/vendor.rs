@@ -234,6 +234,7 @@ pub fn binding(vendor_dir: &Path, lean_root: &Path) -> Result<Binding> {
     // 1. every listed file still hashes to its listed digest.
     let mut content_failures = Vec::new();
     let mut files_listed = 0usize;
+    let mut listed_names: Vec<String> = Vec::new();
     for line in sums_text.lines() {
         let line = line.trim_end();
         if line.is_empty() {
@@ -246,6 +247,7 @@ pub fn binding(vendor_dir: &Path, lean_root: &Path) -> Result<Binding> {
             ));
         };
         files_listed += 1;
+        listed_names.push(name.trim_start_matches("./").to_string());
         let path = vendor_dir.join(name.trim_start_matches("./"));
         match std::fs::read(&path) {
             Ok(bytes) => {
@@ -255,6 +257,39 @@ pub fn binding(vendor_dir: &Path, lean_root: &Path) -> Result<Binding> {
             }
             Err(_) => content_failures.push(format!("{name}: FAILED open or read")),
         }
+    }
+
+    // 1b. the manifest covers the WHOLE tree, not merely itself.
+    //
+    // This direction was missing and an adversarial review demonstrated the
+    // consequence live: with the checker walking only the manifest's own lines,
+    // 334 files were added to `vendor/wasm-spec/` and `xtask vendor` went on
+    // reporting "40 files rechecked from content (0 digest failures)" and
+    // PASSING. A file present in the tree but absent from the manifest changed
+    // no digest anywhere, so the sentence in `Wasm/Revision.lean` claiming that
+    // "changing any vendored byte changes SHA256SUMS" was false as written.
+    //
+    // Enumerating the directory and requiring the two sets to agree closes it in
+    // both directions: an unlisted file is now a finding, and so is a listed
+    // file that has been deleted.
+    let mut present: Vec<String> = Vec::new();
+    collect_relative(vendor_dir, vendor_dir, &mut present)?;
+    present.retain(|p| p != "SHA256SUMS" && p != "BLOBS");
+    present.sort();
+    let mut unlisted: Vec<&String> =
+        present.iter().filter(|p| !listed_names.iter().any(|l| l == *p)).collect();
+    unlisted.sort();
+    for path in &unlisted {
+        findings.push(format!(
+            "vendored file not covered by the digest manifest: {path} -- it can be changed \
+             without changing any recorded digest"
+        ));
+    }
+    let mut vanished: Vec<&String> =
+        listed_names.iter().filter(|l| !present.iter().any(|p| p == *l)).collect();
+    vanished.sort();
+    for path in &vanished {
+        findings.push(format!("digest manifest lists a file the tree does not have: {path}"));
     }
     if files_listed == 0 {
         return Err(SpecError::new(
@@ -536,6 +571,31 @@ fn collect_files(dir: &Path, found: &mut Vec<std::path::PathBuf>) -> Result<()> 
             collect_files(&path, found)?;
         } else {
             found.push(path);
+        }
+    }
+    Ok(())
+}
+
+/// Every file under `dir`, as a path relative to `base`, with `/` separators.
+///
+/// This is the half of the binding that was missing: without enumerating the
+/// tree, a checker that walks only the digest manifest cannot see a file the
+/// manifest does not mention.
+fn collect_relative(base: &Path, dir: &Path, found: &mut Vec<String>) -> Result<()> {
+    let entries = std::fs::read_dir(dir)
+        .map_err(|e| SpecError::io(CLAUSE, "cannot read the vendored directory", dir, e))?;
+    for entry in entries {
+        let entry =
+            entry.map_err(|e| SpecError::io(CLAUSE, "cannot read an entry under", dir, e))?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_relative(base, &path, found)?;
+        } else if let Ok(rel) = path.strip_prefix(base) {
+            let mut parts: Vec<String> = Vec::new();
+            for component in rel.components() {
+                parts.push(component.as_os_str().to_string_lossy().into_owned());
+            }
+            found.push(parts.join("/"));
         }
     }
     Ok(())

@@ -7,7 +7,7 @@ default: vv
 xtask := "cargo run --quiet --release -p xtask --"
 
 # The whole gate. Expected to FAIL at step 9 while WGG-GO-1 is outstanding.
-vv: tools root-check firewall manifest-check releasepath build vendor required schema claims axioms
+vv: tools root-check firewall manifest-check releasepath build vendor core required schema claims axioms
     @{{xtask}} gate
 
 bootstrap:
@@ -86,6 +86,15 @@ releasepath: tools
 # the tree; this is what stops a drifted literal from elaborating past the gate.
 vendor: tools
     @{{xtask}} vendor --list
+
+# SPEC 7.1: how much of the PINNED Core 3.0 front end the Lean tree covers. The
+# checklist is EXTRACTED from the vendored SpecTec sources -- every opcode
+# production, typing rule and syntax production -- so it cannot be edited to
+# flatter the repository. Incomplete coverage is reported, not failed; a marker
+# naming something the sources do not define IS failed, because that is the shape
+# a fabricated coverage claim takes.
+core: tools
+    @{{xtask}} core
 
 # SPEC 15: required declarations, checked against the compiled environment.
 required: tools

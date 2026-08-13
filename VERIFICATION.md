@@ -15,6 +15,7 @@ would mean the gate had been weakened.
 | `just claims` | registry is nonempty, ids unique, no orphan dependencies, no `formalProof` row without a Lean declaration | `M2`, `M3`, `M4` |
 | `just schema` | every `scopeCriticalDefinitions` entry of the frozen `WGG-GO-1` authority is bound to its fully spelled-out body by `Iff.rfl` / `rfl` | `M11` |
 | `just vendor` | the vendored Core 3.0 tree, recomputed from CONTENT, matches the literals `Wasm.profile_matches_pinned_revision` stands on — the digest of `SHA256SUMS`, the per-file digests, the file count, the pinned commit — and every vendored rule anchor the conformance map cites is a label the vendored sources define | `M13` |
+| `just core` | how much of the pinned Core 3.0 front end the Lean tree covers, against a checklist extracted from the vendored SpecTec sources; a marker naming an item those sources do not define fails | `M14` |
 | `just mutation` | each decisive checker rejects a planted fault | self-testing |
 | `just docs` | `CONFORMANCE.md` is generated, deterministic, byte-clean | `reproducible.yml` |
 | `just vv` | all 13 conditions of SPEC §20.2 | `M6` |
