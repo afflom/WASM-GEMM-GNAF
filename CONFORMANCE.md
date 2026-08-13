@@ -1,6 +1,6 @@
 # Conformance
 
-**Inventory:** 97 Lean modules, 55,504 lines, 3,146 proved theorems.
+**Inventory:** 98 Lean modules, 56,625 lines, 3,243 proved theorems.
 Generated live; prose documents cite this table rather than repeating counts.
 
 Generated from `model/claims.json` by `just docs`. Do not edit by hand.

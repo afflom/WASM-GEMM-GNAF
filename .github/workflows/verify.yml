@@ -31,9 +31,15 @@ jobs:
           cd authority && sha256sum -c uor-gnaf.sha256
       - name: build
         run: lake build
+      - name: build the gate checkers
+        # `xtask` has no dependencies, so this is offline: SPEC section 4 forbids
+        # network-fetched inputs in release verification.
+        run: cargo build --release --locked
+      - name: gate checker self-tests
+        run: cargo test --release --locked
       - name: release gate (the same `just vv` used locally)
-        # Runs root-check, firewall, manifest-check, releasepath, build,
-        # required, claims, axioms and then Tools/gate.py. Invoking a hand-picked
+        # Runs tools, root-check, firewall, manifest-check, releasepath, build,
+        # required, claims, axioms and then `xtask gate`. Invoking a hand-picked
         # subset here is how the noncomputable release path went undetected.
         # Expected to FAIL while WGG-GO-1 is outstanding (UOR-GNAF 13.3); do not
         # add continue-on-error.

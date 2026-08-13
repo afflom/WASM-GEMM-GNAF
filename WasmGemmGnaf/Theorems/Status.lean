@@ -9,9 +9,9 @@ proposition exists in this repository.  Where the repository proves something
 *near* a required name but strictly weaker, the required name is recorded as
 OUTSTANDING and the nearer result is named as such — never promoted.
 
-Score: **25 of 58 discharged, 33 outstanding.**
+Score: **31 of 58 discharged, 27 outstanding.**
 
-One of the 25, `Wasm.costed_erase_iff_plain_run`, is discharged in the `DEV-001`
+One of the 31, `Wasm.costed_erase_iff_plain_run`, is discharged in the `DEV-001`
 amended form because SPEC's literal biconditional is false as written; the row
 says so.
 
@@ -24,7 +24,7 @@ ledger and the certification document cannot drift apart:
 |----|------------|
 | `O-1` | Competitor universe defined extensionally over all byte strings — *definable; stated at full strength in `Universal/Competitor.lean`* |
 | `O-2` | Sublevel is finite and decidable — *closable; `Cost.objective_sublevel_finite` is the hinge* |
-| `O-3` | Complete admission: `SystemEvaluationRel` sound / complete / functional |
+| `O-3` | Complete admission: `SystemEvaluationRel` sound / complete / functional — *the `functional` third is now closed; `sound` and `complete` are not* |
 | `O-4` | Attainment: the shipped bytes' exact score computed |
 | `O-5` | A universal lower bound `F`, attained — **no known technique** |
 | `O-6` | Mechanized Wasm Core 3.0 semantics (GC, EH, SIMD, tail calls) and a compiler that can emit the four SPEC §8.2 arithmetic modes |
@@ -42,20 +42,20 @@ Two supporting records are cited where they are the precise reason:
 `O-6` blocks `O-4` structurally: no baseline means no attained upper bound,
 hence no sublevel, hence no argmin.  `O-5` is obstructed independently.
 
-## Wasm — 4 of 11 discharged
+## Wasm — 8 of 11 discharged
 
 | SPEC §15 name | discharged by / blocked by |
 |---|---|
-| `Wasm.decode_sound` | **OUTSTANDING — `O-6`.**  SPEC §7.3 states this against the vendored `DeclarativeBinaryRelation`, which is not mechanized here.  Nearest proved: `WasmGemmGnaf.Wasm.decode_is_encode` and `WasmGemmGnaf.Wasm.decode_error_or_encode` (intrinsic to this repository's codec, not to the pinned grammar). |
-| `Wasm.decode_complete` | **OUTSTANDING — `O-6`.**  Nearest proved: `WasmGemmGnaf.Wasm.encode_decode_roundtrip`. |
-| `Wasm.validate_iff_declarative` | **OUTSTANDING — `O-6`.**  Nearest proved: `WasmGemmGnaf.Wasm.validate_bool_iff`, which decides `Wasm.DeclarativelyValid` — this repository's judgment for the `i32` executable subset, not Core 3.0 validation. |
+| `Wasm.decode_sound` | `WasmGemmGnaf.Wasm.decode_sound` (`Wasm/Declarative.lean`), re-indexed as `Theorems.decode_sound`.  Stated against `Wasm.DeclarativeBinaryRelation`, which that file defines from the vendored Core 3.0 binary grammar without mentioning any decoding function.  Axiom closure `[propext, Quot.sound]`.  The relation covers the *modelled* subset exactly, not the whole pinned grammar: canonical LEB128 only, a fixed total eleven-section sequence with no custom sections, complete function definitions in section 3 rather than the 3/10 split, tagged optionals and sums, a cons-tagged `Bexpr`, and the instruction subset of `Wasm/Syntax.lean`.  The concrete opcode and type-tag *bytes* come from this repository's pinned tables, because the vendored `.rst` files carry their productions as unexpanded SpecTec macros whose bodies are not in the vendored file set; the file header states this and claims no byte-level identity with Core 3.0. |
+| `Wasm.decode_complete` | `WasmGemmGnaf.Wasm.decode_complete` (`Wasm/Declarative.lean`), re-indexed as `Theorems.decode_complete`.  Same relation and same scope caveats.  Axiom closure `[propext, Quot.sound]` — choice free, as SPEC §4 requires of an executable witness.  Getting there needed four proofs in `Wasm/Binary.lean` rewritten: `omega` discharges a conjunctive goal, an implication hypothesis and a `¬(_ ∨ _)` hypothesis by classical case analysis, which had put `Classical.choice` in the closure of the whole module codec. |
+| `Wasm.validate_iff_declarative` | `WasmGemmGnaf.Wasm.validate_iff_declarative` (`Wasm/Declarative.lean`), re-indexed as `Theorems.validate_iff_declarative`.  The SPEC §15 statement is exactly the proposition `WasmGemmGnaf.Wasm.validate_bool_iff` already proved, so it is discharged by `exact` with no weakening.  `Wasm.DeclarativelyValid` remains this repository's judgment for the `i32` executable subset, not full Core 3.0 validation. |
 | `Wasm.validation_progress` | **OUTSTANDING — `O-6`.**  No progress theorem exists. |
 | `Wasm.mem_successors_iff_step` | `WasmGemmGnaf.Wasm.mem_successors_iff_step`, re-indexed as `Theorems.mem_successors_iff_step`. |
 | `Wasm.bounded_tree_covers_every_branch` | **OUTSTANDING — `O-6`.**  Absent. |
 | `Wasm.runFuel_sound` | `WasmGemmGnaf.Wasm.runFuel_sound` (`Wasm/Fuel.lean`). |
 | `Wasm.runFuel_complete_with_bound` | `WasmGemmGnaf.Wasm.runFuel_complete_with_bound` (`Wasm/Fuel.lean`). |
 | `Wasm.costed_erase_iff_plain_run` | `WasmGemmGnaf.Wasm.costed_erase_iff_plain_run`, re-indexed as `Theorems.costed_erase_iff_plain_run`, in the `DEV-001` amended form; the unconditional intent is `Theorems.costed_run_iff_plain_run`. |
-| `Wasm.costed_initialization_erase` | **OUTSTANDING — `O-6`.**  `Wasm/Erasure.lean` covers the reduction phase only. |
+| `Wasm.costed_initialization_erase` | `WasmGemmGnaf.Wasm.costed_initialization_erase` (`Wasm/CostedExplore.lean`): erasing the charge from a completed costed initialization leaves exactly `Wasm.initialGemmInvocation`, the plain entry point defined alongside it, on the configuration the costed observation carries.  `Wasm.costed_initialization_of_erase` is the converse (the plain result determines the costed one, at the pinned `Wasm.initializationCost`) and `Wasm.costed_initialization_erase_error` is the failure half, so the two entry points are mutually determined.  Axiom closure `[propext, Quot.sound]`.  `Wasm/Erasure.lean` still covers only the reduction phase; this is the instantiation phase. |
 | `Wasm.profile_matches_pinned_revision` | **OUTSTANDING — `O-6`.**  Nearest proved: `WasmGemmGnaf.Wasm.ProfileLawful.revisionCommit`, which fixes the pinned commit *string* on a lawful profile body; it does not say the modelled semantics match that revision. |
 
 ## Gemm — 10 of 10 discharged
@@ -64,7 +64,7 @@ hence no sublevel, hence no argmin.  `O-5` is obstructed independently.
 |---|---|
 | `Gemm.classify_total` | `WasmGemmGnaf.Gemm.classify_total`, re-indexed as `Theorems.classify_total`.  (`WasmGemmGnaf.GNAF.classify_total` is a different, unrelated theorem about `GNAF.Machine`.) |
 | `Gemm.reference_total` | `WasmGemmGnaf.Gemm.reference_total` (`Gemm/Reference.lean`), re-indexed as `Theorems.reference_total`: every raw invocation — malformed, truncated, unsupported, resource-invalid or valid — has an accepted observation. |
-| `Gemm.valid_input_finite` | `WasmGemmGnaf.Gemm.valid_input_finite` (`Universal/EnumerateInputs.lean`): a global, constructive `Foundation.Fintype` on `{raw : RawInvocation P // refValid raw.body = true}`, the subtype `Gemm.refValid_iff_classify` identifies with the classifier's `valid` verdict.  The enumeration `validRawInvocations` and both of its proofs are choice-free; the *carrier predicate* inherits `Classical.choice` from the pre-existing `Gemm/Layout.lean` proofs behind `Decidable (View.ElementsInInterval …)`, exactly as `Gemm.classify_total` and `Gemm.reference_total` already do. |
+| `Gemm.valid_input_finite` | `WasmGemmGnaf.Gemm.valid_input_finite` (`Universal/EnumerateInputs.lean`): a global, constructive `Foundation.Fintype` on `{raw : RawInvocation P // refValid raw.body = true}`, the subtype `Gemm.refValid_iff_classify` identifies with the classifier's `valid` verdict.  The enumeration `validRawInvocations`, both of its proofs and the carrier predicate are choice-free: axiom closure `[propext, Quot.sound]`, as SPEC §4 demands of an executable witness.  The `Decidable` instances `Gemm.refValid` decides through are *data*, so `Shape.isEmpty_eq_false_iff`, `ByteRange.overlapCount_pos_iff`, `View.addr_bounds` and `View.checkInterval_iff` introduce their `Iff` and `∧` connectives by hand rather than by `omega`, which discharges them classically.  `Gemm.classify` and `Gemm.refValid` are choice-free for the same reason. |
 | `Gemm.raw_input_finite` | `WasmGemmGnaf.Gemm.raw_input_finite` (`Universal/EnumerateInputs.lean`): SPEC §8.4's `instance problem_input_fintype`, as a **global** instance with no instance hypothesis.  `Gemm.rawInvocations` ranges `ptr` and `len` over `Gemm.allUInt32` and `bytes` over `Gemm.byteArraysOfSize len.toNat`, attaching the SPEC §8.3 lawfulness proof; `Gemm.mem_rawInvocations` and `Gemm.rawInvocations_nodup` are proved structurally, never by evaluation.  Axiom closure: `[propext, Quot.sound]` — no `Classical.choice`.  The hypothesis `[Foundation.Fintype (Gemm.RawInvocation P)]` still *appears* on the older `Universal` and `Artifact` results, which were written before the instance existed; it is now discharged by this instance rather than assumed. |
 | `Gemm.raw_invocation_roundtrip` | `WasmGemmGnaf.Gemm.raw_invocation_roundtrip`, re-indexed as `Theorems.raw_invocation_roundtrip`. |
 | `Gemm.raw_invocation_surjective` | `WasmGemmGnaf.Gemm.raw_invocation_surjective`, re-indexed as `Theorems.raw_invocation_surjective`. |
@@ -94,26 +94,28 @@ the objective but anything to apply it to.
 | `GNAF.compile_cost_exact` | **OUTSTANDING — `O-6`.**  Absent. |
 | `Artifact.decode_emit` | `WasmGemmGnaf.Artifact.decode_emit` (`Artifact/Emit.lean`); `emit` is *defined* as `Wasm.encode`, so this is the verified codec's round trip transported along the definition. |
 
-## Universal — 1 of 12 discharged
+## Universal — 3 of 12 discharged
 
 `Universal/Competitor.lean`, `Correct.lean`, `Feasible.lean`, `Sublevel.lean`,
 `LowerBound.lean`, `BilinearLowerBound.lean`, `Partition.lean` and `Argmin.lean`
 exist and are proof-carrying, but none of them proves a §15 name: they establish
 the *definitions* at full strength and the algebraic facts around them.
-`Universal/EnumerateInputs.lean` now exists and proves one.
-`Universal/EnumerateBytes.lean`, `CheckExecution.lean` and `Coverage.lean` do
-not exist.
+`Universal/EnumerateInputs.lean` now exists and proves two of them (the input
+enumerator and the byte enumerator); `Universal/Argmin.lean` proves the third.
+`Universal/CheckExecution.lean` and `Coverage.lean` do not exist, and
+`EnumerateBytes.lean` is not a separate file — its content lives in
+`EnumerateInputs.lean` beside the input enumerator.
 
 | SPEC §15 name | discharged by / blocked by |
 |---|---|
-| `Universal.possible_winner_within_sublevel` | **OUTSTANDING — `O-4`, `O-6`.**  Needs an attained upper bound, which needs a baseline.  Nearest proved: `WasmGemmGnaf.Universal.sublevel_bytes_size_le` and `sublevel_bytes_enumerated` (`UV-002`) — the finiteness half only. |
-| `Universal.byte_enumerator_complete` | **OUTSTANDING — `O-4`, `O-6`.**  `Universal/EnumerateBytes.lean` does not exist.  Nearest proved: `WasmGemmGnaf.Universal.Enumerate.mem_boundedByteArrays_iff`, which is exactness of the *carrier* enumeration, not of a decoder/validator pipeline over it. |
+| `Universal.possible_winner_within_sublevel` | **OUTSTANDING — `O-4`, `O-6`.**  Needs an attained upper bound, which needs a baseline.  Nearest proved: `WasmGemmGnaf.Universal.sublevel_bytes_size_le`, `sublevel_bytes_enumerated` and `byte_enumerator_covers_sublevel` (`UV-002`) — the finiteness half only. |
+| `Universal.byte_enumerator_complete` | `WasmGemmGnaf.Universal.byte_enumerator_complete` (`Universal/EnumerateInputs.lean`): every byte sequence of size at most `bound` occurs in `Universal.byteEnumerator bound`, unconditionally.  `Universal.byte_enumerator_exact` is the converse inclusion and `Universal.byte_enumerator_nodup` the duplicate-freedom — proved from `byteListsOfLength_nodup`, `Foundation.Bytes.pack_injective` and a size argument across length blocks, never by decidable equality on `ByteArray`.  Axiom closure `[propext, Quot.sound]`, as SPEC §4 requires of an executable witness.  `Universal.byte_enumerator_covers_sublevel` is the sublevel bridge.  **This is finiteness of the byte carrier and nothing more**: it is not a decoder/validator pipeline over that carrier, and `Universal.execution_checker_sound` remains outstanding. |
 | `Universal.input_enumerator_complete` | `WasmGemmGnaf.Universal.input_enumerator_complete` (`Universal/EnumerateInputs.lean`): every `raw : Gemm.RawInvocation P` occurs in `Universal.inputEnumerator P`, unconditionally — no `Fintype` hypothesis, no sublevel bound, no scope predicate.  `Universal.inputEnumerator_nodup` gives the exactness half. |
 | `Universal.execution_checker_sound` | **OUTSTANDING — `O-3`, `O-6`.**  `Universal/CheckExecution.lean` does not exist. |
 | `Universal.execution_checker_complete_within_sublevel` | **OUTSTANDING — `O-3`, `O-6`.** |
-| `Universal.system_evaluation_rel_sound` | **OUTSTANDING — `O-3`, `O-6`.**  SPEC §10.1 states this as the *reflection biconditional* `(Correct ↔ SemanticCorrect) ∧ (Feasible ↔ SemanticWithinResources)` over the implemented `Universal.evaluate`, which does not exist here.  Nearest proved: `WasmGemmGnaf.Universal.correct_of_admissible` and `feasible_of_admissible` (the ⟸ direction of each, from the three extensional predicates), and `WasmGemmGnaf.Release.systemEvaluationRel_sound`, which is *structural* soundness (decode equation, coverage obligation, exact aggregate cost) at the classical release decider, not the biconditional. |
-| `Universal.system_evaluation_rel_complete` | **OUTSTANDING — `O-3`, `O-6`.**  SPEC's statement **asserts existence**: profile-valid + semantically correct + within resources ⟹ `∃ evaluation, SystemEvaluationRel …`.  That is exactly the open nonemptiness obligation.  `WasmGemmGnaf.Release.systemEvaluationRel_complete` takes the evaluation as an *argument* and is therefore strictly weaker; it must not be cited for this row. |
-| `Universal.system_evaluation_rel_functional` | **OUTSTANDING — `O-3`.**  The proposition is proved for *every* setting and *every* decider by `WasmGemmGnaf.Universal.systemEvaluation_subsingleton` (with `inputEvaluation_subsingleton`), re-indexed at the release decider as `WasmGemmGnaf.Release.systemEvaluationRel_functional`.  It is still recorded OUTSTANDING for two reasons and no others: those theorems carry `[Foundation.Fintype (Gemm.RawInvocation P)]`, which is `O-3`; and SPEC indexes the relation by `Universal.evaluate`, which does not exist here.  This is the closest of the twelve to closing. |
+| `Universal.system_evaluation_rel_sound` | **OUTSTANDING — `O-6`.**  SPEC §10.1 states this as the *reflection biconditional* `(Correct ↔ SemanticCorrect) ∧ (Feasible ↔ SemanticWithinResources)` over the implemented `Universal.evaluate`, which does not exist here.  Nearest proved: `WasmGemmGnaf.Universal.correct_of_admissible` and `feasible_of_admissible` (the ⟸ direction of each, from the three extensional predicates).  `Release.systemEvaluationRel_sound` used to be cited here; it is **deleted** along with `Release.decider`. |
+| `Universal.system_evaluation_rel_complete` | **OUTSTANDING — `O-6`.**  SPEC's statement **asserts existence**: profile-valid + semantically correct + within resources ⟹ `∃ evaluation, SystemEvaluationRel …`.  That is exactly the open nonemptiness obligation.  `Release.systemEvaluationRel_complete`, which took the evaluation as an *argument* and was therefore strictly weaker, is **deleted** along with `Release.decider`. |
+| `Universal.system_evaluation_rel_functional` | `WasmGemmGnaf.Universal.system_evaluation_rel_functional` (`Universal/Argmin.lean`), stated in SPEC §10.1's exact shape and **unconditionally**: no `Foundation.Fintype` hypothesis, since `Gemm.raw_input_finite` discharges it (`O-3` closed for this row), and quantified over every `Setting` and every `Decider`, so it holds verbatim of SPEC §10.1's implemented `Universal.evaluate` once that exists.  Proved from `Universal.systemEvaluation_subsingleton`, i.e. from uniqueness of the *codomain*, which is strictly stronger than functionality of the relation; `Universal.systemEvaluation_unique` states that decider-independent half separately. |
 | `Universal.partition_cover_complete` | **OUTSTANDING — `O-5`.**  `Universal/Partition.lean` exists and transcribes SPEC §10.4 in full, including the well-founded `split` recursion.  Nearest proved: `WasmGemmGnaf.Universal.coverLeaves_covers`, which is *conditional on the root cell's own denotation* — refinement loses nothing.  `coverLeaves_covers_scope` proves, machine-checked, that this cannot be read as coverage of all competitor bytes.  No `dominated` instance is constructed: its `memberLowerBound` field is `O-5` itself. |
 | `Universal.universal_sublevel_coverage` | **OUTSTANDING — `O-5`** (`UV-001`).  SPEC §10.5 requires this to have *no* coverage hypothesis; `Atlas.universalCoverCompleteCheck_scope_blind` proves the recorded seal cover cannot supply it. |
 | `Universal.selected_le_every_sublevel_member` | **OUTSTANDING — `O-4`, `O-5`.** |
@@ -183,22 +185,28 @@ reduction checkable:
   not exist and for which `vendor/wasm-spec` carries no data.  No theorem about
   `Release.wasmProfile` may be cited as being about SPEC §7.2's release
   literal.
-* `Theorems.release_decider_answers_admissible` — claim `UV-003` in
-  `model/claims.json` / `CONFORMANCE.md`, discharged in Lean by
-  `Release.deciderAnswersAdmissible`.  Those two records still say `open`; that
-  is drift in the JSON registry, not in the proofs.
-* `Theorems.release_globalOptimal_of_nonempty` — the release theorem, at the
-  strength it actually has.
-* `Theorems.release_lower_bound_clause` and `release_tie_break_clause` — the
-  clauses of `GlobalOptimal` extracted at an *arbitrary* `competitorBytes :
-  ByteArray`, which is the machine-checked record that the competitor
-  quantifier was never narrowed.
-* `Theorems.release_seam_nondegenerate`, `release_systemEvaluation_inhabited`
-  and `release_globalOptimal_of_nonempty_at_seam` — claim `GO-008`: the
-  `Release.Seam` is now a constructed closed term, it is proved not to be the
-  degenerate one, and the release theorem is restated with the seam no longer a
-  parameter.  None of this discharges a §15 name, and none of it makes any
-  byte sequence `Universal.Admissible`.
+* `Theorems.release_seam_nondegenerate` and
+  `release_systemEvaluation_inhabited` — claim `GO-008`: the `Release.Seam` is a
+  constructed closed term, it is proved not to be the degenerate one, and
+  `Universal.SystemEvaluation` at the constructed setting is inhabited on a
+  `ProfileValid` closed literal.  Neither discharges a §15 name, and neither
+  makes any byte sequence `Universal.Admissible`.
+
+**The release theorem is gone.**  `Theorems.release_decider_answers_admissible`,
+`release_globalOptimal_of_nonempty`, `release_globalOptimal_of_admissible`,
+`release_obligation_reduction`, `release_lower_bound_clause`,
+`release_tie_break_clause`, `release_competitor_universe_inhabited`,
+`release_decider_answers_admissible_at_seam`,
+`release_globalOptimal_of_nonempty_at_seam` and
+`release_globalOptimal_of_witness_semantics` were all indexed by
+`Release.decider`, a `noncomputable` `Classical.choice` evaluator that an
+external audit ruled a non-conforming discharge of `UV-003`.  That evaluator,
+`Release.evaluateClassically`, every result stated against them, and
+`Artifact.exists_globalOptimal_of_baseline_semantics` are **deleted**.  `UV-003`
+is open — the `open` records in `model/claims.json` and `CONFORMANCE.md` are now
+correct, not drift — and this repository states **no** `Universal.GlobalOptimal`
+result at the release scope.  `Universal.exists_globalOptimal_of_nonempty` is
+decider-agnostic and still stands; nothing instantiates it.
 
 Four hypotheses were recorded here; the first is now closed.  All four are
 explicit arguments of those theorems:
@@ -262,19 +270,21 @@ explicit arguments of those theorems:
    the same conjunct is `GNAF.compile_refines`, omitted under `BI-002`/`O-6`,
    and no `Universal.SystemEvaluation` inhabits it.
    `Artifact.baseline_admissible_iff` states the residue at the baseline
-   exactly; `Artifact.exists_globalOptimal_of_baseline_semantics` and
-   `Theorems.release_globalOptimal_of_witness_semantics` are **reductions, not
-   discharges** — their `hcorrect`/`hresources`/`e` arguments are the open
-   conjuncts, supplied by the caller, and in the second case `hcorrect` is a
-   false hypothesis.
+   exactly.  The two reduction theorems that used to be cited here,
+   `Artifact.exists_globalOptimal_of_baseline_semantics` and
+   `Theorems.release_globalOptimal_of_witness_semantics`, are deleted: their
+   conclusions were indexed by `Release.decider`.
 
-`Release.decider` is noncomputable — `Classical.propDecidable` on
-`Nonempty (SystemEvaluation …)` and `Classical.choice` on the inhabitant, both
-Prop-level, neither on an executable path.  It is **not** SPEC §10.1's
-implemented decoder / validator / input enumerator / all-branch explorer: it
-decodes nothing, enumerates nothing and explores nothing, and it produces no
-executable witness.  It satisfies the *relational* contract, which is all
-`GlobalOptimal` consumes, and that is the whole of its content.
+There is **no decider** at the release scope.  `Release.decider` and
+`Release.evaluateClassically` are deleted.  SPEC §10.1 asks for an implemented
+finite decoder, validator, input enumerator and all-branch explorer; a
+`Classical.choice` inhabitant of the answer type is none of those, it decodes
+nothing, enumerates nothing and explores nothing, and `just releasepath`
+now rejects that shape under SPEC §19 / §6.3.  Two of the four ingredients do
+exist and are proved: `Universal.enumerateInputs` with
+`Universal.input_enumerator_complete`, and `Wasm.exploreAllCosted` with
+`Release.seam_machine_completes`.  Assembling them into a `Universal.Decider`
+and proving `Universal.DeciderAnswersAdmissible` of it is `UV-003`, open.
 
 ## Files in `WasmGemmGnaf/Theorems/`
 

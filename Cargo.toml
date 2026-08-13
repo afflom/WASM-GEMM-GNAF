@@ -1,0 +1,9 @@
+# Workspace root. This exists ONLY to own the `xtask` tooling crate.
+#
+# Nothing under `WasmGemmGnaf/` depends on Rust: the Lean development is built
+# by `lake` from `lakefile.lean` and does not observe this file. Cargo and Lake
+# share the repository root without interacting -- Lake reads `lakefile.lean`
+# and writes `.lake/`, Cargo reads this manifest and writes `target/`.
+[workspace]
+resolver = "2"
+members = ["xtask"]

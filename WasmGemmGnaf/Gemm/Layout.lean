@@ -159,7 +159,12 @@ def addrLo (v : View) (s : Shape) (t : Bool) : Int := v.addrExtreme s t true
 /-- Greatest address the view reaches. -/
 def addrHi (v : View) (s : Shape) (t : Bool) : Int := v.addrExtreme s t false
 
-/-- Every addressed element lies between the two extremal addresses. -/
+/-- Every addressed element lies between the two extremal addresses.
+
+Choice-freedom note (SPEC §4): the conjunction is introduced explicitly rather
+than left to `omega`, which proves `∧` goals classically.  This lemma sits under
+`checkInterval_iff`, hence under the `Decidable (ElementsInInterval …)` instance,
+which is data. -/
 theorem addr_bounds {v : View} {s : Shape} {t : Bool} {x : Index} (h : x.Mem s) :
     v.addrLo s t ≤ v.addrOf t x ∧ v.addrOf t x ≤ v.addrHi s t := by
   obtain ⟨hb, hi, hj⟩ := h
@@ -170,13 +175,13 @@ theorem addr_bounds {v : View} {s : Shape} {t : Bool} {x : Index} (h : x.Mem s) 
     have sc := span_bounds (n := s.cols) (t := v.colStride) (i := x.j) hj
     simp only [addrOf_false, elementAddr, addrLo, addrHi, addrExtreme, rowExtent,
       colExtent]
-    omega
+    exact ⟨by omega, by omega⟩
   | true =>
     have sr := span_bounds (n := s.cols) (t := v.rowStride) (i := x.j) hj
     have sc := span_bounds (n := s.rows) (t := v.colStride) (i := x.i) hi
     simp only [addrOf_true, elementAddr, addrLo, addrHi, addrExtreme, rowExtent,
       colExtent]
-    omega
+    exact ⟨by omega, by omega⟩
 
 theorem addrLo_le_addrHi (v : View) (s : Shape) (t : Bool) (h : s.isEmpty = false) :
     v.addrLo s t ≤ v.addrHi s t := by
@@ -235,7 +240,13 @@ def checkInterval (v : View) (s : Shape) (t : Bool) (w : Nat) : Bool :=
     (decide ((v.offset : Int) ≤ v.addrLo s t) &&
       decide (v.addrHi s t + (w : Int) ≤ (v.offset : Int) + (v.byteLength : Int)))
 
-/-- The extremal check is *exactly* the elementwise predicate. -/
+/-- The extremal check is *exactly* the elementwise predicate.
+
+Choice-freedom note (SPEC §4): `decidable_of_iff` below turns this proof into
+the `Decidable (ElementsInInterval …)` *instance*, which is data, so no step of
+this proof may be classical.  `omega` proves `Iff` and `∧` goals classically, so
+both directions are introduced by hand and every `omega` call below sees a bare
+arithmetic goal. -/
 theorem checkInterval_iff (v : View) (s : Shape) (t : Bool) (w : Nat) :
     checkInterval v s t w = true ↔ ElementsInInterval v s t w := by
   constructor
@@ -247,7 +258,7 @@ theorem checkInterval_iff (v : View) (s : Shape) (t : Bool) (w : Nat) :
       simp only [Shape.isEmpty, Bool.or_eq_true, beq_iff_eq] at h
       omega
     · obtain ⟨hlo, hhi⟩ := addr_bounds (v := v) (t := t) hx
-      omega
+      exact ⟨by omega, by omega⟩
   · intro h
     by_cases he : s.isEmpty = true
     · simp [checkInterval, he]

@@ -11,9 +11,8 @@
   ## GO-006, STATED
 
   `Universal.Admissible` is a conjunction of three extensional predicates, and
-  the attainability theorem `Release.exists_globalOptimal_of_admissible_evaluation`
-  needs one byte sequence satisfying all three *plus* an inhabitant of
-  `Universal.SystemEvaluation`:
+  the attainability argument of SPEC §13 Phase D needs one byte sequence
+  satisfying all three *plus* an inhabitant of `Universal.SystemEvaluation`:
 
     (a) `Universal.ProfileValid Release.wasmProfile b`
     (b) `Universal.SemanticCorrect (Release.setting seam) b`
@@ -88,9 +87,9 @@
 
   It is therefore **not** stated below, not as a theorem, not as a hypothesis of
   a theorem that concludes `Universal.Admissible`, and not inside any structure
-  field.  The only place it appears is as an explicit, named premise of
-  `Artifact.exists_globalOptimal_of_baseline_semantics`, whose doc comment says
-  in terms that it is a *reduction*, not a discharge.
+  field.  The one theorem that used to take it as an explicit named premise,
+  `Artifact.exists_globalOptimal_of_baseline_semantics`, is deleted: its
+  conclusion was indexed by `Release.decider`.
 
   ### (c) `SemanticWithinResources` — not even expressible yet
 
@@ -129,9 +128,9 @@
     bytes is equivalent to conjuncts (b) and (c) alone.  This is the precise
     sense in which conjunct (a) of GO-006 is closed.
 
-  `Classical.choice` is not used in this file except transitively through
-  `Release.decider` in the single reduction theorem at the end, exactly as
-  `Artifact/Release.lean` discloses.  There is no `sorry`, no `admit`, no
+  `Classical.choice` is not used in this file at all: the reduction theorem that
+  used to pull it in through `Release.decider` is deleted along with that
+  evaluator (`Artifact/Release.lean` §3).  There is no `sorry`, no `admit`, no
   project axiom, no `native_decide`, no `unsafe` and no `partial`.
 
   ## THE DISCLOSED PROFILE DEVIATION IS INHERITED
@@ -378,34 +377,20 @@ theorem baseline_admissible_iff :
   · rintro ⟨hb, hc⟩
     exact ⟨baseline_profileValid, hb, hc⟩
 
-/--
-  **A reduction, and explicitly NOT a discharge of GO-006.**
+/-! `Artifact.exists_globalOptimal_of_baseline_semantics` stood here.  It
+concluded `Universal.GlobalOptimal … (Release.decider seam) …` from conjuncts
+(b), (c) and (d) supplied by the caller, and `Release.decider` — the
+`noncomputable` `Classical.choice` evaluator — has been deleted as a
+non-conforming discharge of UV-003.  The theorem is deleted with it, and no
+weaker or renamed form replaces it: with no implemented `Universal.Decider` at
+the release scope there is no `Universal.GlobalOptimal` statement to make about
+the baseline bytes.
 
-  Read the hypotheses before reading the conclusion.  `hcorrect`, `hresources`
-  and `e` are conjuncts (b), (c) and (d): they are *premises supplied by the
-  caller*, and this repository cannot supply any of the three.  Nothing in this
-  file, and nothing in `Artifact/Release.lean`, discharges them.
-
-  What the theorem adds over `Release.exists_globalOptimal_of_admissible_evaluation`
-  is precisely one thing: the byte sequence is no longer existentially
-  quantified.  It is the closed term `Artifact.baselineBytes`, and its
-  profile-validity conjunct is discharged inside the proof rather than assumed.
-
-  Citing this theorem as evidence that a globally optimal artifact exists would
-  be citing its hypotheses as facts.  They are not facts.  **GO-006 is open.**
--/
-theorem exists_globalOptimal_of_baseline_semantics
-    [Foundation.Fintype (Gemm.RawInvocation Release.wasmProfile)]
-    (hcorrect : Universal.SemanticCorrect (Release.setting seam) baselineBytes)
-    (hresources :
-      Universal.SemanticWithinResources (Release.setting seam) baselineBytes)
-    (e : Universal.SystemEvaluation (Release.setting seam) baselineBytes) :
-    ∃ bytes : ByteArray,
-      Universal.GlobalOptimal (Release.setting seam) (Release.decider seam)
-        (Release.costObjective seam) bytes :=
-  Release.exists_globalOptimal_of_admissible_evaluation seam
-    ⟨baselineBytes,
-      (baseline_admissible_iff seam).mpr ⟨hcorrect, hresources⟩, ⟨e⟩⟩
+What this file still proves is unaffected, because none of it mentions a
+decider: `Artifact.baseline_profileValid` (conjunct (a) on a closed literal),
+`Artifact.systemEvaluation_module_eq`, and `Artifact.baseline_admissible_iff`,
+which reduces `Universal.Admissible` at `Artifact.baselineBytes` to conjuncts
+(b) and (c) alone.  **GO-006 is open.** -/
 
 end Seam
 

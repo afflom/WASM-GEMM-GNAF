@@ -14,6 +14,9 @@
   |-----------------------------------|-------------------------------------------|
   | `Wasm.mem_successors_iff_step`    | `Theorems.mem_successors_iff_step`        |
   | `Wasm.costed_erase_iff_plain_run` | `Theorems.costed_erase_iff_plain_run`     |
+  | `Wasm.decode_sound`               | `Theorems.decode_sound`                   |
+  | `Wasm.decode_complete`            | `Theorems.decode_complete`                |
+  | `Wasm.validate_iff_declarative`   | `Theorems.validate_iff_declarative`       |
 
   `Wasm.costed_erase_iff_plain_run` is discharged in the amended form recorded
   as `DEV-001` in `model/spec-deviations.json`: the literal SPEC §7.5
@@ -30,31 +33,23 @@
 
   ## SPEC §15 Wasm declarations that remain OUTSTANDING
 
-  * `Wasm.decode_sound`, `Wasm.decode_complete` — these are stated in SPEC §7.3
-    against the vendored `DeclarativeBinaryRelation`, which this repository does
-    not mechanize.  `Wasm/Binary.lean` proves the intrinsic pair
-    `encode_decode_roundtrip` / `decode_is_encode` instead, and says so in its
-    own doc comment; that is strictly weaker than a statement about the pinned
-    declarative grammar and is therefore NOT claimed under the §15 names.
-    Blocking obligation: `O-6`.
-  * `Wasm.validate_iff_declarative` — `validate_bool_iff` decides
-    `Wasm.DeclarativelyValid`, the *repository's* declarative judgment for the
-    `i32` executable subset, not Core 3.0 validation.  Blocking obligation:
-    `O-6`.
   * `Wasm.validation_progress` — no progress theorem exists for the modelled
     subset.  Blocking obligation: `O-6`.
   * `Wasm.bounded_tree_covers_every_branch` — absent.  Blocking obligation:
     `O-6`.
-  * `Wasm.costed_initialization_erase` — absent; `Wasm/Erasure.lean` proves
-    erasure for the reduction phase, not for initialization.  Blocking
-    obligation: `O-6`.
   * `Wasm.profile_matches_pinned_revision` — absent.  Blocking obligation:
     `O-6`.
 
   `Wasm.runFuel_sound` and `Wasm.runFuel_complete_with_bound` exist at their
-  §15 names in `WasmGemmGnaf/Wasm/Fuel.lean` and are not re-indexed here.
+  §15 names in `WasmGemmGnaf/Wasm/Fuel.lean`, and
+  `Wasm.costed_initialization_erase` exists at its §15 name in
+  `WasmGemmGnaf/Wasm/CostedExplore.lean` (with `Wasm.initialGemmInvocation`, the
+  plain initialization entry point it erases to, the converse
+  `costed_initialization_of_erase`, and the failure half
+  `costed_initialization_erase_error`).  None of the three is re-indexed here.
 -/
 import WasmGemmGnaf.Wasm.Binary
+import WasmGemmGnaf.Wasm.Declarative
 import WasmGemmGnaf.Wasm.Validate
 import WasmGemmGnaf.Wasm.Step
 import WasmGemmGnaf.Wasm.Fault
@@ -84,6 +79,22 @@ theorem decode_error_or_encode (b : ByteArray) :
     (∃ m : Wasm.Module, Wasm.decode b = .ok m ∧ b = Wasm.encode m) :=
   Wasm.decode_error_or_encode b
 
+/-! ## Binary format: the declarative grammar -/
+
+/-- **SPEC §15, `Wasm.decode_sound`.**  Everything the executable decoder
+accepts is derivable in `Wasm.DeclarativeBinaryRelation`, the relational reading
+of the pinned binary grammar defined in `Wasm/Declarative.lean`. -/
+theorem decode_sound {b : ByteArray} {m : Wasm.Module}
+    (h : Wasm.decode b = .ok m) : Wasm.DeclarativeBinaryRelation b m :=
+  Wasm.decode_sound h
+
+/-- **SPEC §15, `Wasm.decode_complete`.**  Everything derivable in
+`Wasm.DeclarativeBinaryRelation` the executable decoder accepts, returning
+exactly the module the derivation synthesized. -/
+theorem decode_complete {b : ByteArray} {m : Wasm.Module}
+    (h : Wasm.DeclarativeBinaryRelation b m) : Wasm.decode b = .ok m :=
+  Wasm.decode_complete h
+
 /-! ## Validation -/
 
 /-- The executable validator decides the declarative validity judgment of this
@@ -91,6 +102,12 @@ repository's Wasm subset. -/
 theorem validate_bool_iff (m : Wasm.Module) :
     Wasm.validate m = true ↔ Wasm.DeclarativelyValid m :=
   Wasm.validate_bool_iff m
+
+/-- **SPEC §15, `Wasm.validate_iff_declarative`.**  The same proposition as
+`validate_bool_iff`, under the name SPEC §15 requires. -/
+theorem validate_iff_declarative (m : Wasm.Module) :
+    Wasm.validate m = true ↔ Wasm.DeclarativelyValid m :=
+  Wasm.validate_iff_declarative m
 
 /-! ## Reduction: the executable successor enumeration is the relation -/
 

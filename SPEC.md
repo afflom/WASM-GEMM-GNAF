@@ -5,7 +5,7 @@ Repository baseline: `afflom/WASM-GEMM-GNAF` at `fdd58db98edf5b0a28c04bada3e78ce
 Implementation language: Lean 4
 Product: a committed WebAssembly binary plus kernel-checked correctness and global-optimality proofs
 
-This document specifies the complete target repository. It replaces the empty Rust-template behavior currently present at the baseline commit. A conforming repository implements every required definition, algorithm, proof, artifact, audit, and release gate below. A file that merely declares an interface or assumes its decisive theorem is not an implementation.
+This document specifies the complete target repository. It replaces the empty Rust-template behavior currently present at the baseline commit: the template's placeholder crates and empty registers are removed, while Rust is retained as the infrastructure and tooling language under the boundary fixed in §5.1. A conforming repository implements every required definition, algorithm, proof, artifact, audit, and release gate below. A file that merely declares an interface or assumes its decisive theorem is not an implementation.
 
 The words **MUST**, **MUST NOT**, **REQUIRED**, **SHALL**, **SHALL NOT**, **SHOULD**, and **MAY** are normative.
 
@@ -338,15 +338,19 @@ The completed repository SHALL have this logical structure. Additional files are
 │       ├── Manifest.lean
 │       ├── AxiomAudit.lean
 │       └── ReleaseGate.lean
-├── Tools/
-│   ├── Main.lean
-│   ├── EmitArtifact.lean
-│   ├── GenerateManifest.lean
-│   ├── GenerateConformance.lean
-│   ├── CheckClaims.lean
-│   ├── CheckAxioms.lean
-│   ├── CheckSources.lean
-│   └── Reproduce.lean
+├── Cargo.toml
+├── xtask/
+│   ├── Cargo.toml
+│   └── src/
+│       ├── main.rs
+│       ├── emit_artifact.rs
+│       ├── generate_manifest.rs
+│       ├── generate_conformance.rs
+│       ├── check_claims.rs
+│       ├── check_axioms.rs
+│       ├── check_sources.rs
+│       ├── mutation.rs
+│       └── reproduce.rs
 ├── Tests/
 │   ├── Binary.lean
 │   ├── Validate.lean
@@ -374,7 +378,36 @@ The completed repository SHALL have this logical structure. Additional files are
     └── mutation.yml
 ```
 
-The Rust workspace, `Cargo.toml`, `Cargo.lock`, `.cargo`, `crates`, `xtask`, Rust toolchain files, and Rust lint configuration from the template SHALL be removed after the Lean conformance replacement passes. No Rust code is part of the final product or proof path.
+### 5.1 Language boundary
+
+The repository uses exactly two languages, and the boundary between them is
+normative.
+
+**Lean 4 is the proof and implementation language.** Every definition, theorem,
+semantics, cost model, plan, compiler, and artifact-producing term lives under
+`WasmGemmGnaf/` and is checked by the Lean kernel. No other language may
+contribute a step of the proof, and no proof obligation may be discharged by a
+program written outside it.
+
+**Rust is the infrastructure and tooling language.** The release gate, the source
+and firewall scans, the claim and axiom audits, the manifest and documentation
+generators, the mutation suite, and the reproduction driver live under `xtask/`
+and are driven by the `Justfile`. They are checkers and generators: they inspect
+the Lean development, recompute identities from content, and decide whether the
+release gate passes.
+
+The boundary is one-directional and SHALL remain so. `xtask` reads the Lean
+development, the pinned authorities, and the model registry; nothing under
+`WasmGemmGnaf/` may depend on `xtask`, and no Rust code is on the proof path. A
+tool that *decided* a proof obligation would move the trust base outside the Lean
+kernel, which §4 forbids; a tool that *checks* whether the kernel has discharged
+one does not.
+
+`xtask` SHALL build with the Rust standard library alone. A network-fetched crate
+would be a network-fetched input to release verification, which §4 forbids.
+
+Rust lint and formatting configuration MAY be present. Rust source SHALL NOT
+appear under `WasmGemmGnaf/`, and Lean source SHALL NOT appear under `xtask/`.
 
 The vendored authority files are immutable inputs. `MANIFEST.json` SHALL enumerate every vendored path and digest, so offline verification recomputes the pins from content rather than trusting a checksum string.
 

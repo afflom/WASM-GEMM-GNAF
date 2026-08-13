@@ -51,11 +51,20 @@ def overlapCount (a b : ByteRange) : Nat :=
   (if a.stop ≤ b.stop then a.stop else b.stop) -
     (if a.start ≤ b.start then b.start else a.start)
 
+/-- Choice-freedom note (SPEC §4).  This `Iff` is what `decidable_of_iff` turns
+into the `Decidable (Overlaps …)` instance, and a `Decidable` instance is data.
+`omega` proves an `Iff` goal classically, so the two directions are split by
+hand and `omega` only sees arithmetic. -/
 theorem overlapCount_pos_iff (a b : ByteRange) :
     0 < overlapCount a b ↔
       (a.start < a.stop ∧ b.start < b.stop ∧ a.start < b.stop ∧ b.start < a.stop) := by
   simp only [overlapCount]
-  split <;> split <;> omega
+  constructor
+  · intro h
+    split at h <;> split at h <;> exact ⟨by omega, by omega, by omega, by omega⟩
+  · intro h
+    obtain ⟨h1, h2, h3, h4⟩ := h
+    split <;> split <;> omega
 
 /-- Decidable form of `Overlaps`. -/
 def overlapsB (a b : ByteRange) : Bool := decide (0 < overlapCount a b)

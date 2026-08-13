@@ -6,12 +6,17 @@ jobs:
   twice:
     runs-on: ubuntu-24.04
     steps:
+      # actions/checkout v4.2.2
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: build the generators
+        # `xtask` has no dependencies, so this is offline: SPEC section 4 forbids
+        # network-fetched inputs in release verification.
+        run: cargo build --release --locked
       - name: generated documentation is deterministic and byte-clean
         run: |
           set -euo pipefail
-          python3 Tools/gen_conformance.py
+          cargo run --quiet --release -p xtask -- docs
           cp CONFORMANCE.md /tmp/a
-          python3 Tools/gen_conformance.py
+          cargo run --quiet --release -p xtask -- docs
           cmp /tmp/a CONFORMANCE.md
           git diff --exit-code -- CONFORMANCE.md

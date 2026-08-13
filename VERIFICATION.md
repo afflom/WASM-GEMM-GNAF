@@ -21,7 +21,7 @@ would mean the gate had been weakened.
 
 SPEC §19 is explicit: source scanning is defence in depth. The decisive audit inspects
 the **compiled environment** and the transitive dependencies of every public theorem,
-via `#print axioms` in `Tools/axioms.py`. A `sorry` reaches the environment as
+via `#print axioms` in `just axioms`. A `sorry` reaches the environment as
 `sorryAx`, so it is caught there even if the text scan is evaded.
 
 Current closure over every `formalProof` claim: `propext`, `Quot.sound`. Both are Lean
@@ -30,7 +30,7 @@ project-declared axiom, no `Classical.choice`.
 
 ## Planted falsifiers
 
-`Tools/mutation.py`, registered in `model/falsifiers.json`. Each applies its mutation
+`just mutation`, registered in `model/falsifiers.json`. Each applies its mutation
 to a **copy**, never to the repository.
 
 | ID | Family | Plants | Rejected by |
@@ -43,6 +43,21 @@ to a **copy**, never to the repository.
 | M6 | GO | green gate while `GO-001` is outstanding | release gate step 9 |
 | M7 | AT | citing the seal's cover check as universal coverage | `AT-001` blindness lemma + `AT-002` absence |
 | M8 | CM | a stale `.olean` masking a non-elaborating root | direct `lean WasmGemmGnaf.lean` |
+| M9 | UV | a forbidden `Artifact` import into `Universal/Competitor.lean` | dependency firewall (SPEC §10.1) |
+| M10 | CM | a manifest stage containing its own identity | acyclicity check (SPEC §4) |
+| M11 | GO | `GlobalOptimal` weakened by a competitor scope predicate | `Iff.rfl` schema binding in `Conformance/Schema.lean` |
+| M12 | GO | a required declaration present but choice-tainted | SPEC §15 inventory reports `TAINTED`, not discharged |
+
+M11 and M12 answer the audit's two remaining questions about what a *present* name
+proves. M11 plants the weakening SPEC §1 forbids — the competitor quantifier
+restricted to a named scope — and confirms the definitional binding stops
+elaborating, which is the only thing separating "matches the frozen schema" from
+"has the right name". M12 plants a correctly named executable witness built by
+`Classical.choice` and confirms it is reported `TAINTED` and **not** counted as
+discharged; a name-only check credited exactly that shape before the audit caught
+it. Both carry a control: the unweakened binding must still elaborate and the
+choice-free witness must still be credited, so neither can pass by failing for an
+unrelated reason.
 
 M7 and M8 were added after real defects, not hypothetically. M7 answers the audit
 finding that `universalCoverCompleteCheck` verifies bookkeeping only and is

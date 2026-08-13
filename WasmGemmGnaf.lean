@@ -19,6 +19,7 @@ import WasmGemmGnaf.Wasm.Binary
 import WasmGemmGnaf.Wasm.Config
 import WasmGemmGnaf.Wasm.Costed
 import WasmGemmGnaf.Wasm.CostedExplore
+import WasmGemmGnaf.Wasm.Declarative
 import WasmGemmGnaf.Wasm.Erasure
 import WasmGemmGnaf.Wasm.Fault
 import WasmGemmGnaf.Wasm.Feature

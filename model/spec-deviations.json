@@ -32,5 +32,22 @@
       "specAmendmentRecommended": true,
       "amendmentText": "SPEC 11.1 should state that a register-bounded loop's trip count is clamped at the profile's address-space ceiling, so that a static step bound remains derivable from plan text."
     }
+  ],
+  "amendments": [
+    {
+      "id": "AMD-001",
+      "specSection": "5 (new 5.1), and the section 5 file tree",
+      "date": "2026-08-13",
+      "was": "SPEC 5 specified Lean tooling under Tools/ (Main.lean, EmitArtifact.lean, GenerateManifest.lean, GenerateConformance.lean, CheckClaims.lean, CheckAxioms.lean, CheckSources.lean, Reproduce.lean) and stated: 'The Rust workspace ... SHALL be removed after the Lean conformance replacement passes. No Rust code is part of the final product or proof path.'",
+      "now": "SPEC 5.1 'Language boundary' fixes two languages. Lean 4 is the proof and implementation language: every definition, theorem, semantics, cost model, plan, compiler and artifact-producing term lives under WasmGemmGnaf/ and is checked by the Lean kernel. Rust is the infrastructure and tooling language: the release gate, source and firewall scans, claim and axiom audits, manifest and documentation generators, mutation suite and reproduction driver live under xtask/ and are driven by the Justfile.",
+      "rationale": "Requested by the repository owner. The boundary preserves the property the original clause protected: the trust base stays the Lean kernel. xtask CHECKS whether the kernel has discharged an obligation; it never DECIDES one. A tool that decided a proof obligation would move the trust base outside the kernel, which SPEC 4 forbids.",
+      "constraintsAdded": [
+        "The boundary is one-directional: nothing under WasmGemmGnaf/ may depend on xtask.",
+        "No Rust code is on the proof path.",
+        "xtask SHALL build with the Rust standard library alone -- a network-fetched crate would be a network-fetched input to release verification, which SPEC 4 forbids.",
+        "Rust source SHALL NOT appear under WasmGemmGnaf/, and Lean source SHALL NOT appear under xtask/."
+      ],
+      "supersedes": "DEV-003 (never filed; the deviation was amended into the SPEC instead)"
+    }
   ]
 }

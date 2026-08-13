@@ -695,6 +695,88 @@ theorem initialGemmInvocationCosted_invalid {P : Profile} {m : Module}
       .error (initializationFailureReport .invalidModule) :=
   initialGemmInvocationCosted_error (initialConfig_invalid h)
 
+/-! ### Cost erasure of initialization (SPEC §7.5)
+
+`Wasm/Erasure.lean` proves that erasing the cost labels from a *reduction*
+yields exactly the ordinary reduction (`Wasm.costed_erase_iff_plain_run`).  The
+same has to hold one phase earlier, at instantiation: SPEC §7.5 states it as
+`Wasm.costed_initialization_erase`, which relates the costed entry point to the
+plain one.  The plain entry point is defined here, next to the costed one, so
+that the two are visibly the same `Wasm.initialConfig` call and the erasure is a
+theorem about them rather than a definition dressed as one. -/
+
+/-- **SPEC §7.5**, `Wasm.initialGemmInvocation`: the *plain* initialization
+entry point.  Same instantiation protocol as `Wasm.initialGemmInvocationCosted`,
+same failure reports, no charge.  It is the cost erasure of the costed entry
+point, which is exactly what `Wasm.costed_initialization_erase` below says. -/
+def initialGemmInvocation {P : Profile} (m : Module) (invocation : Invocation P) :
+    Except Foundation.FailureReport Config :=
+  match initialConfig m (rawOfInvocation invocation) with
+  | .error fault => .error (initializationFailureReport fault)
+  | .ok initial => .ok initial
+
+theorem initialGemmInvocation_ok_iff {P : Profile} {m : Module}
+    {invocation : Invocation P} {initial : Config} :
+    initialGemmInvocation (P := P) m invocation = .ok initial ↔
+      initialConfig m (rawOfInvocation invocation) = .ok initial := by
+  unfold initialGemmInvocation
+  cases h : initialConfig m (rawOfInvocation invocation) with
+  | error fault => simp
+  | ok c => simp [eq_comm]
+
+theorem initialGemmInvocation_error_iff {P : Profile} {m : Module}
+    {invocation : Invocation P} {report : Foundation.FailureReport} :
+    initialGemmInvocation (P := P) m invocation = .error report ↔
+      ∃ fault : InstantiationFault,
+        initialConfig m (rawOfInvocation invocation) = .error fault ∧
+          report = initializationFailureReport fault := by
+  unfold initialGemmInvocation
+  cases h : initialConfig m (rawOfInvocation invocation) with
+  | error fault => simp [eq_comm]
+  | ok c => simp
+
+/--
+  **SPEC §15**, `Wasm.costed_initialization_erase`.
+
+  Erasing the charge from a completed costed initialization leaves exactly the
+  plain initialization, on exactly the configuration the costed observation
+  carries.  Nothing about the cost vector is used: the two entry points agree
+  because they make the same `Wasm.initialConfig` call, and this theorem is
+  what pins that rather than leaving it to inspection.
+-/
+theorem costed_initialization_erase {P : Profile} {m : Module}
+    {invocation : Invocation P}
+    {initialization : Universal.InitializationObservation P}
+    (h : initialGemmInvocationCosted m invocation = .ok initialization) :
+    initialGemmInvocation (P := P) m invocation = .ok initialization.initial := by
+  rw [initialGemmInvocation_ok_iff]
+  unfold initialGemmInvocationCosted at h
+  split at h
+  · exact absurd h (by simp)
+  · next c hc =>
+    rw [hc]
+    simp only [Except.ok.injEq] at h
+    rw [← h]
+
+/-- **The converse.**  A plain initialization is always the erasure of a costed
+one, and the charge it carries is the pinned `Wasm.initializationCost`.  With
+`costed_initialization_erase` this makes the two entry points mutually
+determined, not merely compatible. -/
+theorem costed_initialization_of_erase {P : Profile} {m : Module}
+    {invocation : Invocation P} {initial : Config}
+    (h : initialGemmInvocation (P := P) m invocation = .ok initial) :
+    initialGemmInvocationCosted m invocation =
+      .ok { initial := initial, cost := initializationCost P m } :=
+  initialGemmInvocationCosted_ok (initialGemmInvocation_ok_iff.mp h)
+
+/-- Failure erases too: the two entry points fail on the same invocations with
+the same located report. -/
+theorem costed_initialization_erase_error {P : Profile} {m : Module}
+    {invocation : Invocation P} {report : Foundation.FailureReport} :
+    initialGemmInvocationCosted m invocation = .error report ↔
+      initialGemmInvocation (P := P) m invocation = .error report := by
+  rw [initialGemmInvocationCosted_error_iff, initialGemmInvocation_error_iff]
+
 /-! ## Replaying a prefix
 
 `Wasm.exploreAll`'s `nonterminalPrefix` constructor carries only the trace;

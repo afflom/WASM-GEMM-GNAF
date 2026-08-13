@@ -1,27 +1,40 @@
 # `just vv` is the normative release gate (SPEC.md section 20.2).
 default: vv
 
+# Every checker, generator and falsifier is the `xtask` Rust binary. It has no
+# dependencies, so building it is offline and reproducible -- SPEC section 4
+# forbids network-fetched inputs in release verification.
+xtask := "cargo run --quiet --release -p xtask --"
+
 # The whole gate. Expected to FAIL at step 9 while WGG-GO-1 is outstanding.
-vv: root-check firewall manifest-check releasepath build required claims axioms
-    @python3 Tools/gate.py
+vv: tools root-check firewall manifest-check releasepath build required claims axioms
+    @{{xtask}} gate
 
 bootstrap:
-    @lean --version && lake --version
+    @lean --version && lake --version && cargo --version
+
+# Build the gate checkers. Every recipe below that runs a check depends on this,
+# so no check can silently run against a stale binary.
+tools:
+    @cargo build --release --quiet
 
 build:
     lake build
 
-test:
+test: tools
     lake build
+    cargo test --release --quiet
 
 prove:
     lake build
 
-claims:
-    @python3 -c "import json;d=json.load(open('model/claims.json'));print(f'claims: {len(d[\"claims\"])}');[print(f'  {c[\"id\"]:<8} {c[\"level\"]:<13} {c[\"status\"]}') for c in d['claims']]"
+# SPEC 17.1: the claim LEVEL is load-bearing, so it is printed beside the status.
+claims: tools
+    @{{xtask}} claims list
 
-axioms:
-    @python3 Tools/axioms.py
+# SPEC 19: axiom closure of every formalProof claim, over the COMPILED environment.
+axioms: tools
+    @{{xtask}} axioms
 
 artifact-check:
     @test -f artifacts/wasm-gemm-gnaf.wasm || (echo "artifact absent: gated on WS-001/LB-001" && exit 1)
@@ -29,41 +42,48 @@ artifact-check:
 emit:
     @echo "emit: gated on WS-001 (mechanized Core 3.0 semantics)" && exit 1
 
-mutation:
-    @echo "mutation: gated on the checkers it would falsify" && exit 1
+# SPEC 18: every decisive gate must reject a planted fault. Each mutation is
+# applied to a COPY; the repository is never modified.
+mutation: tools
+    @{{xtask}} mutation
 
 reproduce:
     @echo "reproduce: gated on emit" && exit 1
 
-docs:
-    @python3 Tools/gen_conformance.py
+# SPEC 17.3: CONFORMANCE.md, regenerated deterministically from the registry.
+docs: tools
+    @{{xtask}} docs
+
+# SPEC 19: forbidden constructs, with comments and string literals excluded.
+scan: tools
+    @{{xtask}} sources scan
 
 # Regenerate the root import module from the layer tree.
-root:
-    @python3 Tools/root.py
+root: tools
+    @{{xtask}} sources root
 
 # Fail if the root import is stale or any module belongs to no SPEC 5 layer.
-root-check:
-    @python3 Tools/root.py --check
+root-check: tools
+    @{{xtask}} sources root --check
 
 # SPEC 10.1: the competitor universe must not import the artifact or a conclusion.
-firewall:
-    @python3 Tools/firewall.py
+firewall: tools
+    @{{xtask}} sources firewall
 
 # SPEC 4/5: regenerate the ordered acyclic identity manifest.
-manifest:
-    @python3 Tools/manifest.py
+manifest: tools
+    @{{xtask}} manifest
 
-manifest-check:
-    @python3 Tools/manifest.py --check
+manifest-check: tools
+    @{{xtask}} manifest --check
 
 # SPEC 19/6.3: no noncomputable definition on the release path.
-releasepath:
-    @python3 Tools/releasepath.py
+releasepath: tools
+    @{{xtask}} sources releasepath
 
 # SPEC 15: required declarations, checked against the compiled environment.
-required:
-    @python3 Tools/required.py --list
+required: tools
+    @{{xtask}} claims required --list
 
 # SPEC 1: the frozen WGG-GO-1 schema binding is definitional (Iff.rfl).
 schema:

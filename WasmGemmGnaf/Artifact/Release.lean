@@ -7,46 +7,53 @@
 
   ## WHAT THIS FILE PROVES
 
-  It discharges obligation **UV-003**: the decider hypothesis
-  `Universal.DeciderAnswersAdmissible`, which `Universal/Argmin.lean` isolated
-  and could not derive.  With it discharged,
-  `Release.exists_globalOptimal_of_nonempty` reduces the release theorem to a
-  single remaining obligation — nonemptiness of the admissible, evaluated set.
+  It fixes the release scope — profile, problem, setting, objective — and it
+  *constructs* a `Release.Seam` (§5) whose cost model, validation cost, resource
+  budget and costed machine are all closed terms, with a `Universal.SystemEvaluation`
+  inhabitant on a closed byte literal.
 
-  It also proves that the release relation `Universal.SystemEvaluationRel`,
-  instantiated at this decider, satisfies exactly the three properties SPEC §1
-  demands of it: **sound**, **functional**, and **complete for every profile
-  valid, semantically correct, resource bounded module that has an evaluation**.
+  ## WHAT THIS FILE NO LONGER PROVES: UV-003 IS OPEN
 
-  ## THE PRICE, STATED PLAINLY
+  This file used to discharge obligation **UV-003** — the decider hypothesis
+  `Universal.DeciderAnswersAdmissible` that `Universal/Argmin.lean` isolates and
+  cannot derive — with `Release.decider`, a `noncomputable` one-field wrapper
+  around `Release.evaluateClassically`.  That evaluator assumed `Nonempty
+  (Universal.SystemEvaluation …)` and extracted an inhabitant by
+  `Classical.choice`: it decoded nothing, validated nothing, enumerated no input
+  and explored no branch.
 
-  `Release.decider` is **noncomputable**.  It is defined by
-  `Classical.propDecidable` on `Nonempty (Universal.SystemEvaluation …)` and by
-  `Classical.choice` on the inhabitant.  Consequently:
+  An external audit ruled that a non-conforming discharge, and it is right.
+  SPEC §10.1 asks for an *implemented* finite decoder, validator, input
+  enumerator and all-branch explorer.  A classically chosen inhabitant of the
+  answer type is not an implementation of anything; it is the conclusion
+  assumed under a different name.  SPEC §19 and §6.3 exclude noncomputable
+  definitions from the release path, and `just releasepath` enforces it.
 
-  * It is **not** SPEC §10.1's "implemented finite decoder, validator, input
-    enumerator and all-branch explorer".  It names no procedure, enumerates
-    nothing, explores nothing, and cannot be run.
-  * It **computes no artifact**.  `exists_globalOptimal_of_nonempty` yields an
-    existential; `Release.decider` contributes nothing towards exhibiting a
-    concrete winning byte sequence, and nothing here may be read as an emitted
-    release.
-  * What it does satisfy is the *relational* contract — soundness,
-    functionality, completeness — and that relational contract is precisely
-    what `Universal.GlobalOptimal` consumes.  `GlobalOptimal` never asks the
-    decider to be executable; it asks that the decider's answer on an
-    admissible competitor *be* that competitor's evaluation.
+  **`Release.decider` and `Release.evaluateClassically` are therefore deleted,
+  together with every declaration stated against them** — the relational
+  soundness / functionality / completeness results, `deciderAnswersAdmissible`,
+  both `exists_globalOptimal_*` reductions, `nonemptiness_iff_admissible_evaluation`,
+  `seam_decider_complete_on_witness`, `globalOptimal_of_witness_semantics`, and
+  their `Theorems.Release.*` re-indexings.  They are absent, not relabelled and
+  not hidden behind a checker.  No replacement evaluator over the witness
+  semantics is offered either: that was explicitly forbidden, and it would be
+  the same substitution wearing a computable-looking hat.
 
-  That distinction is the difference between the theorem being provable and an
-  artifact being emittable.  This file achieves the first and does not touch
-  the second.
+  Consequences, stated plainly:
 
-  `Classical.choice` is used, deliberately and only, in
-  `Release.evaluateClassically` (and hence in `Release.decider`, which is a
-  one-field wrapper around it).  Neither is on an executable path, and neither
-  is claimed to produce an executable witness.  Every other declaration in this
-  file is a definition or a proved theorem; there is no `sorry`, no `admit`, no
-  project axiom, no `native_decide`, no `unsafe` and no `partial`.
+  * UV-003 is **open**.  `Universal.exists_globalOptimal_of_nonempty` still has
+    two hypotheses and this repository discharges neither at the release scope.
+  * This repository states **no** `Universal.GlobalOptimal` result at the
+    release scope, conditional or otherwise.  There is no decider to state one
+    against.
+  * Closing UV-003 means *implementing* SPEC §10.1's explorer as a
+    `Universal.Decider (setting seam)` on the real decoder, validator, the
+    `Universal.enumerateInputs` enumerator and `Wasm.exploreAllCosted`, and
+    proving `Universal.DeciderAnswersAdmissible` of that.
+
+  Every declaration in this file is a definition or a proved theorem; there is
+  no `sorry`, no `admit`, no project axiom, no `native_decide`, no `unsafe`, no
+  `partial` and, now, no `noncomputable`.
 
   ## THE SEAM IS CONSTRUCTED (GO-008)
 
@@ -108,8 +115,8 @@
      conjunct (d), both on a closed literal.  `Universal.SemanticCorrect` —
      conjunct (b) — demands `Gemm.Reference.Accepts` at *every* raw invocation
      and is **false** for a module whose `gemm` returns the constant `0`; it is
-     not claimed here, and `Release.globalOptimal_of_witness_semantics` takes it
-     as a hypothesis exactly because it is one.  `GO-006` is open.
+     not claimed here, and nothing in this file concludes anything from it.
+     `GO-006` is open.
 
   ## WHAT REMAINS A HYPOTHESIS, AND WHY
 
@@ -120,8 +127,8 @@
   hypothesis; `Theorems/GemmTotal.lean` records it as **omitted** under `O-3`
   (the carrier is mathematically finite, but no duplicate-free covering `List`
   with its `Nodup` and coverage proofs exists here).  It is carried here as an
-  instance-implicit argument, exactly as upstream, and everything in §3 and
-  §5.12 — including `Release.systemEvaluation_inhabited` — carries it.
+  instance-implicit argument, exactly as upstream, and §5.12 — including
+  `Release.systemEvaluation_inhabited` — carries it.
 
   ## A DISCLOSED DEVIATION IN THE PROFILE
 
@@ -401,231 +408,38 @@ theorem costObjective_score (c : Cost.CompleteSystemCost) :
     (costObjective seam).score c = Cost.CanonicalObjective.score c :=
   Cost.canonicalObjective_score wasmProfile (setting seam).problem c
 
-/-! ## 3. The release decider, and UV-003
+/-! ## 3. The release decider — REMOVED
 
-Everything below needs SPEC §8.4's `problem_input_fintype`, which this
-repository does not discharge (`O-3`).  It is carried as an instance-implicit
-hypothesis, exactly as `Universal/Competitor.lean` carries it. -/
+There is no `Release.decider` and no `Release.evaluateClassically`.
 
-section Decider
+What used to stand here was a `noncomputable` evaluator that assumed `Nonempty
+(Universal.SystemEvaluation …)` and extracted an inhabitant with
+`Classical.choice`, wrapped in a one-field `Universal.Decider`.  It decoded
+nothing, validated nothing, enumerated no input and explored no branch, and an
+external audit ruled it a non-conforming discharge of **UV-003**: SPEC §10.1
+asks for an *implemented* finite decoder, validator, input enumerator and
+all-branch explorer, and a classically chosen inhabitant is none of those.
+`just releasepath` now rejects exactly that shape (SPEC §19 / §6.3).
 
-variable [Foundation.Fintype (Gemm.RawInvocation wasmProfile)]
+Every result that was stated against it — `decider_evaluate`,
+`evaluateClassically_eq_complete`, `systemEvaluationRel_of_evaluation`,
+`systemEvaluationRel_sound`, `systemEvaluationRel_functional`,
+`systemEvaluationRel_complete`, `deciderAnswersAdmissible`,
+`deciderAnswersAdmissible_rel`, `exists_globalOptimal_of_nonempty`,
+`exists_globalOptimal_of_admissible_evaluation`,
+`nonemptiness_iff_admissible_evaluation`, and their `Theorems.Release.*`
+re-indexings — has been **deleted**, not relabelled and not hidden behind a
+checker.  UV-003 is therefore open again, and the repository states no
+`Universal.GlobalOptimal` result at the release scope at all.
 
-/-- The canonical site named by the decider's failure report.  It is a plain
-identifier: the failure branch carries a located, payload-bearing report as
-SPEC §6.1 requires, and asserts nothing. -/
-def noEvaluationSite : Foundation.CanonicalObjectId where
-  schemaVersion := 1
-  domain := .artifact
-  typeTag := Foundation.Bytes.pack [0x52, 0x45, 0x4c, 0x45, 0x41, 0x53, 0x45]
-  canonicalBodyBytes := Foundation.Bytes.pack []
+No replacement evaluator over the witness semantics is offered: the audit
+forbade that too.  The obligation is to *implement* SPEC §10.1's explorer as a
+`Universal.Decider` and prove `Universal.DeciderAnswersAdmissible` of it.  Until
+that exists, the honest state of this file is the absence below.
 
-/-- The report the classical decider returns when the bytes have no system
-evaluation at all.  `Universal.EvaluationResult` offers no "no evaluation
-exists" constructor, so the located failure constructor is used; the theorems
-below constrain only the `.complete` branch, and nothing here claims the bytes
-failed profile validation for any particular reason. -/
-def noEvaluationReport : Foundation.FailureReport where
-  site := noEvaluationSite
-  code := 1
-  context := []
-
-/--
-  The classical evaluator.
-
-  On `bytes` that have a `Universal.SystemEvaluation`, it returns `.complete`
-  of one — necessarily *the* one, since `Universal.systemEvaluation_subsingleton`
-  makes the type a subsingleton.  Otherwise it returns a located failure.
-
-  **This uses `Classical.propDecidable` and `Classical.choice`, and is
-  therefore noncomputable.**  It is not on any executable path, it is not an
-  implementation of SPEC §10.1's `Universal.evaluate`, and it must not be read
-  as one: it decodes nothing, validates nothing, enumerates no input and
-  explores no branch.
--/
-noncomputable def evaluateClassically (bytes : ByteArray) :
-    Universal.EvaluationResult (setting seam) bytes :=
-  @dite _ (Nonempty (Universal.SystemEvaluation (setting seam) bytes))
-    (Classical.propDecidable _)
-    (fun h => .complete (Classical.choice h))
-    (fun _ => .profileFailure noEvaluationReport)
-
-/-- **SPEC §10.1**, `Release.decider`: the release `Universal.Decider`, a
-one-field wrapper around `Release.evaluateClassically`.  Noncomputable, for the
-reason stated there. -/
-noncomputable def decider : Universal.Decider (setting seam) :=
-  ⟨evaluateClassically seam⟩
-
-@[simp] theorem decider_evaluate (bytes : ByteArray) :
-    (decider seam).evaluate bytes = evaluateClassically seam bytes := rfl
-
-/--
-  The evaluator returns `.complete e` for **every** inhabitant `e` of the
-  evaluation type.  The `dif_pos` step supplies *some* inhabitant; uniqueness
-  (`Universal.systemEvaluation_subsingleton`) upgrades it to the one asked for.
--/
-theorem evaluateClassically_eq_complete {bytes : ByteArray}
-    (e : Universal.SystemEvaluation (setting seam) bytes) :
-    evaluateClassically seam bytes = .complete e := by
-  have h : Nonempty (Universal.SystemEvaluation (setting seam) bytes) := ⟨e⟩
-  show (@dite _ _ (Classical.propDecidable _) _ _) = _
-  rw [dif_pos h]
-  exact congrArg _ (Universal.systemEvaluation_subsingleton _ e)
-
-/-- Consequently the release relation holds of every evaluation of every byte
-sequence. -/
-theorem systemEvaluationRel_of_evaluation {bytes : ByteArray}
-    (e : Universal.SystemEvaluation (setting seam) bytes) :
-    Universal.SystemEvaluationRel (setting seam) (decider seam) bytes e :=
-  evaluateClassically_eq_complete seam e
-
-/-! ### The three properties SPEC §1 requires of `SystemEvaluationRel` -/
-
-/--
-  **Soundness.**  The relation holds only of a genuine evaluation of exactly
-  those bytes.
-
-  Soundness here is structural and total: `Universal.SystemEvaluationRel` can
-  relate `bytes` only to an inhabitant of `Universal.SystemEvaluation
-  (setting seam) bytes`, and every such inhabitant carries, as *proved* fields,
-  the decode equation for exactly those bytes, the maximal-execution coverage
-  obligation at every raw invocation, and the exact aggregate cost equation of
-  SPEC §9.1.  There is no `.complete` answer that escapes them.
--/
-theorem systemEvaluationRel_sound {bytes : ByteArray}
-    {e : Universal.SystemEvaluation (setting seam) bytes}
-    (h : Universal.SystemEvaluationRel (setting seam) (decider seam) bytes e) :
-    (decider seam).evaluate bytes = .complete e ∧
-    Wasm.decode bytes = .ok e.module ∧
-    (∀ raw : Gemm.RawInvocation wasmProfile,
-      (e.perInput raw).CoversEveryMaximalExecution) ∧
-    Cost.ExactAggregateCost bytes (Wasm.decode bytes = .ok e.module)
-      (wasmProfile.body.costTableBody.decodeCost bytes)
-      ((setting seam).semantics.validationSteps e.module)
-      ((setting seam).semantics.staticDataBytes e.module)
-      ((setting seam).problem.workloadRepetitions)
-      (fun raw => (e.perInput raw).resourceVector) e.cost :=
-  ⟨h, e.decodeEq, e.observationsComplete, e.costExact⟩
-
-/--
-  **Functionality.**  Two evaluations related to the same bytes are equal.
-
-  Immediate from `Universal.systemEvaluation_subsingleton`: the relation is
-  functional because its codomain is, which is stronger than functionality of
-  the relation alone and is what `GlobalOptimal`'s conjunctive lower-bound
-  clause actually needs.
--/
-theorem systemEvaluationRel_functional {bytes : ByteArray}
-    {a b : Universal.SystemEvaluation (setting seam) bytes}
-    (_ha : Universal.SystemEvaluationRel (setting seam) (decider seam) bytes a)
-    (_hb : Universal.SystemEvaluationRel (setting seam) (decider seam) bytes b) :
-    a = b :=
-  Universal.systemEvaluation_subsingleton a b
-
-/--
-  **Completeness.**  Every profile valid, semantically correct, resource
-  bounded byte sequence that *has* an evaluation is related to it.
-
-  The three extensional premises are stated because SPEC §1 states them; the
-  proof does not consume them, because this decider is complete on strictly
-  more than the admissible set.  That direction is safe: a decider that answers
-  on more bytes than required still answers on all of them.
--/
-theorem systemEvaluationRel_complete {bytes : ByteArray}
-    (_hprofile : Universal.ProfileValid wasmProfile bytes)
-    (_hcorrect : Universal.SemanticCorrect (setting seam) bytes)
-    (_hresources : Universal.SemanticWithinResources (setting seam) bytes)
-    (e : Universal.SystemEvaluation (setting seam) bytes) :
-    Universal.SystemEvaluationRel (setting seam) (decider seam) bytes e :=
-  systemEvaluationRel_of_evaluation seam e
-
-/--
-  **UV-003 discharged.**  `Universal.DeciderAnswersAdmissible` holds for the
-  release decider.
-
-  `Universal/Argmin.lean` isolated this as the one hypothesis of
-  `Universal.exists_globalOptimal_of_nonempty` that is *not* derivable for an
-  arbitrary `Universal.Decider` — nothing forbids a decider from answering
-  `.profileFailure` on bytes that do have an evaluation.  The classical decider
-  cannot: by construction it answers `.complete` whenever the evaluation type
-  is inhabited, admissible or not.
--/
-theorem deciderAnswersAdmissible :
-    Universal.DeciderAnswersAdmissible (setting seam) (decider seam) :=
-  fun _b _hadm e => ⟨e, systemEvaluationRel_of_evaluation seam e⟩
-
-/-- The "for every inhabitant" form `GlobalOptimal`'s lower-bound clause
-demands, at the release decider. -/
-theorem deciderAnswersAdmissible_rel {b : ByteArray}
-    (hadm : Universal.Admissible (setting seam) b)
-    (e : Universal.SystemEvaluation (setting seam) b) :
-    Universal.SystemEvaluationRel (setting seam) (decider seam) b e :=
-  Universal.deciderAnswersAdmissible_rel (deciderAnswersAdmissible seam) hadm e
-
-/-! ## 4. Attainability, instantiated -/
-
-/--
-  **SPEC §13, Phase D, at the release instantiation.**
-
-  If the admissible, evaluated set is nonempty, some byte sequence satisfies
-  `Universal.GlobalOptimal` at the release setting, the release decider and the
-  release objective — with the competitor quantifier ranging over **all** of
-  `ByteArray`.
-
-  The decider hypothesis is discharged by `Release.deciderAnswersAdmissible`
-  (UV-003).  Exactly one obligation is left: the antecedent.
-
-  This does **not** prove `Artifact.released_wasm_gemm_gnaf_global_optimal`.
-  The conclusion is an existential produced by classical reasoning; it names no
-  literal, and identifying the committed release bytes with the byte sequence
-  selected here is a separate, undischarged obligation.
--/
-theorem exists_globalOptimal_of_nonempty
-    (hne : ∃ b : ByteArray, Universal.Admissible (setting seam) b ∧
-      ∃ e : Universal.SystemEvaluation (setting seam) b,
-        Universal.SystemEvaluationRel (setting seam) (decider seam) b e) :
-    ∃ bytes : ByteArray,
-      Universal.GlobalOptimal (setting seam) (decider seam) (costObjective seam)
-        bytes :=
-  Universal.exists_globalOptimal_of_nonempty (deciderAnswersAdmissible seam) hne
-
-/--
-  The same statement with the relation clause removed.
-
-  Because the release decider relates every byte sequence to every evaluation
-  it has, the antecedent of `Release.exists_globalOptimal_of_nonempty` collapses
-  to: *one* byte sequence that is profile valid, semantically correct, within
-  resources, and has a system evaluation.  Nothing here exhibits one; this is
-  the sharpest reduction available, not a discharge.
--/
-theorem exists_globalOptimal_of_admissible_evaluation
-    (hne : ∃ b : ByteArray, Universal.Admissible (setting seam) b ∧
-      Nonempty (Universal.SystemEvaluation (setting seam) b)) :
-    ∃ bytes : ByteArray,
-      Universal.GlobalOptimal (setting seam) (decider seam) (costObjective seam)
-        bytes := by
-  obtain ⟨b, hadm, ⟨e⟩⟩ := hne
-  exact exists_globalOptimal_of_nonempty seam
-    ⟨b, hadm, e, systemEvaluationRel_of_evaluation seam e⟩
-
-/--
-  The reduction, stated as an equivalence of obligations: the two antecedents
-  above are interchangeable.  This is what "the release theorem now rests on
-  nonemptiness alone" means precisely.
--/
-theorem nonemptiness_iff_admissible_evaluation :
-    (∃ b : ByteArray, Universal.Admissible (setting seam) b ∧
-        ∃ e : Universal.SystemEvaluation (setting seam) b,
-          Universal.SystemEvaluationRel (setting seam) (decider seam) b e) ↔
-      (∃ b : ByteArray, Universal.Admissible (setting seam) b ∧
-        Nonempty (Universal.SystemEvaluation (setting seam) b)) := by
-  constructor
-  · rintro ⟨b, hadm, e, _⟩
-    exact ⟨b, hadm, ⟨e⟩⟩
-  · rintro ⟨b, hadm, ⟨e⟩⟩
-    exact ⟨b, hadm, e, systemEvaluationRel_of_evaluation seam e⟩
-
-end Decider
+What survives is everything that never needed a decider: the scope objects of
+§1 and §2, the constructed seam of §5, and the `Universal.SystemEvaluation`
+inhabitant of §5.14 — which is decider-independent data. -/
 
 end Parametric
 
@@ -1934,25 +1748,13 @@ theorem systemEvaluation_inhabited :
     ∃ bytes : ByteArray, Nonempty (Universal.SystemEvaluation (setting seam) bytes) :=
   ⟨witnessBytes, ⟨witnessSystemEvaluation⟩⟩
 
-/-- The release decider answers `.complete` on the witness bytes: the decider,
-the machine and the evaluation agree on a concrete literal. -/
-theorem seam_decider_complete_on_witness :
-    (decider seam).evaluate witnessBytes = .complete witnessSystemEvaluation :=
-  evaluateClassically_eq_complete seam witnessSystemEvaluation
-
-/-- **Exactly what is left of the release antecedent at the constructed seam.**
-Conjuncts (a) profile validity and (d) evaluation are discharged on a closed
-literal; conjuncts (b) and (c) are the caller's, and this repository supplies
-neither. -/
-theorem globalOptimal_of_witness_semantics
-    (hcorrect : Universal.SemanticCorrect (setting seam) witnessBytes)
-    (hresources : Universal.SemanticWithinResources (setting seam) witnessBytes) :
-    ∃ bytes : ByteArray,
-      Universal.GlobalOptimal (setting seam) (decider seam) (costObjective seam)
-        bytes :=
-  exists_globalOptimal_of_admissible_evaluation seam
-    ⟨witnessBytes, ⟨witness_profileValid, hcorrect, hresources⟩,
-      ⟨witnessSystemEvaluation⟩⟩
+/-! `Release.seam_decider_complete_on_witness` and
+`Release.globalOptimal_of_witness_semantics` stood here.  Both were stated
+against `Release.decider`, the classically chosen evaluator §3 describes and no
+longer defines, so both are deleted.  Nothing weaker replaces them: with no
+`Universal.Decider` implemented at the release scope there is no
+`Universal.GlobalOptimal` statement to make, conditional or otherwise.  The
+witness evaluation above survives because it is decider-independent. -/
 
 /-! ### 5.14 The evaluation of the compiled GEMM kernel, modulo §5.13's two facts -/
 

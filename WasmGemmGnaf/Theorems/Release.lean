@@ -12,72 +12,74 @@
   | name | content |
   |---|---|
   | `Theorems.release_scope_identities` | every profile / problem / setting / objective identity equation of the release instance, in one conjunction |
-  | `Theorems.release_decider_answers_admissible` | UV-003 at the release instance: the decider hypothesis of `Universal.exists_globalOptimal_of_nonempty` is discharged |
-  | `Theorems.release_globalOptimal_of_nonempty` | **the release theorem**: nonemptiness of the admissible evaluated set implies `Universal.GlobalOptimal` at the release setting, decider and objective — full statement written out |
-  | `Theorems.release_obligation_reduction` | the two forms of the remaining antecedent are interchangeable |
-  | `Theorems.release_lower_bound_clause` | from `GlobalOptimal` at the release scope, the lower-bound clause at an *arbitrary* `competitorBytes : ByteArray` |
-  | `Theorems.release_tie_break_clause` | the canonical-least half of the same projection |
-  | `Theorems.release_competitor_universe_inhabited` | the competitor clause is not vacuous |
   | `Theorems.release_seam_nondegenerate` | **GO-008**: the constructed `Release.seam` charges every event, charges every validation, budgets every coordinate, and its machine completes with a nonempty frontier |
   | `Theorems.release_systemEvaluation_inhabited` | **GO-008's headline**: `Universal.SystemEvaluation` at the constructed setting is inhabited on a `ProfileValid` closed literal |
-  | `Theorems.release_globalOptimal_of_nonempty_at_seam` | the release theorem with the seam no longer a parameter |
-  | `Theorems.release_globalOptimal_of_witness_semantics` | exactly what is left of the antecedent on that literal — and it is a *false* hypothesis, not a discharge |
+
+  ## WHAT IS NOT PROVED HERE, AND USED TO BE
+
+  The release theorem.  `Theorems.release_decider_answers_admissible`,
+  `release_globalOptimal_of_nonempty`, `release_globalOptimal_of_admissible`,
+  `release_obligation_reduction`, `release_lower_bound_clause`,
+  `release_tie_break_clause`, `release_competitor_universe_inhabited`,
+  `release_decider_answers_admissible_at_seam`,
+  `release_globalOptimal_of_nonempty_at_seam` and
+  `release_globalOptimal_of_witness_semantics` were all stated against
+  `Release.decider`, the `noncomputable` `Classical.choice` evaluator that an
+  external audit ruled a non-conforming discharge of **UV-003**.  That evaluator
+  and every result depending on it are deleted; §2 records the reasoning.
+
+  **UV-003 is open and this repository states no `Universal.GlobalOptimal`
+  result at the release scope.**
 
   ## THE NAME IS HONEST, AND HERE IS WHY IT HAS TO BE
 
   `Artifact.released_wasm_gemm_gnaf_global_optimal` is **not declared here and is
   not declared anywhere in this repository**.  SPEC §15 forbids that name from
   taking `Coverage`, `LowerBound`, `Correct`, `FaithfulWasm`, `CompilerCorrect`
-  or `GlobalOptimal` as parameters, so it cannot be stated as a conditional; and
-  the antecedent below is open.  `release_globalOptimal_of_nonempty` is named
-  after its hypothesis on purpose.  A conditional theorem wearing the
-  unconditional theorem's name would make every downstream citation false, and
-  no amount of surrounding prose would repair it.
+  or `GlobalOptimal` as parameters, so it cannot be stated as a conditional.  It
+  cannot be stated at all right now: with `Release.decider` deleted there is no
+  decider at the release scope to index `Universal.GlobalOptimal` by.  A
+  conditional theorem wearing the unconditional theorem's name would make every
+  downstream citation false, and no amount of surrounding prose would repair
+  it.
 
   ## EVERY HYPOTHESIS THAT REMAINS
 
-  There are four, and all four are arguments of the theorems below — none is an
-  axiom, a `sorry`, or a definition quietly chosen to make something true.
-  Number 2 is **closed** as of GO-008: see §4 of this file and §5 of
-  `Artifact/Release.lean`.  It is left in the list, marked, because the
-  theorems of §2 and §3 still quantify over `(seam : Release.Seam)` and are
-  therefore still stated at that generality.
-
   1. `[Foundation.Fintype (Gemm.RawInvocation Release.wasmProfile)]` — SPEC
-     §8.4's `problem_input_fintype`.  Recorded OUTSTANDING under `O-3` in
-     `Theorems/Status.lean` (`Gemm.raw_input_finite`).  Carried as an
-     instance-implicit argument, exactly as `Universal/Competitor.lean` carries
-     it.
-  2. `(seam : Release.Seam)` — **CLOSED (GO-008)**, and still universally
-     quantified in §2 and §3 because the results hold for *every* choice.
-     `Release.seam` is a closed term: `Release.semantics` (`Release.costEvent`
-     plus `Wasm.validationCost` and `Wasm.instantiatedStaticBytes`),
-     `Release.machine` (`Wasm.releaseCostedMachine`, the real all-branch costed
-     explorer), and `Release.limit` (five coordinates pinned by SPEC §8.2, the
-     other eleven at the profile maximum the pinned costed-step budget
-     implies).  `Theorems.release_seam_nondegenerate` proves it is not the fake
-     seam — the cost model is not free, validation is not free, no coordinate is
-     budgeted at zero, and the machine returns a completed **nonempty** frontier
-     on a real module.  Two disclosures travel with it and are stated in §4:
+     §8.4's `problem_input_fintype`.  This is now **discharged**, globally and
+     constructively, by `Gemm.raw_input_finite` in
+     `Universal/EnumerateInputs.lean`; §4's section header still binds it
+     because the statements there were written before the instance existed, and
+     it is satisfied rather than assumed.
+  2. `(seam : Release.Seam)` — **CLOSED (GO-008)**.  `Release.seam` is a closed
+     term: `Release.semantics` (`Release.costEvent` plus `Wasm.validationCost`
+     and `Wasm.instantiatedStaticBytes`), `Release.machine`
+     (`Wasm.releaseCostedMachine`, the real all-branch costed explorer), and
+     `Release.limit` (five coordinates pinned by SPEC §8.2, the other eleven at
+     the profile maximum the pinned costed-step budget implies).
+     `Theorems.release_seam_nondegenerate` proves it is not the fake seam — the
+     cost model is not free, validation is not free, no coordinate is budgeted
+     at zero, and the machine returns a completed **nonempty** frontier on a
+     real module.  Two disclosures travel with it and are stated in §4:
      `Release.costEvent` is a *lower bound* on the SPEC §7.5 contribution law,
      and `Release.witnessModule` is not a GEMM implementation.
-  3. `hne` — nonemptiness of the admissible, evaluated set.  **This is the one
-     that matters, and it is still open.**  No byte sequence is proved
-     `ProfileValid ∧ SemanticCorrect ∧ SemanticWithinResources` anywhere in this
-     repository, and none is asserted to be.  It is an explicit hypothesis of
-     every conclusion below.  Two of its four conjuncts are now theorems on one
+  3. **The decider.**  SPEC §10.1's implemented finite decoder, validator, input
+     enumerator and all-branch explorer, as a `Universal.Decider`.  It does not
+     exist here.  It used to be faked by `Release.decider`; see §2.  **UV-003.**
+  4. `hne` — nonemptiness of the admissible, evaluated set.  Still open, and now
+     not even statable in the form the deleted theorems used, because that form
+     mentioned the decider.  No byte sequence is proved `ProfileValid ∧
+     SemanticCorrect ∧ SemanticWithinResources` anywhere in this repository, and
+     none is asserted to be.  Two of the four conjuncts are theorems on one
      closed literal, `Release.witnessBytes`: `Release.witness_profileValid`
      (profile validity) and `Theorems.release_systemEvaluation_inhabited` (the
-     `Universal.SystemEvaluation` inhabitant, which before GO-008 was not known
-     to be satisfiable at *any* seam).  `Universal.SemanticWithinResources` is
-     unproved for it and `Universal.SemanticCorrect` is **false** for it — the
+     `Universal.SystemEvaluation` inhabitant).  `Universal.SemanticWithinResources`
+     is unproved for it and `Universal.SemanticCorrect` is **false** for it — the
      witness module's `gemm` returns the constant `0`.  `Artifact/Baseline.lean`
      proves profile validity for the compiled GEMM witness
      (`Artifact.baseline_profileValid`); its `SemanticCorrect` is
-     `GNAF.compile_refines`, omitted under `BI-002`/`O-6`.  Two of four on a
-     module that does not compute GEMM is not four of four, and `hne` stays a
-     hypothesis here.
-  4. The disclosed profile deviation: `Release.wasmProfile` is
+     `GNAF.compile_refines`, omitted under `BI-002`/`O-6`.
+  5. The disclosed profile deviation: `Release.wasmProfile` is
      `Wasm.unitWitnessProfile`, not SPEC §7.2's release literal — the cost table
      is `Wasm.canonicalCostTableUnits`, whose eight units, canonical GC widths
      and audit rows are the canonical release values, but which is *not* built
@@ -92,12 +94,9 @@
      law (`Wasm.canonicalCostTable_charges_exactly`), not cross-checked against
      an external conformance map.
 
-  `Release.decider` is **noncomputable** (`Classical.propDecidable` and
-  `Classical.choice`, both Prop-level, neither on an executable path, neither
-  producing a claimed executable witness).  It computes no artifact; the
-  conclusion below is an existential and names no byte literal.  Identifying a
-  committed release literal with the byte sequence it selects is a further,
-  undischarged obligation (`Artifact.released_bytes_equal_selection`, `O-4`).
+  `Release.decider` no longer exists (§2).  Nothing selects a byte sequence at
+  the release scope, so `Artifact.released_bytes_equal_selection` (`O-4`) is not
+  merely undischarged — it has no selection to be about.
 
   Every declaration in this file is a proved theorem.  There is no `sorry`, no
   `admit`, no project axiom, no `native_decide`, no `unsafe`, no `partial`.
@@ -200,223 +199,40 @@ theorem release_scope_identities (seam : Release.Seam) :
    Release.costObjective_tieOrder seam,
    Release.costObjective_score seam⟩
 
-/-! ## 2. The release theorem
+/-! ## 2 AND 3. THE RELEASE THEOREM — REMOVED
 
-Everything below needs SPEC §8.4's `problem_input_fintype`, which this
-repository does not discharge (`O-3`), and the `Release.Seam` data, which it
-does not have.  Both are arguments. -/
+`Theorems.release_decider_answers_admissible`,
+`Theorems.release_globalOptimal_of_nonempty`,
+`Theorems.release_globalOptimal_of_admissible`,
+`Theorems.release_obligation_reduction`,
+`Theorems.release_lower_bound_clause`,
+`Theorems.release_tie_break_clause` and
+`Theorems.release_competitor_universe_inhabited` stood here, and
+`Theorems.release_decider_answers_admissible_at_seam`,
+`Theorems.release_globalOptimal_of_nonempty_at_seam` and
+`Theorems.release_globalOptimal_of_witness_semantics` stood in §4.
 
-section Release
+Every one of them was stated against `Release.decider`: a `noncomputable`
+one-field wrapper around `Release.evaluateClassically`, which assumed `Nonempty
+(Universal.SystemEvaluation …)` and extracted an inhabitant by
+`Classical.choice`.  It decoded nothing, validated nothing, enumerated no input
+and explored no branch.  An external audit ruled that a non-conforming discharge
+of **UV-003**, and SPEC §19 / §6.3 exclude noncomputable definitions from the
+release path in the first place.
 
-variable [Foundation.Fintype (Gemm.RawInvocation Release.wasmProfile)]
+`Release.decider` and `Release.evaluateClassically` are deleted, so these
+results are deleted with them.  They are **absent**, not weakened, not renamed
+and not retained behind a checker; and no replacement evaluator over the witness
+semantics is offered, because a differently-spelled substitution for the
+implemented explorer is the same non-conformance.
 
-/--
-  **UV-003 at the release instance.**
-
-  `Universal.exists_globalOptimal_of_nonempty` has two hypotheses.  This is the
-  one that *is* discharged: the release decider returns a completed evaluation
-  on every admissible byte sequence that has one.  It is not derivable for an
-  arbitrary `Universal.Decider` — nothing forbids a decider from answering
-  `.profileFailure` on bytes that do have an evaluation — and it is what makes
-  `release_globalOptimal_of_nonempty` rest on nonemptiness *alone*.
--/
-theorem release_decider_answers_admissible (seam : Release.Seam) :
-    ∀ b : ByteArray,
-      Universal.Admissible (Release.setting seam) b →
-      Universal.SystemEvaluation (Release.setting seam) b →
-      ∃ e : Universal.SystemEvaluation (Release.setting seam) b,
-        Universal.SystemEvaluationRel (Release.setting seam)
-          (Release.decider seam) b e :=
-  Release.deciderAnswersAdmissible seam
-
-/--
-  **The release theorem, at the strength it actually has.**
-
-  *If* one byte sequence is profile valid, semantically correct, within
-  resources and has a system evaluation, *then* some byte sequence satisfies
-  `Universal.GlobalOptimal` at the release setting, the release decider and the
-  release objective: all three extensional conjuncts, the evaluation
-  existential with `Correct` and `Feasible`, the universal lower-bound clause
-  over **all** of `ByteArray`, and the canonical tie-break clause.
-
-  The conclusion is written out rather than abbreviated as
-  `Universal.GlobalOptimal …` so that the competitor quantifier is visible: it
-  is `∀ competitorBytes : ByteArray`, with no scope predicate, no registry, no
-  attention index and no "known algorithms" restriction.
-
-  **What this is not.**  It is not
-  `Artifact.released_wasm_gemm_gnaf_global_optimal`.  The antecedent `hne` is
-  open — this repository proves no concrete byte sequence admissible — the
-  `Release.Seam` argument is data it does not have, the `Foundation.Fintype`
-  instance is `O-3`, and the conclusion is an existential produced by classical
-  reasoning that names no byte literal.  Cite it with its hypotheses or not at
-  all.
--/
-theorem release_globalOptimal_of_nonempty (seam : Release.Seam)
-    (hne : ∃ b : ByteArray,
-      Universal.ProfileValid Release.wasmProfile b ∧
-      Universal.SemanticCorrect (Release.setting seam) b ∧
-      Universal.SemanticWithinResources (Release.setting seam) b ∧
-      Nonempty (Universal.SystemEvaluation (Release.setting seam) b)) :
-    ∃ releasedBytes : ByteArray,
-      Universal.ProfileValid Release.wasmProfile releasedBytes ∧
-      Universal.SemanticCorrect (Release.setting seam) releasedBytes ∧
-      Universal.SemanticWithinResources (Release.setting seam) releasedBytes ∧
-      ∃ releasedEval :
-          Universal.SystemEvaluation (Release.setting seam) releasedBytes,
-        Universal.SystemEvaluationRel (Release.setting seam)
-            (Release.decider seam) releasedBytes releasedEval ∧
-        Universal.Correct releasedEval ∧
-        Universal.Feasible releasedEval ∧
-        (∀ competitorBytes : ByteArray,
-          Universal.ProfileValid Release.wasmProfile competitorBytes →
-          Universal.SemanticCorrect (Release.setting seam) competitorBytes →
-          Universal.SemanticWithinResources (Release.setting seam)
-            competitorBytes →
-          ∀ competitorEval :
-              Universal.SystemEvaluation (Release.setting seam) competitorBytes,
-            Universal.SystemEvaluationRel (Release.setting seam)
-                (Release.decider seam) competitorBytes competitorEval ∧
-            (Release.costObjective seam).score releasedEval.cost ≤
-              (Release.costObjective seam).score competitorEval.cost) ∧
-        (∀ competitorBytes : ByteArray,
-          Universal.ProfileValid Release.wasmProfile competitorBytes →
-          Universal.SemanticCorrect (Release.setting seam) competitorBytes →
-          Universal.SemanticWithinResources (Release.setting seam)
-            competitorBytes →
-          ∀ competitorEval :
-              Universal.SystemEvaluation (Release.setting seam) competitorBytes,
-            Universal.SystemEvaluationRel (Release.setting seam)
-                (Release.decider seam) competitorBytes competitorEval →
-            (Release.costObjective seam).score releasedEval.cost =
-                (Release.costObjective seam).score competitorEval.cost →
-            Foundation.CanonicalBytesLE releasedBytes competitorBytes) := by
-  obtain ⟨b, hprofile, hcorrect, hresources, hev⟩ := hne
-  exact Release.exists_globalOptimal_of_admissible_evaluation seam
-    ⟨b, ⟨hprofile, hcorrect, hresources⟩, hev⟩
-
-/--
-  The same conclusion from the packaged antecedent, so that the theorem above
-  and `Release.exists_globalOptimal_of_nonempty` are visibly the same result.
--/
-theorem release_globalOptimal_of_admissible (seam : Release.Seam)
-    (hne : ∃ b : ByteArray, Universal.Admissible (Release.setting seam) b ∧
-      Nonempty (Universal.SystemEvaluation (Release.setting seam) b)) :
-    ∃ releasedBytes : ByteArray,
-      Universal.GlobalOptimal (Release.setting seam) (Release.decider seam)
-        (Release.costObjective seam) releasedBytes :=
-  Release.exists_globalOptimal_of_admissible_evaluation seam hne
-
-/--
-  **The remaining obligation, stated as an equivalence.**
-
-  Because the release decider relates every byte sequence to every evaluation it
-  has, the "decider agrees" form of the antecedent and the "has an evaluation"
-  form are interchangeable.  This is the precise content of the claim that the
-  release theorem now rests on nonemptiness alone: there is nothing left in the
-  antecedent except exhibiting one admissible, evaluated byte sequence — which
-  this repository does **not** do.
--/
-theorem release_obligation_reduction (seam : Release.Seam) :
-    (∃ b : ByteArray, Universal.Admissible (Release.setting seam) b ∧
-        ∃ e : Universal.SystemEvaluation (Release.setting seam) b,
-          Universal.SystemEvaluationRel (Release.setting seam)
-            (Release.decider seam) b e) ↔
-      (∃ b : ByteArray, Universal.Admissible (Release.setting seam) b ∧
-        Nonempty (Universal.SystemEvaluation (Release.setting seam) b)) :=
-  Release.nonemptiness_iff_admissible_evaluation seam
-
-/-! ## 3. The competitor quantifier really ranges over all of `ByteArray`
-
-`GlobalOptimal` is only worth proving if its universal clause is universal.  The
-two projections below take an arbitrary `competitorBytes : ByteArray` — bound at
-the top of the statement, with no scope predicate anywhere — and produce the
-lower-bound and tie-break clauses at it.  If the definition had narrowed the
-quantifier to a registry, a sublevel, a plan family or an attention index, these
-would not typecheck. -/
-
-/--
-  **The universal lower-bound clause, extracted at an arbitrary competitor.**
-
-  Given a proof of `GlobalOptimal` at the release scope and *any* byte sequence
-  whatever that is profile valid, semantically correct and within resources: the
-  released evaluation exists, is the release decider's own answer, is `Correct`
-  and `Feasible`, and its score is `≤` the score of every evaluation of that
-  competitor — which the decider also answers.
-
-  `competitorBytes` is an ordinary universally quantified `ByteArray`.  That is
-  the whole point of this declaration: it documents, in a form the kernel
-  checks, that the release instance's competitor universe is every finite byte
-  sequence.
--/
-theorem release_lower_bound_clause (seam : Release.Seam)
-    {releasedBytes : ByteArray}
-    (h : Universal.GlobalOptimal (Release.setting seam) (Release.decider seam)
-      (Release.costObjective seam) releasedBytes)
-    (competitorBytes : ByteArray)
-    (hprofile : Universal.ProfileValid Release.wasmProfile competitorBytes)
-    (hcorrect : Universal.SemanticCorrect (Release.setting seam) competitorBytes)
-    (hresources : Universal.SemanticWithinResources (Release.setting seam)
-      competitorBytes) :
-    ∃ releasedEval :
-        Universal.SystemEvaluation (Release.setting seam) releasedBytes,
-      Universal.SystemEvaluationRel (Release.setting seam)
-          (Release.decider seam) releasedBytes releasedEval ∧
-      Universal.Correct releasedEval ∧
-      Universal.Feasible releasedEval ∧
-      ∀ competitorEval :
-          Universal.SystemEvaluation (Release.setting seam) competitorBytes,
-        Universal.SystemEvaluationRel (Release.setting seam)
-            (Release.decider seam) competitorBytes competitorEval ∧
-        (Release.costObjective seam).score releasedEval.cost ≤
-          (Release.costObjective seam).score competitorEval.cost :=
-  Universal.globalOptimal_lower_bound_at h competitorBytes hprofile hcorrect
-    hresources
-
-/--
-  **The tie-break clause, extracted at an arbitrary competitor.**  Same
-  quantifier, canonical-least half: an equal-scoring competitor is never
-  canonically smaller than the released bytes.
--/
-theorem release_tie_break_clause (seam : Release.Seam)
-    {releasedBytes : ByteArray}
-    (h : Universal.GlobalOptimal (Release.setting seam) (Release.decider seam)
-      (Release.costObjective seam) releasedBytes)
-    (competitorBytes : ByteArray)
-    (hprofile : Universal.ProfileValid Release.wasmProfile competitorBytes)
-    (hcorrect : Universal.SemanticCorrect (Release.setting seam) competitorBytes)
-    (hresources : Universal.SemanticWithinResources (Release.setting seam)
-      competitorBytes) :
-    ∃ releasedEval :
-        Universal.SystemEvaluation (Release.setting seam) releasedBytes,
-      Universal.SystemEvaluationRel (Release.setting seam)
-          (Release.decider seam) releasedBytes releasedEval ∧
-      ∀ competitorEval :
-          Universal.SystemEvaluation (Release.setting seam) competitorBytes,
-        Universal.SystemEvaluationRel (Release.setting seam)
-            (Release.decider seam) competitorBytes competitorEval →
-        (Release.costObjective seam).score releasedEval.cost =
-            (Release.costObjective seam).score competitorEval.cost →
-        Foundation.CanonicalBytesLE releasedBytes competitorBytes :=
-  Universal.globalOptimal_canonical_least_at h competitorBytes hprofile hcorrect
-    hresources
-
-/--
-  **Non-vacuity.**  The competitor premises are satisfied by the released bytes
-  themselves, so the universal clause above is not true merely because its
-  premises are unsatisfiable.
--/
-theorem release_competitor_universe_inhabited (seam : Release.Seam)
-    {releasedBytes : ByteArray}
-    (h : Universal.GlobalOptimal (Release.setting seam) (Release.decider seam)
-      (Release.costObjective seam) releasedBytes) :
-    ∃ competitorBytes : ByteArray,
-      Universal.ProfileValid Release.wasmProfile competitorBytes ∧
-      Universal.SemanticCorrect (Release.setting seam) competitorBytes ∧
-      Universal.SemanticWithinResources (Release.setting seam) competitorBytes :=
-  Universal.globalOptimal_competitor_universe_inhabited h
-
-end Release
+**UV-003 is open, and this repository states no `Universal.GlobalOptimal`
+result at the release scope.**  Closing it means implementing SPEC §10.1's
+finite decoder, validator, input enumerator and all-branch explorer as a
+`Universal.Decider (Release.setting Release.seam)` and proving
+`Universal.DeciderAnswersAdmissible` of *that*.  The scope identities of §1, the
+seam non-degeneracy of §4 and the evaluation inhabitant of §4 are unaffected:
+none of them mentions a decider. -/
 
 /-! ## 4. The seam is constructed (GO-008)
 
@@ -514,62 +330,6 @@ theorem release_systemEvaluation_inhabited :
       Nonempty (Universal.SystemEvaluation (Release.setting Release.seam) bytes) :=
   ⟨Release.witnessBytes, Release.witness_profileValid,
     ⟨Release.witnessSystemEvaluation⟩⟩
-
-/-- **UV-003 at the constructed seam.** -/
-theorem release_decider_answers_admissible_at_seam :
-    ∀ b : ByteArray,
-      Universal.Admissible (Release.setting Release.seam) b →
-      Universal.SystemEvaluation (Release.setting Release.seam) b →
-      ∃ e : Universal.SystemEvaluation (Release.setting Release.seam) b,
-        Universal.SystemEvaluationRel (Release.setting Release.seam)
-          (Release.decider Release.seam) b e :=
-  Release.deciderAnswersAdmissible Release.seam
-
-/--
-  **The release theorem at the constructed seam.**
-
-  Same content as `release_globalOptimal_of_nonempty`, with the seam no longer
-  a parameter: the setting, the decider and the objective are closed terms of
-  this repository.  The antecedent `hne` is still open, and is still the only
-  thing left.
--/
-theorem release_globalOptimal_of_nonempty_at_seam
-    (hne : ∃ b : ByteArray,
-      Universal.ProfileValid Release.wasmProfile b ∧
-      Universal.SemanticCorrect (Release.setting Release.seam) b ∧
-      Universal.SemanticWithinResources (Release.setting Release.seam) b ∧
-      Nonempty (Universal.SystemEvaluation (Release.setting Release.seam) b)) :
-    ∃ releasedBytes : ByteArray,
-      Universal.GlobalOptimal (Release.setting Release.seam)
-        (Release.decider Release.seam) (Release.costObjective Release.seam)
-        releasedBytes := by
-  obtain ⟨b, hprofile, hcorrect, hresources, hev⟩ := hne
-  exact Release.exists_globalOptimal_of_admissible_evaluation Release.seam
-    ⟨b, ⟨hprofile, hcorrect, hresources⟩, hev⟩
-
-/--
-  **Exactly what is left, on a closed literal, at the constructed seam.**
-
-  Read the hypotheses first.  `hcorrect` and `hresources` are conjuncts (b) and
-  (c) of the release antecedent at `Release.witnessBytes`; this repository
-  supplies neither, and `hcorrect` is in fact *false* for the witness module,
-  which returns the constant `0`.  What the theorem records is that conjuncts
-  (a) and (d) — profile validity and the system evaluation — are no longer
-  hypotheses of anything.
-
-  Citing it as evidence that a globally optimal artifact exists would be citing
-  a false hypothesis as a fact.  **GO-006 is open.**
--/
-theorem release_globalOptimal_of_witness_semantics
-    (hcorrect : Universal.SemanticCorrect (Release.setting Release.seam)
-      Release.witnessBytes)
-    (hresources : Universal.SemanticWithinResources (Release.setting Release.seam)
-      Release.witnessBytes) :
-    ∃ releasedBytes : ByteArray,
-      Universal.GlobalOptimal (Release.setting Release.seam)
-        (Release.decider Release.seam) (Release.costObjective Release.seam)
-        releasedBytes :=
-  Release.globalOptimal_of_witness_semantics hcorrect hresources
 
 end AtSeam
 

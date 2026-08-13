@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "description": "Planted falsifiers. SPEC 18: at least one defect per proof family, and the corresponding checker must fail.",
-  "runner": "Tools/mutation.py",
+  "runner": "just mutation (xtask/src/mutation.rs)",
   "falsifiers": [
     {
       "id": "M1",
@@ -65,7 +65,7 @@
       "id": "M9",
       "family": "UV",
       "plants": "a forbidden import (Artifact) into Universal/Competitor.lean",
-      "expectedRejector": "Tools/firewall.py, SPEC 10.1 dependency firewall",
+      "expectedRejector": "xtask sources firewall, SPEC 10.1 dependency firewall",
       "status": "rejects",
       "note": "Guards the property that makes GlobalOptimal meaningful: the competitor universe must be defined without reference to the artifact it will be compared against. Otherwise the theorem is a statement about a universe built around its own answer."
     },
@@ -73,9 +73,25 @@
       "id": "M10",
       "family": "CM",
       "plants": "a manifest stage containing its own identity, or a backward reference between stages",
-      "expectedRejector": "Tools/mutation.py M10 acyclicity check",
+      "expectedRejector": "M10 acyclicity check over MANIFEST.json",
       "status": "rejects",
       "note": "SPEC 4 requires the identity stages be acyclic: no manifest contains its own identity and no two stages hash each other. A cyclic manifest could be made to attest to itself."
+    },
+    {
+      "id": "M11",
+      "family": "GO",
+      "plants": "a weakened GlobalOptimal whose competitor quantifier is restricted by a scope predicate",
+      "expectedRejector": "the Iff.rfl schema binding in WasmGemmGnaf/Conformance/Schema.lean",
+      "status": "rejects",
+      "note": "SPEC 1 requires the gate to compare the compiled UNFOLDED definition against the frozen WGG-GO-1 schema, and says a theorem scoped to a subset of the competitor universe SHALL have a different name. Iff.rfl is what makes that comparison definitional. The falsifier elaborates GlobalOptimalOver <scope> against the same frozen schema and requires it to FAIL, with the unweakened binding as a control so it cannot pass by failing for an unrelated reason."
+    },
+    {
+      "id": "M12",
+      "family": "GO",
+      "plants": "a required declaration that is present, correctly named, and choice-tainted",
+      "expectedRejector": "the SPEC 15 inventory, which reports TAINTED and does not count it as discharged",
+      "status": "rejects",
+      "note": "SPEC 4: Classical.choice SHALL NOT produce executable witnesses. A Fintype instance, an enumerator and a decision procedure are DATA, so a choice-tainted closure disqualifies them however well-named they are. An external audit found a name-only check crediting exactly this shape. The planted witness is elaborated against the real compiled environment, so the axiom closure driving the verdict is Lean's own answer; a choice-free witness under the same name is the control and must still be credited."
     }
   ],
   "note": "A mutation suite that merely expects runtime output differences does not test universal-coverage integrity (SPEC 18). M4 and M6 target claim integrity directly."

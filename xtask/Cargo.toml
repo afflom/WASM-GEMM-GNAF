@@ -1,0 +1,16 @@
+[package]
+name = "xtask"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Release-gate checkers for WASM-GEMM-GNAF. Tooling only: never on the Lean proof path."
+
+# SPEC section 4 forbids network-fetched inputs in release verification, so this
+# crate has NO dependencies. Everything below is std: the JSON reader, the Lean
+# comment stripper and the directory walk are all implemented here precisely so
+# that offline verification has no fetch step.
+[dependencies]
+
+[[bin]]
+name = "xtask"
+path = "src/main.rs"

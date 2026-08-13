@@ -342,15 +342,16 @@ theorem validRawInvocations_nodup (P : Wasm.Profile) :
   instance hypothesis and no `Fintype` argument: the enumeration, its coverage
   proof and its duplicate-freedom proof are all supplied here.
 
-  Axiom note.  Unlike `raw_input_finite`, whose closure is `[propext,
-  Quot.sound]`, this instance's closure also contains `Classical.choice.`  The
-  filter is the classifier's own verdict, and `Gemm.classify` — hence
-  `Gemm.refValid` — already depends on `Classical.choice` in committed code: the
-  `Decidable (View.LayoutOk …)` instance embeds `View.checkInterval_iff`, which
-  goes through `Shape.isEmpty_eq_false_iff`, proved by `omega` on an `Iff` goal.
-  `omega` discharges `Iff`, `And` and `Or` goals classically.  No enumeration of
-  the *valid* carrier can be choice-free while `Gemm.classify` is not; nothing
-  is added here.
+  Axiom note.  The closure is `[propext, Quot.sound]` — no `Classical.choice`,
+  as SPEC §4 requires of an executable witness.  The filter is the Boolean
+  `Gemm.refValid`, whose `= true ↔ classify … = .valid _` characterisation is
+  `Gemm.refValid_iff_classify`, and `refValid` is now choice-free down to the
+  arithmetic: the `Decidable` instances it decides through
+  (`View.ElementsInInterval` via `View.checkInterval_iff`, `ByteRange.Overlaps`
+  via `ByteRange.overlapsB_iff`) are *data*, so `Shape.isEmpty_eq_false_iff`,
+  `ByteRange.overlapCount_pos_iff`, `View.addr_bounds` and
+  `View.checkInterval_iff` introduce their `Iff` and `∧` by hand instead of
+  letting `omega` — which discharges those connectives classically — do it.
 -/
 instance valid_input_finite (P : Wasm.Profile) :
     Foundation.Fintype (ValidRawInvocation P) where
@@ -490,5 +491,85 @@ theorem fintype_input_enumerator_complete {P : Wasm.Profile}
     (raw : Gemm.RawInvocation P) :
     raw ∈ Foundation.Fintype.elems (Gemm.RawInvocation P) :=
   Foundation.Fintype.mem_elems raw
+
+/-! ## The byte enumerator (SPEC §10.3 (1))
+
+SPEC §10.3's first finiteness clause is "byte strings within the module-size
+bound are finite and exactly enumerable".  `Universal/Sublevel.lean` builds
+`Enumerate.boundedByteArrays` and proves it covers the bound in both directions;
+what was missing is the *named enumerator* SPEC §15 asks for, together with the
+duplicate-freedom that makes "exactly enumerable" mean exactly.
+
+Duplicate-freedom is the new content here.  It needs `byteListsOfLength_nodup`
+and `Foundation.Bytes.pack_injective` inside each length block, and, across
+blocks, the fact that entries of different blocks have different sizes — which
+is `length_of_mem_byteListsOfLength`, not an appeal to decidable equality on
+`ByteArray`.  Every step is choice-free, as SPEC §4 demands of an executable
+witness: axiom closure `[propext, Quot.sound]`. -/
+
+/-- **SPEC §10.3 (1)'s executable byte enumerator.**  Every byte sequence whose
+size is at most `bound`, listed once each.  This is the list the module-size
+half of the sublevel search ranges over. -/
+def byteEnumerator (bound : Nat) : List ByteArray :=
+  Enumerate.boundedByteArrays bound
+
+/--
+  **SPEC §15**, `Universal.byte_enumerator_complete`.  The byte enumerator
+  misses no byte sequence within the bound.
+
+  Unconditional: no `Fintype` hypothesis, no scope predicate, no coverage
+  assumption.  Together with `byte_enumerator_exact` and
+  `byte_enumerator_nodup` it says the enumerator *is* the bounded carrier.
+-/
+theorem byte_enumerator_complete {bound : Nat} {bytes : ByteArray}
+    (h : bytes.size ≤ bound) : bytes ∈ byteEnumerator bound :=
+  Enumerate.mem_boundedByteArrays h
+
+/-- **Exactness.**  Nothing outside the bound is listed, so the enumerator is
+the bounded carrier rather than a superset of it. -/
+theorem byte_enumerator_exact (bound : Nat) (bytes : ByteArray) :
+    bytes ∈ byteEnumerator bound ↔ bytes.size ≤ bound :=
+  Enumerate.mem_boundedByteArrays_iff bytes
+
+/-- Each length block of the enumerator is duplicate-free. -/
+theorem byteArraysOfLength_nodup (k : Nat) :
+    ((Enumerate.byteListsOfLength k).map Foundation.Bytes.pack).Nodup := by
+  rw [List.Nodup, List.pairwise_map]
+  refine (Enumerate.byteListsOfLength_nodup k).imp ?_
+  intro x y hxy hc
+  exact hxy (Foundation.Bytes.pack_injective hc)
+
+/-- **Duplicate-freedom.**  No byte sequence is listed twice.
+
+Within one length block this is `byteListsOfLength_nodup` transported along the
+injection `Foundation.Bytes.pack`.  Across two blocks it is a size argument: an
+entry of the `k`-block packs a list of length `k`, so a common entry would force
+`k₁ = k₂`, contradicting duplicate-freedom of `List.range (bound + 1)`. -/
+theorem byte_enumerator_nodup (bound : Nat) : (byteEnumerator bound).Nodup := by
+  rw [byteEnumerator, Enumerate.boundedByteArrays, List.Nodup,
+    List.pairwise_flatMap]
+  refine ⟨fun k _ => byteArraysOfLength_nodup k, ?_⟩
+  refine (Enumerate.nodup_range (bound + 1)).imp ?_
+  intro k₁ k₂ hne b₁ hb₁ b₂ hb₂ heq
+  refine hne ?_
+  obtain ⟨l₁, hl₁, hp₁⟩ := List.mem_map.mp hb₁
+  obtain ⟨l₂, hl₂, hp₂⟩ := List.mem_map.mp hb₂
+  have h₁ : b₁.size = k₁ := by
+    rw [← hp₁, Foundation.Bytes.size_pack,
+      Enumerate.length_of_mem_byteListsOfLength k₁ l₁ hl₁]
+  have h₂ : b₂.size = k₂ := by
+    rw [← hp₂, Foundation.Bytes.size_pack,
+      Enumerate.length_of_mem_byteListsOfLength k₂ l₂ hl₂]
+  rw [← h₁, ← h₂, heq]
+
+/-- The sublevel bridge, at the named enumerator: every competitor whose
+evaluated score lies in the sublevel `u` occurs in `byteEnumerator u`.  This is
+finiteness of the *carrier*; it is not `universal_sublevel_coverage`, and it
+claims nothing about which of those byte sequences are checked. -/
+theorem byte_enumerator_covers_sublevel {P : Wasm.Profile} {S : Setting P}
+    (O : Cost.ProperObjective P S.problem) {bytes : ByteArray}
+    (evaluation : SystemEvaluation S bytes) {u : Nat}
+    (h : O.score evaluation.cost ≤ u) : bytes ∈ byteEnumerator u :=
+  sublevel_bytes_enumerated O evaluation h
 
 end WasmGemmGnaf.Universal

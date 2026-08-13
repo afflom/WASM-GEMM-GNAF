@@ -12,7 +12,7 @@
   anyone narrows a quantifier, drops a conjunct, adds a hypothesis, or swaps the
   competitor domain for a scoped predicate, these stop elaborating.
 
-  This is the machine-checked half of the authority gate rule. `Tools/required.py`
+  This is the machine-checked half of the authority gate rule. `just required`
   supplies the inventory half.
 -/
 import WasmGemmGnaf.Universal.Sublevel

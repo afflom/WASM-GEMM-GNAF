@@ -21,10 +21,12 @@
 # `reproducible.yml` asserts it is byte-clean after regeneration -- which
 # requires it to be tracked.
 
-# Scratch written by the gate and the axiom auditor. Both delete their probe on
-# the success path; these entries cover an interrupted run.
+# Scratch written by the gate and the axiom auditor. Each deletes its probe on
+# every path; these entries cover an interrupted run.
 /.gate_axioms.lean
+/.gate_decl.lean
 /.axioms_probe.lean
+/.required_probe.lean
 
 # Scratch Lean. Anything under `WasmGemmGnaf/` that belongs to no SPEC section 5
 # layer is rejected by `just root-check` rather than ignored here -- a scratch
@@ -32,13 +34,14 @@
 /scratch/
 /tmp/
 
+# Cargo build output for the `xtask` gate tooling. Derived from `xtask/src` plus
+# the pinned toolchain, and reproducible offline: `xtask` has no dependencies, so
+# `Cargo.lock` is NOT ignored and no fetch step exists to make it stale.
+/target/
+
 # Editor and OS noise.
 .DS_Store
 *.swp
 *~
 .idea/
 .vscode/
-
-# Python bytecode from the gate tools.
-__pycache__/
-*.pyc

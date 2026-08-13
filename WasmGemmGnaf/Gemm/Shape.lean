@@ -36,10 +36,20 @@ def isEmpty (s : Shape) : Bool := s.batch == 0 || s.rows == 0 || s.cols == 0
 theorem count_eq_zero_iff (s : Shape) : s.count = 0 ↔ s.isEmpty = true := by
   simp [count, isEmpty, Nat.mul_eq_zero]
 
+/-- Choice-freedom note (SPEC §4).  `omega` proves an `Iff` goal by classical
+case analysis, and this lemma sits under the `Decidable` instances that
+`Gemm.refValid` — hence the `Foundation.Fintype` instance
+`Gemm.valid_input_finite` — is built from.  A `Decidable` instance is *data*, so
+the two directions are separated by hand here and `omega` only ever sees a
+single arithmetic goal. -/
 theorem isEmpty_eq_false_iff (s : Shape) :
     s.isEmpty = false ↔ (0 < s.batch ∧ 0 < s.rows ∧ 0 < s.cols) := by
   simp only [isEmpty, Bool.or_eq_false_iff, beq_eq_false_iff_ne, ne_eq]
-  omega
+  constructor
+  · intro h
+    exact ⟨Nat.pos_of_ne_zero h.1.1, Nat.pos_of_ne_zero h.1.2, Nat.pos_of_ne_zero h.2⟩
+  · intro h
+    exact ⟨⟨Nat.ne_of_gt h.1, Nat.ne_of_gt h.2.1⟩, Nat.ne_of_gt h.2.2⟩
 
 end Shape
 

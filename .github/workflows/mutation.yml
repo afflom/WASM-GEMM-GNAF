@@ -6,6 +6,24 @@ jobs:
   falsifiers:
     runs-on: ubuntu-24.04
     steps:
+      # actions/checkout v4.2.2
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      # M6 runs the release gate and M8 elaborates the root module, so this job
+      # needs the pinned toolchain and a build. Without them those two
+      # falsifiers cannot run at all -- and a falsifier that cannot run has not
+      # rejected anything.
+      - name: install pinned Lean toolchain
+        run: |
+          set -euo pipefail
+          curl -sSfL https://github.com/leanprover/elan/releases/download/v3.1.1/elan-x86_64-unknown-linux-gnu.tar.gz \
+            | tar xz
+          ./elan-init -y --default-toolchain "$(cat lean-toolchain)"
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: build
+        run: lake build
+      - name: build the falsifier runner
+        # `xtask` has no dependencies, so this is offline: SPEC section 4 forbids
+        # network-fetched inputs in release verification.
+        run: cargo build --release --locked
       - name: planted faults must be rejected (SPEC 18)
-        run: python3 Tools/mutation.py
+        run: cargo run --quiet --release -p xtask -- mutation

@@ -85,18 +85,15 @@ Phase B is a prerequisite for everything downstream: no baseline means no attain
 upper bound, hence no sublevel, hence no argmin. So O-6 blocks O-5 structurally,
 independently of O-5's own obstruction. `BI-002` records this.
 
-**The release seam is a parameter, not a construction.** `Release.Seam` bundles the
-costed `Semantics`, the `CostedMachine`, and the resource `limit`, and **nothing in
-the tree inhabits it**. Every release theorem — including
-`Theorems.release_globalOptimal_of_nonempty` — is quantified over `(seam : Seam)`.
-
-This is not vacuity in the strict sense: `Seam` *is* inhabitable, because
-`Semantics` is three total functions and `CostedMachine` admits one that always
-returns `.initializationFailure`. But such a seam leaves `SystemEvaluation`
-uninhabited, so the nonemptiness antecedent is unsatisfiable and the implication
-holds for want of any antecedent to test. The honest reading is therefore: **a true
-implication whose antecedent may be unsatisfiable for every seam that can currently
-be constructed.**
+**There is no release theorem.** `Release.Seam` is now a constructed closed term
+(`GO-008`) and `Theorems.release_seam_nondegenerate` proves it is not the
+degenerate one, so the seam is no longer the obstruction. The obstruction is that
+there is **no decider**: `Release.decider` and every result indexed by it have been
+deleted (see `UV-003` below), so this repository states no `Universal.GlobalOptimal`
+result at the release scope, conditional or otherwise. What survives at that scope
+is the seam's non-degeneracy and `Theorems.release_systemEvaluation_inhabited` — a
+`Universal.SystemEvaluation` on a closed `ProfileValid` literal whose module is not
+a GEMM implementation.
 
 `GO-008` recorded this, and **`GO-008` is now closed.** `Release.seam` is a closed
 term — `Release.semantics`, `Release.machine` (`Wasm.releaseCostedMachine`, the real
@@ -163,7 +160,7 @@ all are accepted; several were missed by this repository's own auditing.
 
 **The inventory materially understated the proof surface.** `model/claims.json`
 showed 10 outstanding rows. SPEC §15 requires 58 declarations, of which **22 are
-discharged and 36 outstanding**. `Tools/required.py` now derives that inventory
+discharged and 36 outstanding**. `just required` now derives that inventory
 from SPEC.md and queries the *compiled environment*; gate steps 4, 5, 8 and 9 test
 declaration presence instead of reading a status field. A hand-maintained JSON
 status is not evidence.
@@ -174,13 +171,18 @@ checksum file names the authority *without* a directory prefix, so the step fail
 and the workflow stopped **before `lake build`**. Neither the build nor the axiom
 closure had been established by CI at any commit. Fixed.
 
-**The decider is noncomputable and its completeness is circular.**
-`Release.evaluateClassically` assumes `Nonempty (SystemEvaluation …)` and extracts
-a witness by `Classical.choice`; `Release.decider` wraps it. It decodes,
-validates, enumerates and executes nothing, and the completeness theorem takes an
-existing evaluation as an *argument* rather than proving one exists. SPEC §19
-excludes noncomputable definitions from the product/proof path. `UV-003` is
-**reopened**, and `Tools/releasepath.py` now fails the gate on it.
+**The decider was noncomputable and its completeness was circular; it is now
+deleted.** `Release.evaluateClassically` assumed `Nonempty (SystemEvaluation …)`
+and extracted a witness by `Classical.choice`; `Release.decider` wrapped it. It
+decoded, validated, enumerated and executed nothing, and the completeness theorem
+took an existing evaluation as an *argument* rather than proving one exists. SPEC
+§19 excludes noncomputable definitions from the product/proof path. Both
+definitions, every theorem stated against them, and the `Theorems.release_*` and
+`Artifact.exists_globalOptimal_of_baseline_semantics` results that depended on
+them have been **removed from the repository** — not relabelled, not retained
+behind a checker, and not replaced by a substitute evaluator over the witness
+semantics. `UV-003` is **open**, `just releasepath` passes, and no classical
+stand-in for the implemented explorer remains.
 
 **The release profile is the i32 witness profile.** `Release.wasmProfile` is
 `Wasm.unitWitnessProfile`, and its cost table is `canonicalCostTableUnits` rather
@@ -307,7 +309,7 @@ disabled, so the pattern was tightened to token boundaries. It is now clean on t
 real tree and still catches a planted `theorem p : True := by sorry`.
 
 The decisive audit remains `#print axioms` over the compiled environment
-(`Tools/axioms.py`), per SPEC §19; the text scan is defence in depth.
+(`just axioms`), per SPEC §19; the text scan is defence in depth.
 
 Authority pins verified by content, not by trusting a string:
 

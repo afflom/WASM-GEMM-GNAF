@@ -76,6 +76,7 @@
 -/
 import WasmGemmGnaf.Universal.Sublevel
 import WasmGemmGnaf.Universal.LowerBound
+import WasmGemmGnaf.Universal.EnumerateInputs
 
 set_option autoImplicit false
 
@@ -523,5 +524,55 @@ theorem exists_globalOptimal_of_nonempty
     exact hscore
 
 end Argmin
+
+/-! ## Evaluation uniqueness, unconditionally (SPEC §10.1, SPEC §15)
+
+`systemEvaluation_subsingleton` above carries `[Foundation.Fintype
+(Gemm.RawInvocation P)]`, SPEC §8.4's `problem_input_fintype`, because
+`Cost.exact_unique` sums over the raw-input carrier.  That instance used to be
+an assumption of this repository (`O-3`).  It is now a *theorem*:
+`Gemm.raw_input_finite` in `Universal/EnumerateInputs.lean` is a global,
+choice-free `Foundation.Fintype` built from `Gemm.rawInvocations`, its coverage
+proof and its duplicate-freedom proof.
+
+So the proposition SPEC §15 names can be stated with no hypothesis at all, which
+is what the section below does. -/
+
+section Functional
+
+variable {P : Wasm.Profile}
+
+/--
+  **SPEC §15**, `Universal.system_evaluation_rel_functional`.
+
+  Two evaluations that the decider relates to the same byte sequence are equal.
+
+  Three things about the statement.  It carries **no** `Foundation.Fintype`
+  hypothesis — the instance is `Gemm.raw_input_finite`, discharged, not assumed.
+  It is quantified over **every** `Setting` and **every** `Decider`, so it does
+  not depend on which evaluator is installed; in particular it will still hold
+  verbatim of SPEC §10.1's implemented `Universal.evaluate` once that exists.
+  And it is proved from uniqueness of the *codomain*
+  (`systemEvaluation_subsingleton`), which is strictly stronger than
+  functionality of the relation and is what `GlobalOptimal`'s conjunctive
+  lower-bound clause actually consumes: that clause asserts the relation of
+  *every* inhabitant of the evaluation type, which no decider could satisfy if
+  two distinct evaluations of one byte sequence existed.
+-/
+theorem system_evaluation_rel_functional {S : Setting P} {D : Decider S}
+    {bytes : ByteArray} {a b : SystemEvaluation S bytes}
+    (_ha : SystemEvaluationRel S D bytes a)
+    (_hb : SystemEvaluationRel S D bytes b) : a = b :=
+  systemEvaluation_subsingleton a b
+
+/-- The same fact with the relation dropped entirely: the evaluation type of a
+byte sequence has at most one inhabitant, whatever the decider.  Stated
+separately so that `system_evaluation_rel_functional` is visibly a corollary of
+a decider-independent fact and not of a property of some particular decider. -/
+theorem systemEvaluation_unique {S : Setting P} {bytes : ByteArray}
+    (a b : SystemEvaluation S bytes) : a = b :=
+  systemEvaluation_subsingleton a b
+
+end Functional
 
 end WasmGemmGnaf.Universal

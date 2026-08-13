@@ -15,9 +15,11 @@
     "wasmCore": {
       "source": "official wg-3.0",
       "commit": "9d36019973201a19f9c9ebb0f10828b2fe2374aa",
-      "vendored": false,
+      "vendored": true,
       "vendorPath": "vendor/wasm-spec/",
-      "note": "NOT VENDORED. Release gate step 1 fails until the pinned tree is vendored and every file digest recomputed from content."
+      "note": "Vendored from the official WebAssembly/spec repository at the pinned commit. SPEC 5 requires offline verification to recompute pins from CONTENT rather than trust a checksum string, so every vendored file's digest is recorded in SHA256SUMS and rechecked by the gate. Scope: document/core/{binary,valid,exec,syntax,appendix} -- the normative sources the conformance map cites -- plus licences.",
+      "vendoredFiles": 40,
+      "digestManifest": "vendor/wasm-spec/SHA256SUMS"
     },
     "lean": {
       "toolchain": "leanprover/lean4:v4.30.0",

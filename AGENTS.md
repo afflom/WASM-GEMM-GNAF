@@ -28,7 +28,7 @@ an unproved structure field.
 
 Every file starts with `set_option autoImplicit false`, placed **after** its imports.
 
-The source scan is defence in depth. The decisive audit is `Tools/axioms.py`, which
+The source scan is defence in depth. The decisive audit is `just axioms`, which
 reads the compiled environment via `#print axioms`. Permitted closure: `propext`,
 `Quot.sound`, `Classical.choice` — named individually, never as a category.
 
@@ -51,7 +51,7 @@ that line — SPEC §17.1 and §18 both say so, and `M4` in the mutation suite e
 In this order:
 
 1. A row in `model/claims.json` with its level and its `specSection`.
-2. A falsifier in `model/falsifiers.json`, wired into `Tools/mutation.py`.
+2. A falsifier in `model/falsifiers.json`, wired into `just mutation`.
 3. The Lean declaration, proved.
 4. `just docs` to regenerate `CONFORMANCE.md` (it is generated; editing it by hand is
    a mistake the gate catches).

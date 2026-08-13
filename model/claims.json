@@ -351,7 +351,7 @@
       "level": "buildEvidence",
       "statement": "MANIFEST.json realises SPEC 4's three ordered identity stages, acyclically: no stage contains its own identity, references are forward-only, and MANIFEST.json is absent from its own preimage.",
       "leanDeclaration": null,
-      "sourceModule": "Tools/manifest.py",
+      "sourceModule": "xtask/src/manifest.rs",
       "specSection": "4",
       "status": "verified",
       "releaseApplicable": true,
@@ -371,7 +371,7 @@
       "specSection": "13",
       "status": "discharged",
       "releaseApplicable": true,
-      "note": "SPEC 13 Phase D. The optimality HALF of the release theorem is now discharged. Because the artifact is defined as the selection, the lower bound falls out of the argmin construction rather than needing an analytic certificate: scores are naturals so a nonempty admissible set has a least score; minimizers satisfy moduleBytes <= score by coordinate_le_score hence are bounded-length and finite; a finite nonempty set under the total order CanonicalBytesLE has a canonical-least element. What remains is an EXHIBITION problem, not a lower-bound problem. Correct and Feasible were NOT assumed: correct_of_admissible and feasible_of_admissible are proved from the three extensional predicates, because every recorded CostedExecutionObservation carries a FiniteExecution proof and both branch costs are pinned to Cost.traceCost by costExact. GO-004 carries one hypothesis, UV-003. AUDIT NOTE: the release instantiation routes through Release.decider, which is noncomputable (see UV-003, reopened). Universal.exists_globalOptimal_of_nonempty itself is decider-agnostic and stands; the RELEASE-scope corollary does not, until a computable evaluator exists.",
+      "note": "SPEC 13 Phase D. The optimality HALF of the release theorem is now discharged. Because the artifact is defined as the selection, the lower bound falls out of the argmin construction rather than needing an analytic certificate: scores are naturals so a nonempty admissible set has a least score; minimizers satisfy moduleBytes <= score by coordinate_le_score hence are bounded-length and finite; a finite nonempty set under the total order CanonicalBytesLE has a canonical-least element. What remains is an EXHIBITION problem, not a lower-bound problem. Correct and Feasible were NOT assumed: correct_of_admissible and feasible_of_admissible are proved from the three extensional predicates, because every recorded CostedExecutionObservation carries a FiniteExecution proof and both branch costs are pinned to Cost.traceCost by costExact. GO-004 carries one hypothesis, UV-003. AUDIT NOTE: Release.decider and Release.evaluateClassically, and every result stated against them, have been DELETED (see UV-003, reopened). Universal.exists_globalOptimal_of_nonempty itself is decider-agnostic and stands; nothing instantiates it, and this repository now states no GlobalOptimal result at the release scope at all.",
       "hypotheses": [
         "UV-003 (DeciderAnswersAdmissible)",
         "GO-006 (nonemptiness)"
@@ -486,7 +486,7 @@
       "dependsOn": [
         "WS-001"
       ],
-      "note": "REOPENED after external audit. It was promoted on Release.decider, which is `noncomputable` and built from Release.evaluateClassically: that function ASSUMES Nonempty (SystemEvaluation ...) and then extracts a witness with Classical.choice. It decodes, validates, enumerates and executes nothing. SPEC 19 excludes noncomputable definitions from the product/proof path and SPEC 6.3 requires executable proof-producing functions to be computable, so this is not a conforming discharge. Correspondingly the completeness theorem takes an existing evaluation as an argument rather than proving one exists. Tools/releasepath.py now fails on it.",
+      "note": "REOPENED after external audit. It was promoted on Release.decider, which is `noncomputable` and built from Release.evaluateClassically: that function ASSUMES Nonempty (SystemEvaluation ...) and then extracts a witness with Classical.choice. It decodes, validates, enumerates and executes nothing. SPEC 19 excludes noncomputable definitions from the product/proof path and SPEC 6.3 requires executable proof-producing functions to be computable, so this is not a conforming discharge. Correspondingly the completeness theorem takes an existing evaluation as an argument rather than proving one exists. `just releasepath` now fails on that shape. RESOLUTION: Release.decider, Release.evaluateClassically, Release.systemEvaluationRel_{sound,functional,complete}, Release.deciderAnswersAdmissible(_rel), Release.exists_globalOptimal_of_{nonempty,admissible_evaluation}, Release.nonemptiness_iff_admissible_evaluation, Release.seam_decider_complete_on_witness, Release.globalOptimal_of_witness_semantics, Artifact.exists_globalOptimal_of_baseline_semantics and the ten Theorems.release_* results indexed by the decider are DELETED, not relabelled and not retained behind a checker. No replacement evaluator over the witness semantics was substituted. Closing UV-003 requires implementing SPEC 10.1's finite decoder, validator, input enumerator and all-branch explorer as a Universal.Decider and proving DeciderAnswersAdmissible of it.",
       "axioms": [
         "propext",
         "Classical.choice",
@@ -625,11 +625,11 @@
       "level": "buildEvidence",
       "statement": "The SPEC 15 inventory is derived from SPEC.md and checked against the compiled environment, not from a hand-maintained status field.",
       "leanDeclaration": null,
-      "sourceModule": "Tools/required.py",
+      "sourceModule": "xtask/src/required.rs",
       "specSection": "15",
       "status": "verified",
       "releaseApplicable": true,
-      "note": "ADDED after external audit showed the claims registry materially understated the proof surface: 10 'outstanding' rows against 36 outstanding SPEC 15 declarations. Tools/required.py parses SPEC 15 and queries the compiled environment: 58 required, 22 discharged, 36 outstanding. Gate steps 4, 5, 8 and 9 now test declaration presence instead of reading model/claims.json."
+      "note": "ADDED after external audit showed the claims registry materially understated the proof surface: 10 'outstanding' rows against 36 outstanding SPEC 15 declarations. `just required` parses SPEC 15 and queries the compiled environment: 58 required, 22 discharged, 36 outstanding. Gate steps 4, 5, 8 and 9 now test declaration presence instead of reading model/claims.json."
     },
     {
       "id": "WS-003",
@@ -659,7 +659,7 @@
       "specSection": "15",
       "status": "discharged",
       "releaseApplicable": true,
-      "note": "Closes three SPEC 15 declarations: Gemm.raw_input_finite, Gemm.valid_input_finite, Universal.input_enumerator_complete. required.py 22 -> 25 of 58, verified independently. raw_input_finite and input_enumerator_complete are CHOICE-FREE ([propext, Quot.sound]); the instance is global with no hypothesis. Achieving that required reproving List.nodup_range, because the toolchain's goes through List.range_eq_range' and depends on Classical.choice. valid_input_finite DOES carry Classical.choice, inherited from Gemm.classify/refValid in committed code (omega discharges Iff/And/Or classically); no enumeration of the VALID carrier can be choice-free while the classifier is not. Recorded rather than glossed."
+      "note": "Closes three SPEC 15 declarations: Gemm.raw_input_finite, Gemm.valid_input_finite, Universal.input_enumerator_complete. the SPEC 15 inventory 22 -> 25 of 58, verified independently. raw_input_finite and input_enumerator_complete are CHOICE-FREE ([propext, Quot.sound]); the instance is global with no hypothesis. Achieving that required reproving List.nodup_range, because the toolchain's goes through List.range_eq_range' and depends on Classical.choice. valid_input_finite DOES carry Classical.choice, inherited from Gemm.classify/refValid in committed code (omega discharges Iff/And/Or classically); no enumeration of the VALID carrier can be choice-free while the classifier is not. Recorded rather than glossed."
     }
   ],
   "refutedFramings": [

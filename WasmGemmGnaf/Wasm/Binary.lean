@@ -337,6 +337,13 @@ theorem decSLEB_slebNeg (m : Nat) (r : List UInt8) :
         · have : m / 128 = 0 := by omega
           omega
       simp only [hcond, if_false, Except.ok.injEq, Prod.mk.injEq, and_true]
+      -- `hcond` and `ih` must leave the context before `omega` runs: `omega`
+      -- case splits on a hypothesis whose top-level structure is `¬(_ ∨ _)`
+      -- through `Classical.byCases`, and that would put `Classical.choice` in
+      -- the closure of every declaration downstream of the module codec ---
+      -- including `decode_complete`, which SPEC section 4 requires to be
+      -- choice free.  The remaining goal is a linear integer equation.
+      clear hcond hdiv ih
       omega
 
 theorem decSLEB_encodeSLEB (i : Int) (r : List UInt8) :
@@ -410,19 +417,33 @@ theorem decSLEB_sound :
             rcases Nat.lt_or_ge (b.toNat - 128) 64 with hlt | hge
             · exact hlt
             · exact absurd ⟨hz, hge⟩ hc2
+          -- The canonicality side condition has now been turned into the two
+          -- implications `hkey1` / `hkey2`.  Its original disjunctive form must
+          -- leave the context before any further `omega`: `omega` case splits on
+          -- a hypothesis of shape `¬(_ ∧ _ ∨ _ ∧ _)` through `Classical.byCases`,
+          -- and SPEC section 4 forbids `Classical.choice` in the closure of
+          -- `decode_complete`, which is downstream of this proof.
+          clear hc hc1 hc2
           subst hv
           by_cases hw : 0 ≤ w
-          · -- nonnegative tail
+          · -- nonnegative tail.  `hge` is derived first because it is the only
+            -- consumer of `hkey1`; every later `omega` runs with the two
+            -- implications cleared, since `omega` discharges a `→` hypothesis by
+            -- a classical case split and SPEC section 4 forbids
+            -- `Classical.choice` in the closure of `decode_complete`.
+            have hge : ¬ (((b.toNat - 128 : Nat) : Int) + 128 * w).toNat < 64 := by
+              by_cases hw0 : w = 0
+              · have h64 : 64 ≤ b.toNat - 128 := hkey1 hw0
+                clear hkey1 hkey2
+                omega
+              · clear hkey1 hkey2
+                omega
+            clear hkey1 hkey2
             have hnn : (0 : Int) ≤ ((b.toNat - 128 : Nat) : Int) + 128 * w := by omega
             unfold encodeSLEB
             simp only [hnn, if_true]
             have hwenc : encodeSLEB w = slebNonneg w.toNat := by
               unfold encodeSLEB; simp [hw]
-            have hge : ¬ (((b.toNat - 128 : Nat) : Int) + 128 * w).toNat < 64 := by
-              by_cases hw0 : w = 0
-              · have h64 : 64 ≤ b.toNat - 128 := hkey1 hw0
-                omega
-              · omega
             rw [slebNonneg_ge hge]
             have hmod : (((b.toNat - 128 : Nat) : Int) + 128 * w).toNat % 128
                 = b.toNat - 128 := by omega
@@ -431,18 +452,22 @@ theorem decSLEB_sound :
             rw [hmod, hdiv, show b.toNat - 128 + 128 = b.toNat by omega,
               uint8_ofNat_toNat, ← hwenc, hrest]
             rfl
-          · -- negative tail
+          · -- negative tail.  Same discipline: `hkey2` is consumed by `hge` and
+            -- both implications are cleared before any further `omega`.
+            have hge : ¬ (((b.toNat - 128 : Nat) : Int) + 128 * w).natAbs - 1 < 64 := by
+              by_cases hw1 : w = -1
+              · have h64 : b.toNat - 128 < 64 := hkey2 hw1
+                clear hkey1 hkey2
+                omega
+              · clear hkey1 hkey2
+                omega
+            clear hkey1 hkey2
             have hwlt : w < 0 := by omega
             have hneg : ¬ (0 : Int) ≤ ((b.toNat - 128 : Nat) : Int) + 128 * w := by omega
             unfold encodeSLEB
             simp only [hneg, if_false]
             have hwenc : encodeSLEB w = slebNeg (w.natAbs - 1) := by
               unfold encodeSLEB; simp [hw]
-            have hge : ¬ (((b.toNat - 128 : Nat) : Int) + 128 * w).natAbs - 1 < 64 := by
-              by_cases hw1 : w = -1
-              · have h64 : b.toNat - 128 < 64 := hkey2 hw1
-                omega
-              · omega
             rw [slebNeg_ge hge]
             have hdiv : ((((b.toNat - 128 : Nat) : Int) + 128 * w).natAbs - 1) / 128
                 = w.natAbs - 1 := by omega
@@ -2875,7 +2900,11 @@ theorem decInstr_decExpr_enc : ∀ fuel : Nat,
           have h1 := opcodeC_enc_length_pos Opcode.ifThenElse
           simp only [Instr.cost, Instr.enc, List.length_append] at h
           simp only [Expr.cost]
-          omega
+          -- Split the conjunction by hand: `omega` proves a conjunctive goal
+          -- through a classical case analysis, which would put
+          -- `Classical.choice` in the closure of the module codec and hence of
+          -- `decode_complete` (SPEC section 4).
+          exact ⟨by omega, by omega⟩
         simp [decInstr, Instr.enc, List.append_assoc,
           ihE b1 (Expr.enc b2 ++ r) hcs.1, ihE b2 r hcs.2]
       case tryTable bt cs body =>
@@ -2894,7 +2923,7 @@ theorem decInstr_decExpr_enc : ∀ fuel : Nat,
         have hcs : Instr.cost i ≤ f ∧ Expr.cost e' ≤ f := by
           simp only [Expr.cost, Expr.enc, List.length_cons, List.length_append] at h
           simp only [Instr.cost, Expr.cost]
-          omega
+          exact ⟨by omega, by omega⟩
         simp [decExpr, Expr.enc, List.append_assoc,
           ihI i (Expr.enc e' ++ r) hcs.1, ihE e' r hcs.2]
 
