@@ -7,7 +7,7 @@ default: vv
 xtask := "cargo run --quiet --release -p xtask --"
 
 # The whole gate. Expected to FAIL at step 9 while WGG-GO-1 is outstanding.
-vv: tools root-check firewall manifest-check releasepath build vendor core required schema claims axioms
+vv: tools root-check firewall manifest-check releasepath build vendor core required signature schema claims axioms docs-check
     @{{xtask}} gate
 
 bootstrap:
@@ -50,6 +50,13 @@ mutation: tools
 reproduce:
     @echo "reproduce: gated on emit" && exit 1
 
+# SPEC 17.3: CONFORMANCE.md embeds a LIVE inventory over the whole Lean tree, so
+# it goes stale whenever a module is added -- not only when a claim changes.
+# `reproducible.yml` asserted this in CI only, so staleness was found one push
+# too late. This fails locally first.
+docs-check: tools
+    @{{xtask}} docs --check
+
 # SPEC 17.3: CONFORMANCE.md, regenerated deterministically from the registry.
 docs: tools
     @{{xtask}} docs
@@ -89,12 +96,14 @@ vendor: tools
 
 # SPEC 7.1: how much of the PINNED Core 3.0 front end the Lean tree covers. The
 # checklist is EXTRACTED from the vendored SpecTec sources -- every opcode
-# production, typing rule and syntax production -- so it cannot be edited to
-# flatter the repository. Incomplete coverage is reported, not failed; a marker
-# naming something the sources do not define IS failed, because that is the shape
-# a fabricated coverage claim takes.
+# production, typing rule, syntax production and execution rule -- so it cannot
+# be edited to flatter the repository.
+#
+# `--check` FAILS on incomplete coverage. It did not, and an external audit was
+# right that a coverage number which cannot fail is not a gate: `just vv` ran the
+# bare form, so 166 of 1206 passed silently.
 core: tools
-    @{{xtask}} core
+    @{{xtask}} core --check
 
 # SPEC 15: required declarations, checked against the compiled environment.
 required: tools
@@ -106,3 +115,15 @@ required: tools
 schema: tools
     @lake build WasmGemmGnaf.Conformance.Schema
     @{{xtask}} schema
+
+# SPEC 15: every required declaration the environment credits is bound to SPEC's
+# PROPOSITION -- restated in full, closed by `:= @Name`, so the comparison is
+# definitional. SPEC.md is the source of the list; the Lean elaborator is the
+# comparator.
+#
+# Without this, `just required` checked a NAME. An external audit demonstrated
+# the consequence with this repository's own M12: a declaration called
+# `Gemm.valid_input_finite` with type `Nat` and body `0` was counted discharged.
+signature: tools
+    @lake build WasmGemmGnaf.Conformance.RequiredSignatures
+    @{{xtask}} signature

@@ -9,15 +9,34 @@ proposition exists in this repository.  Where the repository proves something
 *near* a required name but strictly weaker, the required name is recorded as
 OUTSTANDING and the nearer result is named as such — never promoted.
 
-Score: **36 of 58 discharged, 22 outstanding**, as `xtask claims required`
+Score: **34 of 58 discharged, 24 outstanding**, as `xtask claims required`
 reports it against the compiled environment.  This header is prose and can
 drift; that command is the ledger, and where the two disagree the command wins.
 
-One of the 36, `Wasm.costed_erase_iff_plain_run`, is discharged in the `DEV-001`
-amended form because SPEC's literal biconditional is false as written; the row
-says so.
+**The score fell from 36 to 34 when the checker started reading PROPOSITIONS
+instead of names.**  An external audit objected that "its checker verifies names
+rather than exact proposition types; its own M12 test demonstrates that a
+matching-name `Nat := 0` is counted as discharged", and that was accurate.
+`WasmGemmGnaf/Conformance/RequiredSignatures.lean` now restates every required
+declaration in full and closes each one with `:= @Name`, so the comparison is
+definitional and a `Nat := 0` under the right name does not elaborate;
+`xtask signature` checks the wiring and `M15` is its falsifier.
 
-**An external audit grades this repository lower than 36, and is right to.**  Its
+Two names that were counted lost their credit to that check, and both rows below
+already said why:
+
+* `Wasm.costed_erase_iff_plain_run` — the `DEV-001` amended form, whose
+  right-hand side carries a conjunct SPEC's biconditional does not.  The
+  deviation is filed and argues SPEC's literal statement is false as written.
+* `Atlas.incremental_eq_full_rebuild` — two hypotheses SPEC's statement does not
+  have, `Coherent state.body` and `scope = Scope.unscoped`.  `Atlas/Rebuild.lean`
+  argues the second is required for truth.  **No deviation is filed for it**;
+  until one is, the name is outstanding.
+
+Neither is a regression in what this repository proves.  Both are corrections to
+what it was reporting.
+
+**An external audit grades this repository lower than 34, and is right to.**  Its
 strict count rejects `Wasm.decode_sound`, `Wasm.decode_complete` and
 `Wasm.validate_iff_declarative` — they are proved against a hand-written subset
 codec and an i32-only validator, while the released profile enables SIMD, GC and
@@ -54,7 +73,7 @@ Two supporting records are cited where they are the precise reason:
 `O-6` blocks `O-4` structurally: no baseline means no attained upper bound,
 hence no sublevel, hence no argmin.  `O-5` is obstructed independently.
 
-## Wasm — 11 of 11 discharged
+## Wasm — 10 of 11 discharged
 
 | SPEC §15 name | discharged by / blocked by |
 |---|---|
@@ -66,7 +85,7 @@ hence no sublevel, hence no argmin.  `O-5` is obstructed independently.
 | `Wasm.bounded_tree_covers_every_branch` | `WasmGemmGnaf.Wasm.bounded_tree_covers_every_branch` (`Wasm/Fuel.lean`), re-indexed as `Theorems.bounded_tree_covers_every_branch`.  From `Wasm.exploreAll bound initial = .complete obs cov` and `Wasm.FiniteExecution initial o` it concludes `o ∈ obs` with **no** hypothesis on `o.trace.length` — the third clause of SPEC §7.4, "and that `complete` contains every maximal branch", which `Wasm.runFuel_complete_with_bound` does not give because its conclusion is conditional on `observation.trace.length ≤ bound`.  What makes the unconditional form true is proved rather than assumed: the `complete` constructor is reachable only when `Wasm.prefixes (bound + 1) [] initial = []`, and the new `Wasm.prefixes_complete` (the converse of the existing `Wasm.prefixes_sound`, with `Wasm.Reduces.split`) turns that into a proof that *every* finite execution of that `initial` has a trace of length at most `bound + 1`.  So the bound is a proved property of `initial`, not a restriction on the runs covered.  Axiom closure `[propext, Quot.sound]` — choice free.  Scope: the statement is about the `complete` constructor only; a `nonterminalPrefix` result genuinely misses branches that terminate past `bound + 1`, and no claim is made about those.  Divergent branches are outside `FiniteExecution` by construction and remain uncovered, as SPEC §7.4's "No general halting oracle is permitted" requires. |
 | `Wasm.runFuel_sound` | `WasmGemmGnaf.Wasm.runFuel_sound` (`Wasm/Fuel.lean`). |
 | `Wasm.runFuel_complete_with_bound` | `WasmGemmGnaf.Wasm.runFuel_complete_with_bound` (`Wasm/Fuel.lean`). |
-| `Wasm.costed_erase_iff_plain_run` | `WasmGemmGnaf.Wasm.costed_erase_iff_plain_run`, re-indexed as `Theorems.costed_erase_iff_plain_run`, in the `DEV-001` amended form; the unconditional intent is `Theorems.costed_run_iff_plain_run`. |
+| `Wasm.costed_erase_iff_plain_run` | **OUTSTANDING.**  `WasmGemmGnaf.Wasm.costed_erase_iff_plain_run` exists and is re-indexed as `Theorems.costed_erase_iff_plain_run`, but in the `DEV-001` amended form: its right-hand side carries the extra conjunct `Wasm.CostedLabelling module invocation costedTrace`, so the forward direction is strictly stronger than SPEC §7.5's and the backward direction strictly weaker.  It is therefore not SPEC's proposition and no longer counts.  `Conformance/RequiredSignatures.lean` pins the amended form under `-- spec-signature-amended:` so it cannot drift either; `DEV-001` argues SPEC's literal biconditional is false as written and names `Theorems.costed_run_iff_plain_run` as carrying the unconditional intent. |
 | `Wasm.costed_initialization_erase` | `WasmGemmGnaf.Wasm.costed_initialization_erase` (`Wasm/CostedExplore.lean`): erasing the charge from a completed costed initialization leaves exactly `Wasm.initialGemmInvocation`, the plain entry point defined alongside it, on the configuration the costed observation carries.  `Wasm.costed_initialization_of_erase` is the converse (the plain result determines the costed one, at the pinned `Wasm.initializationCost`) and `Wasm.costed_initialization_erase_error` is the failure half, so the two entry points are mutually determined.  Axiom closure `[propext, Quot.sound]`.  `Wasm/Erasure.lean` still covers only the reduction phase; this is the instantiation phase. |
 | `Wasm.profile_matches_pinned_revision` | `WasmGemmGnaf.Wasm.profile_matches_pinned_revision` (`Wasm/Adequacy.lean`), re-indexed as `Theorems.profile_matches_pinned_revision`.  Stated as the conjunction SPEC §7.1 *defines* the name to mean, and no more: (i) the concrete model and map are identity-bound to the **vendored** revision — the profile, the conformance map and `Wasm.core3VendoredTree` carry one commit, the map carries the digest of `vendor/wasm-spec/SHA256SUMS` (the digest of digests over all forty vendored files), and both canonical identities are injective, so a different revision or a single different vendored byte gives a different identity; (ii) every enabled vendored rule has **exactly one** mapped Lean declaration — one fully qualified name, one map row and one vendored anchor per enabled identifier, no declaration shared by two identifiers, and nothing at all for a rejected one.  Axiom closure `[propext, Classical.choice, Quot.sound]`; the `Classical.choice` enters through Lean core's `String.ofList_toList`, used by `string_append_left_cancel` to cancel the namespace prefix, and this is a Prop-level theorem, not an executable witness, so SPEC §4's restriction is not triggered.  **What holds it up outside the kernel, stated plainly**: Lean cannot read `vendor/wasm-spec/`, so the tree binding rests on the literals `Wasm.core3VendorManifestSha256`, `fileCount` and `core3RevisionCommit`; `xtask vendor` (gate step 1, `just vendor`) recomputes the digest of digests from CONTENT, rechecks `SHA256SUMS` against all forty files, compares the commit with `vendor/wasm-spec/PINNED-COMMIT`, and checks that every anchor `Wasm.PinnedCoreRuleId.vendorAnchor?` cites is a label the vendored `.rst` sources actually DEFINE; falsifier `M13` plants a flipped digest, an appended line and a deleted entry on a COPY and requires each to be rejected, with the unmutated copy as control.  **What is still not established**: the enumeration cites 73 distinct anchors of the 835 rule-shaped labels the vendored tree defines, so it is a declared *subset* of the pinned rule set and is not proved to be all of it; and 320 unexpanded SpecTec `${rule: ...}` references remain in the vendored sources, whose `.watsup` bodies are not vendored, so the anchor check tests rule IDENTITY and never rule CONTENT.  Neither gap is inside this theorem's statement — SPEC §7.1 explicitly places the transcription on the authority side of the boundary — but both are why `WS-001`/`O-6` stay open. |
 
@@ -133,14 +152,14 @@ enumerator and the byte enumerator); `Universal/Argmin.lean` proves the third.
 | `Universal.selected_le_every_sublevel_member` | **OUTSTANDING — `O-4`, `O-5`.** |
 | `Universal.all_competitors_lower_bound` | **OUTSTANDING — `O-5`.**  No known technique.  Nearest proved: `WasmGemmGnaf.Universal.attained_lower_bound_is_optimal` — which says an *attained* bound would suffice, and `lower_bound_below_released_is_not_optimality`, which says an unattained one would not. |
 
-## Atlas — 4 of 10 discharged
+## Atlas — 3 of 10 discharged
 
 | SPEC §15 name | discharged by / blocked by |
 |---|---|
 | `Atlas.semantic_closure_least` | `WasmGemmGnaf.Atlas.semantic_closure_least`, re-indexed as `Theorems.semantic_closure_least`. |
 | `Atlas.attention_no_optimum_relevant_false_negative` | **OUTSTANDING — `O-3`, `O-5`.**  The statement needs a notion of optimum, which does not exist here.  Nearest proved: `WasmGemmGnaf.Atlas.attend_determined_by_index`, `attend_monotone`, `attend_blind_to_optimizer_state`. |
 | `Atlas.invalidation_complete` | `WasmGemmGnaf.Atlas.invalidation_complete` (`Atlas/Dependency.lean`). |
-| `Atlas.incremental_eq_full_rebuild` | `WasmGemmGnaf.Atlas.incremental_eq_full_rebuild`, re-indexed as `Theorems.incremental_eq_full_rebuild`, with the hypothesis `state.body.scope = Scope.unscoped`, which is required for truth.  The unrestricted content is `Theorems.incremental_eq_full_rebuild_scoped`, strengthened past canonicalisation by `Theorems.incremental_eq_full_rebuild_exact`. |
+| `Atlas.incremental_eq_full_rebuild` | **OUTSTANDING.**  `WasmGemmGnaf.Atlas.incremental_eq_full_rebuild` exists and is re-indexed as `Theorems.incremental_eq_full_rebuild`, but carries two hypotheses SPEC §12.5's statement does not: `Atlas.Coherent state.body` and `state.body.scope = Scope.unscoped`.  `Atlas/Rebuild.lean` argues the second is required for truth — `semanticRebuildBody` takes only the declaration base and so cannot reproduce a scope the declarations do not name — and proves the general form as `Theorems.incremental_eq_full_rebuild_scoped`, strengthened past canonicalisation by `Theorems.incremental_eq_full_rebuild_exact`.  That argument is very likely right, but **no deviation is filed in `model/spec-deviations.json`**, so unlike `DEV-001` there is no reviewed record of it and the required name stays outstanding.  `Conformance/RequiredSignatures.lean` pins the weaker form under `-- spec-signature-weaker:`.  Filing the deviation, or proving SPEC's literal form, closes this row. |
 | `Atlas.seal_verifier_reconstructs_every_preimage` | **OUTSTANDING — `O-3`.**  Nearest proved: `WasmGemmGnaf.Atlas.resolvesEveryReferencedPreimage_iff` — *referenced* preimages only, which is strictly weaker. |
 | `Atlas.seal_implies_universal_coverage` | **OUTSTANDING — `O-5`, and deliberately so.**  `Theorems.universalCoverCompleteCheck_scope_blind` proves the seal's cover check is a function of three recorded components and therefore cannot witness any proposition quantified over `ByteArray`.  Deriving this name from the seal would be unsound. |
 | `Atlas.lifecycle_prefix_conservation` | `WasmGemmGnaf.Atlas.lifecycle_prefix_conservation` (`Atlas/Lifecycle.lean`), matching SPEC §16's statement.  Scope: it holds of every `Atlas.LifecycleEvaluation` because that structure's `totalExact` field *demands* the exact mixed fold — the content is that the carrier stores no unchecked total, not that some particular lifecycle was measured. |

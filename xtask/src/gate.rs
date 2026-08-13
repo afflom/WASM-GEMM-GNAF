@@ -265,12 +265,60 @@ pub fn run(root: &Path, no_mutation: bool) -> Result<Outcome> {
     // environment. A hand-maintained JSON status field is not evidence; an
     // external audit found the registry understated the surface by 26
     // declarations.
+    //
+    // `required::report` now demands a PROPOSITION, not a name: a required
+    // declaration counts only if `Conformance/RequiredSignatures.lean` restates
+    // it in full and closes it with `:= @Name`. The same audit found the previous
+    // rule crediting a matching-name `Nat := 0`.
     let inventory = required::report(root)?;
     g.check(
         "2",
         "SPEC 15 required declarations all discharged",
         inventory.missing.is_empty(),
         &clip(&inventory.render(false).replace('\n', " "), 150),
+    );
+
+    // And the wiring that makes the line above mean anything: every credited
+    // declaration has a binding, no binding is closed by a tactic, no marker
+    // names something SPEC does not require, and every quotation of SPEC is
+    // current. `M15` is the falsifier.
+    let spec_text = std::fs::read_to_string(Path::new("SPEC.md"))
+        .map_err(|e| SpecError::io(CLAUSE, "cannot read", Path::new("SPEC.md"), e))?;
+    let required_declarations = required::required_names(&spec_text)?;
+    let signature_source = std::fs::read_to_string(Path::new(
+        "WasmGemmGnaf/Conformance/RequiredSignatures.lean",
+    ))
+    .map_err(|e| {
+        SpecError::io(
+            CLAUSE,
+            "cannot read",
+            Path::new("WasmGemmGnaf/Conformance/RequiredSignatures.lean"),
+            e,
+        )
+    })?;
+    let signature_bindings = crate::signature::parse(&signature_source);
+    let mut signature_failures = crate::signature::audit(
+        &required_declarations,
+        &signature_bindings,
+        &crate::signature::deviation_ids()?,
+        &spec_text,
+    );
+    let exact = crate::signature::exact_names(&signature_bindings);
+    for name in &inventory.credited {
+        if !exact.iter().any(|e| e == name)
+            && !signature_bindings.iter().any(|b| b.name == *name)
+        {
+            signature_failures.push(format!("{name} has no signature binding"));
+        }
+    }
+    g.check(
+        "2",
+        &format!(
+            "all {} credited SPEC 15 declarations bound to SPEC's proposition",
+            exact.len()
+        ),
+        signature_failures.is_empty(),
+        &clip(&signature_failures.join("; "), 200),
     );
 
     // ---- declaration presence, from one probe -------------------------------

@@ -185,6 +185,44 @@ fn strip_comment(line: &str) -> &str {
     }
 }
 
+/// Remove SpecTec block comments `(; … ;)`, keeping newlines so line-oriented
+/// extraction still sees the original line structure.
+///
+/// Without this the checklist counted commented-out rules as obligations.
+/// `2.3-validation.instructions.spectec` block-comments out `rule Instr_ok/load`
+/// and `rule Instr_ok/store` — the pinned spec's own superseded forms, replaced
+/// by the `-val` / `-pack` pairs below them — so the validation denominator read
+/// 258 when the honest number is 256. An adversarial review found it; the two
+/// rules are not obligations and no Lean declaration should claim them.
+///
+/// Nesting is honoured: SpecTec allows `(; (; … ;) ;)`.
+fn strip_block_comments(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut out = String::with_capacity(text.len());
+    let mut depth = 0usize;
+    let mut i = 0usize;
+    while i < bytes.len() {
+        if bytes[i] == b'(' && i + 1 < bytes.len() && bytes[i + 1] == b';' {
+            depth += 1;
+            i += 2;
+            continue;
+        }
+        if depth > 0 && bytes[i] == b';' && i + 1 < bytes.len() && bytes[i + 1] == b')' {
+            depth -= 1;
+            i += 2;
+            continue;
+        }
+        if depth == 0 {
+            out.push(bytes[i] as char);
+        } else if bytes[i] == b'\n' {
+            // Keep the line structure so nothing downstream shifts.
+            out.push('\n');
+        }
+        i += 1;
+    }
+    out
+}
+
 /// Every `syntax <name>` production the vendored syntax sources declare.
 ///
 /// SpecTec spells a variant family as `syntax absheaptype/syn`; the family name
@@ -300,8 +338,7 @@ fn declaration_name(line: &str) -> Option<&str> {
         "class ",
     ] {
         if let Some(rest) = trimmed.strip_prefix(keyword) {
-            let name = rest.split(|c: char| c.is_whitespace() || c == ':' || c == '(').next()?;
-            if !name.is_empty() {
+            if let Some(name) = identifier_prefix(rest) {
                 return Some(name);
             }
         }
@@ -310,6 +347,12 @@ fn declaration_name(line: &str) -> Option<&str> {
 }
 
 /// Whether a line is an inductive constructor, and under what name.
+///
+/// Guillemet-quoted identifiers are kept WITH their quotes. Lean spells a
+/// constructor whose name collides with a keyword as `| «struct»`, and the
+/// probe must ask for `@Ns.Ref_ok.«struct»` -- the bare form does not parse.
+/// An earlier version stopped at the `«` and reported two real constructors of
+/// `Wasm.Core.Ref_ok` as attached to nothing.
 fn constructor_name(line: &str) -> Option<&str> {
     let trimmed = line.trim_start();
     if !line.starts_with(' ') && !line.starts_with('\t') {
@@ -317,9 +360,16 @@ fn constructor_name(line: &str) -> Option<&str> {
         return None;
     }
     let rest = trimmed.strip_prefix("| ")?;
-    let name = rest
-        .split(|c: char| c.is_whitespace() || c == ':' || c == '(' || c == '{')
-        .next()?;
+    identifier_prefix(rest)
+}
+
+/// The leading Lean identifier of `s`, including guillemets when it is quoted.
+fn identifier_prefix(s: &str) -> Option<&str> {
+    if s.starts_with('«') {
+        let close = s.find('»')?;
+        return Some(&s[..close + '»'.len_utf8()]);
+    }
+    let name = s.split(|c: char| c.is_whitespace() || c == ':' || c == '(' || c == '{').next()?;
     (!name.is_empty() && name.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_'))
         .then_some(name)
 }
@@ -428,7 +478,8 @@ fn coverage(spectec_dir: &Path, lean_root: &Path, kind: Kind) -> Result<Coverage
     let mut required: Vec<String> = Vec::new();
     for file in kind.sources() {
         let path = spectec_dir.join(file);
-        let text = crate::repo::read_lossy(CLAUSE, &path)?;
+        let raw = crate::repo::read_lossy(CLAUSE, &path)?;
+        let text = strip_block_comments(&raw);
         let mut names = match kind {
             Kind::Syntax => syntax_names(&text),
             Kind::Rule | Kind::Exec => rule_names(&text),
@@ -711,6 +762,52 @@ syntax absheaptype/sem =
         let _ = std::fs::remove_dir_all(&scratch);
         assert!(markers.is_empty(), "markers: {markers:?}");
         assert_eq!(unattached.len(), 1, "unattached: {unattached:?}");
+    }
+
+    #[test]
+    fn a_block_commented_rule_is_not_an_obligation() {
+        // The pinned `2.3-validation.instructions.spectec` block-comments out its
+        // superseded `Instr_ok/load` and `Instr_ok/store`, replacing them with
+        // the `-val` / `-pack` pairs. Counting them made the denominator 258
+        // where the honest number is 256.
+        let src = "\
+rule Instr_ok/data.drop:
+  C |- DATA.DROP x : eps -> eps
+
+(;
+rule Instr_ok/load:
+  C |- LOAD nt x memarg : at -> nt
+;)
+
+rule Instr_ok/load-val:
+  C |- LOAD nt x memarg : at -> nt
+";
+        let stripped = strip_block_comments(src);
+        assert_eq!(rule_names(&stripped), vec!["Instr_ok/data.drop", "Instr_ok/load-val"]);
+        // Nesting.
+        assert_eq!(strip_block_comments("a(;b(;c;)d;)e").trim(), "ae");
+    }
+
+    #[test]
+    fn a_guillemet_quoted_constructor_is_attached() {
+        // Lean spells a constructor whose name collides with a keyword as
+        // `| «struct»`, and the probe must ask for it the same way. Stopping at
+        // the opening guillemet reported two real constructors of
+        // `Wasm.Core.Ref_ok` as attached to nothing.
+        let scratch = std::env::temp_dir().join("wgg-core-guillemet-test");
+        let _ = std::fs::remove_dir_all(&scratch);
+        std::fs::create_dir_all(&scratch).unwrap();
+        std::fs::write(
+            scratch.join("A.lean"),
+            "namespace N\n\ninductive Ref_ok where\n  \
+             -- core-exec: Ref_ok/struct\n  | «struct» (a : Nat)\n\nend N\n",
+        )
+        .unwrap();
+        let (markers, unattached) = lean_markers(&scratch, Kind::Exec).unwrap();
+        let _ = std::fs::remove_dir_all(&scratch);
+        assert!(unattached.is_empty(), "unattached: {unattached:?}");
+        assert_eq!(markers.len(), 1);
+        assert_eq!(markers[0].declaration, "N.Ref_ok.«struct»");
     }
 
     #[test]

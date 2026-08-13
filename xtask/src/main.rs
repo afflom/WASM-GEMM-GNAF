@@ -25,6 +25,7 @@ mod scan;
 mod schema;
 mod sha1;
 mod sha256;
+mod signature;
 mod spec;
 mod vendor;
 
@@ -78,6 +79,13 @@ ENVIRONMENT CHECKS (question the compiled Lean environment)
                                body by a definitional proof (SPEC 1). The authority
                                JSON supplies the list; Lean's elaborator compares
                                the bodies.
+    signature                  Every SPEC 15 declaration the environment credits is
+                               bound to SPEC's PROPOSITION, restated in full and
+                               closed by `:= @Name`, in
+                               WasmGemmGnaf/Conformance/RequiredSignatures.lean.
+                               SPEC.md supplies the list; Lean's elaborator compares
+                               the types. Without this, a declaration with the right
+                               name and type `Nat` counts as discharged.
 
 GENERATORS (write a tracked file, deterministically)
     manifest [--check]         The ordered acyclic identity stages, as MANIFEST.json
@@ -88,7 +96,7 @@ RELEASE
     gate [--no-mutation]       The normative release gate: SPEC 20.2's thirteen
                                conditions. --no-mutation is for the M6 falsifier,
                                which would otherwise recurse back into this suite.
-    mutation                   Planted falsifiers M1-M13 (SPEC 18). Every mutation is
+    mutation                   Planted falsifiers M1-M15 (SPEC 18). Every mutation is
                                applied to a COPY, never to the repository.
 
 Requires `lake build` first for the environment checks.
@@ -150,10 +158,11 @@ fn dispatch(args: &[String]) -> Result<Outcome> {
         }
         "axioms" => axioms::run(&root),
         "schema" => schema::run(&root),
+        "signature" => signature::run(&root),
         "vendor" => vendor::run(has(rest, "--list")),
         "core" => core::run(&root, has(rest, "--list"), has(rest, "--check")),
         "manifest" => manifest::run(has(rest, "--check")),
-        "docs" => docs::run(),
+        "docs" => docs::run(has(rest, "--check")),
         "gate" => gate::run(&root, has(rest, "--no-mutation")),
         "mutation" => mutation::run(&root),
         "help" | "--help" | "-h" => {

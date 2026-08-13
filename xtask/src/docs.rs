@@ -16,7 +16,15 @@ use crate::spec::{Outcome, Result, SpecError};
 const CLAUSE: &str = "17.3";
 const OUTPUT: &str = "CONFORMANCE.md";
 
-pub fn run() -> Result<Outcome> {
+/// Regenerate `CONFORMANCE.md`, or with `check` only report whether it is current.
+///
+/// The check mode exists because the generated file embeds a LIVE inventory --
+/// module count, line count, proved-theorem count over the whole Lean tree -- so
+/// it goes stale whenever any Lean file changes, not only when a claim changes.
+/// Nothing caught that locally: `reproducible.yml` asserted byte-cleanliness in
+/// CI, so a commit that added Lean modules after the last `just docs` shipped a
+/// stale file and turned CI red one push later. `just vv` now fails first.
+pub fn run(check: bool) -> Result<Outcome> {
     let registry = read_registry()?;
     let claims = registry
         .get("claims")
@@ -24,10 +32,26 @@ pub fn run() -> Result<Outcome> {
         .ok_or_else(|| SpecError::new(CLAUSE, "model/claims.json has no `claims` array"))?;
 
     let text = render(&registry, claims)?;
+    let outstanding = claims.iter().filter(|c| status(c) == "outstanding").count();
+
+    if check {
+        let current = std::fs::read(Path::new(OUTPUT))
+            .map(|b| String::from_utf8_lossy(&b).into_owned())
+            .unwrap_or_default();
+        if current == text {
+            println!("{OUTPUT} current: {} claims, {outstanding} outstanding", claims.len());
+            return Ok(Outcome::Pass);
+        }
+        println!(
+            "{OUTPUT} STALE -- run `just docs`. It embeds a live inventory over the whole \
+             Lean tree, so adding or removing a module makes it stale even when no claim \
+             changed."
+        );
+        return Ok(Outcome::Fail);
+    }
+
     std::fs::write(Path::new(OUTPUT), &text)
         .map_err(|e| SpecError::io(CLAUSE, "cannot write", Path::new(OUTPUT), e))?;
-
-    let outstanding = claims.iter().filter(|c| status(c) == "outstanding").count();
     println!("{OUTPUT}: {} claims, {outstanding} outstanding", claims.len());
     Ok(Outcome::Pass)
 }

@@ -14,6 +14,7 @@ would mean the gate had been weakened.
 | `just axioms` | every `formalProof` claim's transitive axiom closure is inside the SPEC §4 trust base | `M5` |
 | `just claims` | registry is nonempty, ids unique, no orphan dependencies, no `formalProof` row without a Lean declaration | `M2`, `M3`, `M4` |
 | `just schema` | every `scopeCriticalDefinitions` entry of the frozen `WGG-GO-1` authority is bound to its fully spelled-out body by `Iff.rfl` / `rfl` | `M11` |
+| `just signature` | every SPEC §15 declaration the compiled environment credits is bound to SPEC's **proposition** — restated in full in `Conformance/RequiredSignatures.lean` and closed by `:= @Name`, so the comparison is definitional | `M15` |
 | `just vendor` | the vendored Core 3.0 tree, recomputed from CONTENT, matches the literals `Wasm.profile_matches_pinned_revision` stands on — the digest of `SHA256SUMS`, the per-file digests, the file count, the pinned commit — and every vendored rule anchor the conformance map cites is a label the vendored sources define | `M13` |
 | `just core` | how much of the pinned Core 3.0 front end the Lean tree covers, against a checklist extracted from the vendored SpecTec sources; a marker naming an item those sources do not define fails | `M14` |
 | `just mutation` | each decisive checker rejects a planted fault | self-testing |
@@ -59,8 +60,49 @@ to a **copy**, never to the repository.
 | M11 | GO | `GlobalOptimal` weakened by a competitor scope predicate; a deleted binding; a tactic-proved binding | `Iff.rfl` schema binding in `Conformance/Schema.lean`, and the authority-driven audit in `just schema` |
 | M12 | GO | a required declaration present but choice-tainted | SPEC §15 inventory reports `TAINTED`, not discharged |
 | M13 | WS | a flipped digest, an appended line and a deleted entry in `vendor/wasm-spec/SHA256SUMS`, each on a copy of the vendored tree | `vendor::binding`, the checker `just vendor` and release gate step 1 both call |
+| M15 | CM | a required SPEC §15 **name** carrying the type `Nat`, bound at `:= 0`; plus a deleted marker, a tactic-closed binding, a marker naming something SPEC does not require, and a stale SPEC quotation, each on a copy of the binding source | the `:= @Name` coercion in `Conformance/RequiredSignatures.lean`, and `signature::audit` / `required::apply_signatures`, which `just signature`, `just required` and release gate step 2 all call |
 
-M11 and M12 answer the audit's two remaining questions about what a *present* name
+## What a *name* proves, and what it does not
+
+M11, M12 and M15 answer three versions of one question: a declaration is present —
+so what?
+
+M15 answers the sharpest version, and it is the one an external audit put directly:
+
+> The repository's reported 36/58 remains inflated. Its checker verifies names
+> rather than exact proposition types; its own M12 test demonstrates that a
+> matching-name `Nat := 0` is counted as discharged.
+
+That was accurate. `just required` asked `#print axioms` whether each SPEC §15 name
+existed, so **any** type under that name passed. `WasmGemmGnaf/Conformance/RequiredSignatures.lean`
+now restates each required declaration in full and closes it with `:= @Name`. That
+is a definitional coercion: if the declaration's type is not defeq to the stated
+proposition, the module does not elaborate. M15 plants
+`Wasm.m15_planted_validation_progress : Nat := 0` and requires the SPEC §7.3
+`validation_progress` binding closed by `:= @<planted>` to fail with a **type
+mismatch** — not with an unknown identifier, which would mean the plant never
+reached the environment and nothing was rejected — with the real binding as the
+control. It then attacks the wiring, on a copy of the binding source, four ways.
+
+**Applying this check moved the reported ledger from 36 to 34 of 58.** Two names
+are present in the compiled environment but do not carry SPEC's proposition:
+`Wasm.costed_erase_iff_plain_run`, whose right-hand side gains a conjunct
+(`DEV-001` is filed and argues SPEC's literal biconditional is false as written),
+and `Atlas.incremental_eq_full_rebuild`, which gains two hypotheses (no deviation
+is filed). Both are pinned by `-- spec-signature-amended:` / `-- spec-signature-weaker:`
+bindings, so the weaker propositions cannot drift either, and both are reported
+`UNBOUND` by `just required` rather than counted.
+
+There is a residual, and concealing it would be worse than having it: twenty-nine
+of SPEC §15's fifty-eight names have no fenced statement anywhere in `SPEC.md`, and
+for those no tool can decide that the proposition written in the Lean file is the
+one SPEC means. Where SPEC *does* state the theorem in a fenced block — eighteen of
+the thirty-six bindings — `just signature`
+re-reads `SPEC.md` and requires the docstring to quote it verbatim, so a SPEC
+amendment breaks the binding instead of leaving a stale quotation looking normative.
+For the rest, the docstring quotes the governing prose and a reader closes the gap.
+
+M11 and M12 answer the audit's two earlier questions about what a *present* name
 proves. M11 plants the weakening SPEC §1 forbids — the competitor quantifier
 restricted to a named scope — and confirms the definitional binding stops
 elaborating, which is the only thing separating "matches the frozen schema" from

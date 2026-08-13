@@ -33,7 +33,7 @@ type Falsifier = fn(&Path) -> Result<bool>;
 pub fn run(root: &Path) -> Result<Outcome> {
     println!("mutation suite (SPEC 18)\n");
 
-    let falsifiers: [(&str, Falsifier); 14] = [
+    let falsifiers: [(&str, Falsifier); 15] = [
         ("M1 mutated authority bytes rejected by digest recomputation", m1),
         ("M2 duplicate claim id rejected", m2),
         ("M3 orphan claim dependency rejected", m3),
@@ -48,6 +48,7 @@ pub fn run(root: &Path) -> Result<Outcome> {
         ("M12 choice-tainted required declaration reported TAINTED, not discharged", m12),
         ("M13 mutated vendored SHA256SUMS breaks the pinned-revision binding", m13),
         ("M14 fabricated Core coverage marker rejected by the extracted checklist", m14),
+        ("M15 required name carrying `Nat := 0` rejected by the signature binding", m15),
     ];
 
     let mut failed: Vec<&str> = Vec::new();
@@ -796,6 +797,213 @@ fn m14(_root: &Path) -> Result<bool> {
         && count_unmoved
         && rejects_floating
         && rejects_ghost)
+}
+
+// ---------------------------------------------------------------------------
+// M15: a declaration carrying a required SPEC 15 NAME and the type `Nat`, bound
+//      at `:= 0`, must be rejected.
+//
+// This is the exact shape an external audit named:
+//
+//   > The repository's reported 36/58 remains inflated. Its checker verifies
+//   > names rather than exact proposition types; its own M12 test demonstrates
+//   > that a matching-name `Nat := 0` is counted as discharged.
+//
+// It was right. `xtask claims required` asked `#print axioms` whether the name
+// existed, so a `Nat := 0` under the right name passed. `M12` planted precisely
+// that shape and, by construction, only ever tested the choice-taint rule on it.
+//
+// Two halves, as `M11` has:
+//
+//   * the ELABORATOR half. A signature binding stating SPEC section 7.3's
+//     `validation_progress` and closed by `:= @<planted Nat>` must FAIL to
+//     elaborate, with the same binding closed by `:= @Wasm.validation_progress`
+//     as the control. Without the control a typo would make the mutant fail for
+//     an unrelated reason and this falsifier would report PASS having tested
+//     nothing.
+//
+//   * the WIRING half. The elaborator is only consulted if something asks it, so
+//     on a COPY of the binding source the marker is deleted, the `:= @Name` is
+//     replaced by a tactic, the marker is repointed at a name SPEC does not
+//     require, and the SPEC quotation is made stale -- and `signature::audit`
+//     plus `required::apply_signatures` must reject each one.
+//
+// Every mutation is applied to a COPY; `WasmGemmGnaf/` is never written.
+// ---------------------------------------------------------------------------
+
+/// The Lean module carrying the SPEC 15 proposition bindings. M15 mutates a COPY
+/// of its text; the file itself is never written.
+const SIGNATURE_BINDINGS: &str = "WasmGemmGnaf/Conformance/RequiredSignatures.lean";
+
+fn m15(root: &Path) -> Result<bool> {
+    let tmp = TempDir::new("m15")?;
+
+    // ---- the elaborator half ------------------------------------------------
+    let control = probe_source(
+        CLAUSE,
+        root,
+        &tmp.path().join("M15Control.lean"),
+        &signature_binding("@WasmGemmGnaf.Wasm.validation_progress", ""),
+    )?;
+    if !control.success {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the REAL signature binding does not elaborate, so M15 would prove nothing: {}",
+                first_line(&control.combined())
+            ),
+        ));
+    }
+
+    // The mutation: the required name, present, correctly spelled, type `Nat`.
+    let mutant = probe_source(
+        CLAUSE,
+        root,
+        &tmp.path().join("M15Mutant.lean"),
+        &signature_binding(
+            "@WasmGemmGnaf.Wasm.m15_planted_validation_progress",
+            "namespace WasmGemmGnaf.Wasm\n\
+             def m15_planted_validation_progress : Nat := 0\n\
+             end WasmGemmGnaf.Wasm\n\n",
+        ),
+    )?;
+    if mutant.success {
+        return Ok(false);
+    }
+    // It must fail as a TYPE MISMATCH, not because the planted name is unknown:
+    // an "unknown identifier" would mean the plant never entered the environment
+    // and the binding rejected nothing.
+    let rejects_nat = mutant.combined().contains("Type mismatch")
+        || mutant.combined().contains("type mismatch");
+
+    // ---- the wiring half ----------------------------------------------------
+    let spec = fs::read_to_string(Path::new("SPEC.md"))
+        .map_err(|e| SpecError::io(CLAUSE, "cannot read", Path::new("SPEC.md"), e))?;
+    let required = crate::required::required_names(&spec)?;
+    let deviations = crate::signature::deviation_ids()?;
+    let real = fs::read_to_string(Path::new(SIGNATURE_BINDINGS)).map_err(|e| {
+        SpecError::io(CLAUSE, "cannot read", Path::new(SIGNATURE_BINDINGS), e)
+    })?;
+    if !crate::signature::audit(&required, &crate::signature::parse(&real), &deviations, &spec)
+        .is_empty()
+    {
+        return Err(SpecError::new(
+            CLAUSE,
+            "the REAL signature bindings already fail their own audit, so M15's second \
+             half would pass for the wrong reason",
+        ));
+    }
+
+    const MARKER: &str = "-- spec-signature: Wasm.validation_progress\n";
+    const CLOSURE: &str = "  @Wasm.validation_progress\n";
+
+    // (a) the binding deleted: the name is credited by the environment and bound
+    //     by nothing, which is the state the audit found the repository in.
+    let deleted = real.replacen(MARKER, "", 1);
+    if deleted == real {
+        return Err(SpecError::new(CLAUSE, "could not delete the validation_progress marker"));
+    }
+    let bindings = crate::signature::parse(&deleted);
+    let exact = crate::signature::exact_names(&bindings);
+    let rejects_deleted = !exact.contains(&"Wasm.validation_progress".to_string());
+
+    // and the inventory must actually DEMOTE it, not merely notice.
+    let mut demoted = crate::required::classify(
+        &required,
+        &required::flatten(&format!(
+            "'WasmGemmGnaf.Wasm.validation_progress' does not depend on any axioms"
+        )),
+    );
+    let credited_before = demoted.discharged;
+    crate::required::apply_signatures(&mut demoted, &exact);
+    let rejects_in_inventory = credited_before == 1
+        && demoted.discharged == 0
+        && demoted.unsigned == vec!["Wasm.validation_progress".to_string()];
+
+    // (b) closed by a tactic. `by exact @Name` proves the same proposition today
+    //     and accepts anything tomorrow; only `:= @Name` is definitional.
+    let tactic = real.replacen(CLOSURE, "  by exact @Wasm.validation_progress\n", 1);
+    if tactic == real {
+        return Err(SpecError::new(CLAUSE, "could not replace the validation_progress closure"));
+    }
+    let rejects_tactic = crate::signature::audit(
+        &required,
+        &crate::signature::parse(&tactic),
+        &deviations,
+        &spec,
+    )
+    .iter()
+    .any(|f| f.contains("not by `:= @"));
+
+    // (c) a marker naming something SPEC section 15 does not require.
+    let invented = real.replacen(MARKER, "-- spec-signature: Wasm.not_in_spec_15\n", 1);
+    let rejects_invented = crate::signature::audit(
+        &required,
+        &crate::signature::parse(&invented),
+        &deviations,
+        &spec,
+    )
+    .iter()
+    .any(|f| f.contains("SPEC section 15 does not require it"));
+
+    // (d) a stale SPEC quotation. SPEC.md is the source of the quoted block, so
+    //     amending SPEC must break the binding rather than leave a stale
+    //     quotation looking normative.
+    let amended_spec = spec.replacen(
+        "  (Wasm.successors config).Nonempty",
+        "  (Wasm.successors config).Nonempty ∨ True",
+        1,
+    );
+    if amended_spec == spec {
+        return Err(SpecError::new(CLAUSE, "could not amend the SPEC 7.3 progress block"));
+    }
+    let rejects_stale_quote = crate::signature::audit(
+        &required,
+        &crate::signature::parse(&real),
+        &deviations,
+        &amended_spec,
+    )
+    .iter()
+    .any(|f| f.contains("does not quote it verbatim"));
+
+    Ok(rejects_nat
+        && rejects_deleted
+        && rejects_in_inventory
+        && rejects_tactic
+        && rejects_invented
+        && rejects_stale_quote)
+}
+
+/// A standalone signature binding of SPEC section 7.3's `validation_progress`,
+/// closed by `closure`.
+///
+/// The proposition is SPEC's, written out rather than referenced, so the planted
+/// file tests the same statement `Conformance/RequiredSignatures.lean` does. Only
+/// the closure and the optional preamble differ between control and mutant.
+fn signature_binding(closure: &str, preamble: &str) -> String {
+    format!(
+        "import WasmGemmGnaf\n\
+         \n\
+         set_option autoImplicit false\n\
+         \n\
+         open WasmGemmGnaf\n\
+         \n\
+         {preamble}\
+         namespace M15Planted\n\
+         \n\
+         theorem planted_signature :\n\
+         \x20   ∀ {{module : Wasm.Module}} {{config : Wasm.Config}},\n\
+         \x20     Wasm.DeclarativelyValid module →\n\
+         \x20     Wasm.ConfigInstantiates module config →\n\
+         \x20     Wasm.ConfigWellTyped config →\n\
+         \x20     (∃ outcome, Wasm.Halt config outcome) ∨\n\
+         \x20     (∃ trap, Wasm.Trapped config trap) ∨\n\
+         \x20     (∃ exceptionValue, Wasm.Thrown config exceptionValue) ∨\n\
+         \x20     (Wasm.successors config).Nonempty :=\n\
+         \x20 {closure}\n\
+         \n\
+         end M15Planted\n"
+    )
 }
 
 /// Copy a directory tree. Every mutation is applied to a COPY; the vendored

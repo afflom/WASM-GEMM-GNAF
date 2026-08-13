@@ -33,11 +33,18 @@ const EXECUTABLE_WITNESS: [&str; 4] = [
 pub struct Report {
     pub total: usize,
     pub discharged: usize,
-    /// Not discharged: absent, or present but choice-tainted.
+    /// Not discharged: absent, choice-tainted, or with no exact signature binding.
     pub missing: Vec<String>,
     /// Present, but a `Classical.choice` closure in a declaration SPEC section 4
     /// requires to be an executable witness. Also counted in `missing`.
     pub tainted: Vec<String>,
+    /// Present and choice-free -- what the NAME-and-axiom rule alone credits.
+    /// This is the pre-signature verdict, kept so `xtask signature` can ask what
+    /// the environment says without the two checks agreeing by construction.
+    pub credited: Vec<String>,
+    /// Present and choice-free, but with no `-- spec-signature:` binding, so not
+    /// known to carry SPEC's proposition. Also counted in `missing`.
+    pub unsigned: Vec<String>,
 }
 
 impl Report {
@@ -60,9 +67,20 @@ impl Report {
                 ));
             }
         }
+        if !self.unsigned.is_empty() {
+            out.push(format!(
+                "  of which present but not bound to SPEC's proposition: {}",
+                self.unsigned.len()
+            ));
+            for name in &self.unsigned {
+                out.push(format!(
+                    "    UNBOUND  {name}  (no exact `-- spec-signature:` binding, SPEC 15)"
+                ));
+            }
+        }
         if list {
             for name in &self.missing {
-                if !self.tainted.contains(name) {
+                if !self.tainted.contains(name) && !self.unsigned.contains(name) {
                     out.push(format!("    MISSING  {name}"));
                 }
             }
@@ -196,8 +214,27 @@ pub fn run(root: &Path, list: bool, check: bool) -> Result<Outcome> {
     Ok(if check && !report.missing.is_empty() { Outcome::Fail } else { Outcome::Pass })
 }
 
-/// Ask the compiled environment about every declaration SPEC section 15 requires.
+/// The SPEC section 15 inventory: the compiled environment's answer, then the
+/// signature bindings applied to it.
+///
+/// Both halves are needed and neither is sufficient. `#print axioms` decides
+/// whether a declaration EXISTS and what it rests on; only the elaborated
+/// `:= @Name` bindings in `Conformance/RequiredSignatures.lean` decide whether it
+/// carries SPEC's PROPOSITION. An external audit found this command crediting a
+/// name whose type was `Nat`, which is exactly the gap the second half closes.
 pub fn report(root: &Path) -> Result<Report> {
+    let mut report = environment_report(root)?;
+    let bindings = crate::signature::tracked_bindings()?;
+    apply_signatures(&mut report, &crate::signature::exact_names(&bindings));
+    Ok(report)
+}
+
+/// The compiled environment's answer alone: present, and choice-free where SPEC
+/// section 4 requires an executable witness. Split out because `xtask signature`
+/// must be able to ask what the environment says WITHOUT the signature rule
+/// already applied -- otherwise the two checks would agree by construction and
+/// neither would test the other.
+pub fn environment_report(root: &Path) -> Result<Report> {
     let spec = std::fs::read(Path::new("SPEC.md"))
         .map(|b| String::from_utf8_lossy(&b).into_owned())
         .map_err(|e| SpecError::io(CLAUSE, "cannot read", Path::new("SPEC.md"), e))?;
@@ -206,6 +243,28 @@ pub fn report(root: &Path) -> Result<Report> {
     let probe: Vec<String> = candidates(&names).into_iter().flatten().collect();
     let result = probe_axioms(CLAUSE, root, PROBE, &probe)?;
     Ok(classify(&names, &flatten(&result.combined())))
+}
+
+/// Demote every credited name with no EXACT signature binding.
+///
+/// Pure, and separated from the probe on purpose: this is the rule `M15` has to
+/// be able to attack directly. Deleting the body of this function must turn M15
+/// red -- that is what makes the falsifier a test of the rule rather than of its
+/// own arithmetic.
+pub fn apply_signatures(report: &mut Report, exact: &[String]) {
+    let unsigned: Vec<String> = report
+        .credited
+        .iter()
+        .filter(|name| !exact.iter().any(|e| e == *name))
+        .cloned()
+        .collect();
+    for name in &unsigned {
+        if !report.missing.contains(name) {
+            report.missing.push(name.clone());
+        }
+        report.discharged = report.discharged.saturating_sub(1);
+    }
+    report.unsigned = unsigned;
 }
 
 /// Namespace each bare name under `WasmGemmGnaf`; a `Theorems/` re-export
@@ -238,6 +297,7 @@ pub fn classify(names: &[&str], flat: &str) -> Report {
     let mut discharged = 0usize;
     let mut missing: Vec<String> = Vec::new();
     let mut tainted: Vec<String> = Vec::new();
+    let mut credited: Vec<String> = Vec::new();
 
     for (name, cands) in names.iter().zip(&candidates) {
         let Some(closure) = cands.iter().find_map(|c| closure_of(flat, c)) else {
@@ -251,14 +311,15 @@ pub fn classify(names: &[&str], flat: &str) -> Report {
             missing.push((*name).to_string());
         } else {
             discharged += 1;
+            credited.push((*name).to_string());
         }
     }
 
-    Report { total: names.len(), discharged, missing, tainted }
+    Report { total: names.len(), discharged, missing, tainted, credited, unsigned: Vec::new() }
 }
 
 /// The declaration list fenced in SPEC section 15.
-fn required_names(spec: &str) -> Result<Vec<&str>> {
+pub fn required_names(spec: &str) -> Result<Vec<&str>> {
     const HEADING: &str = "## 15. Required Lean declarations";
     let start = spec
         .find(HEADING)
