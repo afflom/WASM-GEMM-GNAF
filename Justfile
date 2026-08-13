@@ -7,7 +7,7 @@ default: vv
 xtask := "cargo run --quiet --release -p xtask --"
 
 # The whole gate. Expected to FAIL at step 9 while WGG-GO-1 is outstanding.
-vv: tools root-check firewall manifest-check releasepath build required claims axioms
+vv: tools root-check firewall manifest-check releasepath build required schema claims axioms
     @{{xtask}} gate
 
 bootstrap:
@@ -85,6 +85,9 @@ releasepath: tools
 required: tools
     @{{xtask}} claims required --list
 
-# SPEC 1: the frozen WGG-GO-1 schema binding is definitional (Iff.rfl).
-schema:
-    @lake build WasmGemmGnaf.Conformance.Schema && echo 'schema binding holds'
+# SPEC 1: every scopeCriticalDefinitions entry of the frozen WGG-GO-1 authority
+# is bound to its fully spelled-out body by Iff.rfl / rfl. The authority JSON is
+# the source of the list; the Lean elaborator is the comparator.
+schema: tools
+    @lake build WasmGemmGnaf.Conformance.Schema
+    @{{xtask}} schema

@@ -458,11 +458,21 @@ restricting the input domain to make the sum tractable; or asserting
 `released_wasm_gemm_gnaf_global_optimal` with any hypothesis attached. Each would
 produce a different, weaker proposition wearing the release theorem's name.
 
+Each of those substitutions is now mechanically detectable rather than merely
+prohibited in prose. `WasmGemmGnaf/Conformance/Schema.lean` states every entry of
+the authority's `scopeCriticalDefinitions` against its fully spelled-out body and
+closes it definitionally, so a narrowed quantifier, a dropped conjunct, an added
+hypothesis or a substituted scoped predicate stops elaborating; and `just schema`
+reads that list from `authority/global-optimality-WGG-GO-1.json` rather than
+transcribing it, so the frozen authority — not this repository — decides what must
+be bound.
+
 ## 7. Reproducing this outcome
 
 ```
 just claims     # registry: WGG-GO-1 present, status incomplete
 just axioms     # axiom closure of every proved declaration
+just schema     # every scope-critical definition bound to the frozen schema
 just vv         # full gate; FAILS at step 9 by design
 ```
 

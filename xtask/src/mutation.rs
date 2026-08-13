@@ -17,10 +17,15 @@ use crate::gate::{run_command, self_exe};
 use crate::json::{self, Value};
 use crate::lean::probe_source;
 use crate::required;
+use crate::schema;
 use crate::sha256;
 use crate::spec::{Outcome, Result, SpecError};
 
 const CLAUSE: &str = "18";
+
+/// The Lean module carrying the WGG-GO-1 schema bindings. M11 mutates a COPY of
+/// its text; the file itself is never written.
+const SCHEMA_BINDINGS: &str = "WasmGemmGnaf/Conformance/Schema.lean";
 
 /// A planted falsifier: `Ok(true)` means the gate under test REJECTED the fault.
 type Falsifier = fn(&Path) -> Result<bool>;
@@ -39,7 +44,7 @@ pub fn run(root: &Path) -> Result<Outcome> {
         ("M8 root module elaborates directly, not via stale olean", m8),
         ("M9 conclusion-dependent import rejected by firewall", m9),
         ("M10 manifest stages acyclic and not self-bound", m10),
-        ("M11 weakened GlobalOptimal breaks the Iff.rfl schema binding", m11),
+        ("M11 weakened GlobalOptimal breaks the Iff.rfl schema binding and the schema audit", m11),
         ("M12 choice-tainted required declaration reported TAINTED, not discharged", m12),
     ];
 
@@ -319,7 +324,45 @@ fn m11(root: &Path) -> Result<bool> {
             "    (scope : ByteArray → Prop)\n",
         ),
     )?;
-    Ok(!mutant.success)
+    if mutant.success {
+        return Ok(false);
+    }
+
+    // The elaborator rejects the weakening. The second half checks the WIRING
+    // that decides whether the elaborator is ever asked: `xtask schema` reads
+    // the authority's own `scopeCriticalDefinitions` and audits the bindings.
+    // Two ways to defeat it, both attacked on a COPY of the binding source:
+    //
+    //   * delete the binding, leaving the definition unbound;
+    //   * keep the binding but close it with a tactic, which proves at most a
+    //     propositional equivalence and so no longer distinguishes the frozen
+    //     schema from a weaker paraphrase.
+    let required = schema::scope_critical_definitions()?;
+    let real = fs::read_to_string(Path::new(SCHEMA_BINDINGS))
+        .map_err(|e| SpecError::io(CLAUSE, "cannot read", Path::new(SCHEMA_BINDINGS), e))?;
+    if !schema::audit(&required, &schema::parse(&real)).is_empty() {
+        return Err(SpecError::new(
+            CLAUSE,
+            "the REAL bindings are already unbound, so M11's second half would pass \
+             for the wrong reason",
+        ));
+    }
+
+    let deleted = real.replace("-- authority-binding: GlobalOptimal\n", "");
+    let names_unbound = schema::audit(&required, &schema::parse(&deleted));
+
+    let paraphrased = real.replacen(
+        "              Foundation.CanonicalBytesLE releasedBytes competitorBytes)) :=\n  Iff.rfl",
+        "              Foundation.CanonicalBytesLE releasedBytes competitorBytes)) := by\n  \
+         simp [GlobalOptimal]",
+        1,
+    );
+    let rejects_tactic = schema::audit(&required, &schema::parse(&paraphrased));
+
+    Ok(names_unbound.iter().any(|f| f.starts_with("GlobalOptimal -- NO BINDING"))
+        && rejects_tactic
+            .iter()
+            .any(|f| f.contains("not by definitional reduction")))
 }
 
 /// A standalone `Iff.rfl` binding of `left` against the frozen WGG-GO-1 schema.

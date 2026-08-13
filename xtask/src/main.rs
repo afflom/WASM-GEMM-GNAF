@@ -21,6 +21,7 @@ mod repo;
 mod required;
 mod root;
 mod scan;
+mod schema;
 mod sha256;
 mod spec;
 mod vendor;
@@ -55,6 +56,11 @@ ENVIRONMENT CHECKS (question the compiled Lean environment)
     claims list                The claim registry with each claim's level and status
                                (SPEC 17.1).
     axioms                     Axiom closure of every formalProof claim (SPEC 19).
+    schema                     Every `scopeCriticalDefinitions` entry of the frozen
+                               WGG-GO-1 authority is bound to its fully spelled-out
+                               body by a definitional proof (SPEC 1). The authority
+                               JSON supplies the list; Lean's elaborator compares
+                               the bodies.
 
 GENERATORS (write a tracked file, deterministically)
     manifest [--check]         The ordered acyclic identity stages, as MANIFEST.json
@@ -126,6 +132,7 @@ fn dispatch(args: &[String]) -> Result<Outcome> {
             }
         }
         "axioms" => axioms::run(&root),
+        "schema" => schema::run(&root),
         "manifest" => manifest::run(has(rest, "--check")),
         "docs" => docs::run(),
         "gate" => gate::run(&root, has(rest, "--no-mutation")),

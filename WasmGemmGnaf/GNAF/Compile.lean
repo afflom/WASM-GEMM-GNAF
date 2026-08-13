@@ -715,28 +715,41 @@ theorem checkList_cons2 {C : Wasm.Ctx} {h k m : Nat} {i : Wasm.Instr}
     (hl : checkList C k l = some m) : checkList C h (i :: l) = some m := by
   simp [hi, hl]
 
-/-- The context in which a structured control instruction checks its body. -/
-abbrev pushLabel (C : Wasm.Ctx) (h : Nat) : Wasm.Ctx := { C with labels := h :: C.labels }
+/-- The context in which a structured control instruction of empty block type
+checks its body: one more label, of result arity `0`.  Empty block type means
+the label's result type is empty, and `Wasm.Ctx.labels` records label result
+arities (`Wasm/Validate.lean`, following `valid/conventions.rst` "Contexts"). -/
+abbrev pushLabel (C : Wasm.Ctx) : Wasm.Ctx := { C with labels := 0 :: C.labels }
 
-@[simp] theorem pushLabel_numLocals (C : Wasm.Ctx) (h : Nat) :
-    (pushLabel C h).numLocals = C.numLocals := rfl
+@[simp] theorem pushLabel_numLocals (C : Wasm.Ctx) :
+    (pushLabel C).numLocals = C.numLocals := rfl
+
+/-!
+The three lemmas below check a body at height `0`, not at the enclosing height:
+a block body is typed in a fresh operand frame, so it can neither consume nor
+leave operands belonging to the enclosing frame.  That is the `val_height`
+discipline of `vendor/wasm-spec/document/core/appendix/algorithm.rst`
+(`push_ctrl` / `pop_val` / `pop_ctrl`).  Every code lemma in this file is
+universally quantified over the height, so the enclosing height is simply
+instantiated to `0` inside a block.
+-/
 
 theorem checkList_ifE (C : Wasm.Ctx) (h : Nat) (a b : List Wasm.Instr)
-    (ha : checkList (pushLabel C h) h a = some h)
-    (hb : checkList (pushLabel C h) h b = some h) :
+    (ha : checkList (pushLabel C) 0 a = some 0)
+    (hb : checkList (pushLabel C) 0 b = some 0) :
     checkList C (h + 1) [ifE a b] = some h := by
   unfold checkList at *
   simp only [Wasm.Expr.ofList, Wasm.checkExpr, ifE, Wasm.checkInstr, ha, hb, and_self,
     if_pos]
 
 theorem checkList_blockE (C : Wasm.Ctx) (h : Nat) (b : List Wasm.Instr)
-    (hb : checkList (pushLabel C h) h b = some h) :
+    (hb : checkList (pushLabel C) 0 b = some 0) :
     checkList C h [blockE b] = some h := by
   unfold checkList at *
   simp only [Wasm.Expr.ofList, Wasm.checkExpr, blockE, Wasm.checkInstr, hb, if_pos]
 
 theorem checkList_loopE (C : Wasm.Ctx) (h : Nat) (b : List Wasm.Instr)
-    (hb : checkList (pushLabel C h) h b = some h) :
+    (hb : checkList (pushLabel C) 0 b = some 0) :
     checkList C h [loopE b] = some h := by
   unfold checkList at *
   simp only [Wasm.Expr.ofList, Wasm.checkExpr, loopE, Wasm.checkInstr, hb, if_pos]
@@ -756,13 +769,13 @@ theorem checkList_setConst (C : Wasm.Ctx) (h i n : Nat) (hi : i < C.numLocals) :
 /-- The counting loop is operand-stack neutral. -/
 theorem checkList_countLoop (C : Wasm.Ctx) (h c n : Nat) (body : List Wasm.Instr)
     (hc : c < C.numLocals)
-    (hbody : checkList (pushLabel (pushLabel C h) h) h body = some h) :
+    (hbody : checkList (pushLabel (pushLabel C)) 0 body = some 0) :
     checkList C h (countLoop c n body) = some h := by
   refine checkList_app2 (checkList_setConst C h c 0 hc) ?_
   refine checkList_blockE C h _ ?_
-  refine checkList_loopE _ h _ ?_
+  refine checkList_loopE _ 0 _ ?_
   rw [List.append_assoc]
-  refine checkList_app2 (k := h) (b := body ++ _) ?_ ?_
+  refine checkList_app2 (k := 0) (b := body ++ _) ?_ ?_
   · simp [Wasm.checkInstr, constI, geUI, hc]
   · refine checkList_app2 hbody ?_
     simp [Wasm.checkInstr, constI, addI, Wasm.SubsetIBinOp, hc]
@@ -770,13 +783,13 @@ theorem checkList_countLoop (C : Wasm.Ctx) (h c n : Nat) (body : List Wasm.Instr
 /-- The register-bounded counting loop is operand-stack neutral. -/
 theorem checkList_countLoopVar (C : Wasm.Ctx) (h c ext : Nat) (body : List Wasm.Instr)
     (hc : c < C.numLocals) (hext : ext < C.numLocals)
-    (hbody : checkList (pushLabel (pushLabel C h) h) h body = some h) :
+    (hbody : checkList (pushLabel (pushLabel C)) 0 body = some 0) :
     checkList C h (countLoopVar c ext body) = some h := by
   refine checkList_app2 (checkList_setConst C h c 0 hc) ?_
   refine checkList_blockE C h _ ?_
-  refine checkList_loopE _ h _ ?_
+  refine checkList_loopE _ 0 _ ?_
   rw [List.append_assoc]
-  refine checkList_app2 (k := h) (b := body ++ _) ?_ ?_
+  refine checkList_app2 (k := 0) (b := body ++ _) ?_ ?_
   · simp [Wasm.checkInstr, geUI, hc, hext]
   · refine checkList_app2 hbody ?_
     simp [Wasm.checkInstr, constI, addI, Wasm.SubsetIBinOp, hc]
@@ -784,8 +797,8 @@ theorem checkList_countLoopVar (C : Wasm.Ctx) (h c ext : Nat) (body : List Wasm.
 /-- A tag dispatch is operand-stack neutral. -/
 theorem checkList_dispatchOn (C : Wasm.Ctx) (h t k : Nat) (a b : List Wasm.Instr)
     (ht : t < C.numLocals)
-    (ha : checkList (pushLabel C h) h a = some h)
-    (hb : checkList (pushLabel C h) h b = some h) :
+    (ha : checkList (pushLabel C) 0 a = some 0)
+    (hb : checkList (pushLabel C) 0 b = some 0) :
     checkList C h (dispatchOn t k a b) = some h := by
   unfold dispatchOn
   refine checkList_app2 (a := [Wasm.Instr.localGet t, constI k, eqI]) ?_
@@ -863,11 +876,11 @@ theorem checkList_classifyCode (e : CompileEnv) (C : Wasm.Ctx) (h t : Nat)
   · simp only [List.append_assoc]
     refine checkList_app2 (checkList_setConst C h t _ ht) ?_
     refine checkList_app2 (checkList_headerOkCode e C h) ?_
-    refine checkList_ifE C h _ _ ?_ (checkList_setConst _ h t 1 ht)
-    refine checkList_app2 (checkList_tagsKnownCode e _ h) ?_
-    refine checkList_ifE _ h _ _ ?_ (checkList_setConst _ h t 2 ht)
-    refine checkList_app2 (checkList_compatCode e _ h) ?_
-    exact checkList_ifE _ h _ _ (checkList_nil _ h) (checkList_setConst _ h t 1 ht)
+    refine checkList_ifE C h _ _ ?_ (checkList_setConst _ 0 t 1 ht)
+    refine checkList_app2 (checkList_tagsKnownCode e _ 0) ?_
+    refine checkList_ifE _ 0 _ _ ?_ (checkList_setConst _ 0 t 2 ht)
+    refine checkList_app2 (checkList_compatCode e _ 0) ?_
+    exact checkList_ifE _ 0 _ _ (checkList_nil _ 0) (checkList_setConst _ 0 t 1 ht)
 
 theorem checkList_layoutTestCode (e : CompileEnv) (C : Wasm.Ctx) (h t field cls : Nat)
     (ht : t < C.numLocals) : checkList C h (layoutTestCode e t field cls) = some h := by
@@ -875,7 +888,7 @@ theorem checkList_layoutTestCode (e : CompileEnv) (C : Wasm.Ctx) (h t field cls 
   refine checkList_app2 (checkList_u16Code e C h field) ?_
   refine checkList_app2 (checkList_widthCode e C (h + 1)) ?_
   refine checkList_cons2 (k := h + 1) ?_
-    (checkList_ifE C h _ _ (checkList_setConst _ h t cls ht) (checkList_nil _ h))
+    (checkList_ifE C h _ _ (checkList_setConst _ 0 t cls ht) (checkList_nil _ 0))
   simp [Wasm.checkInstr, eqI]
 
 theorem checkList_layoutCode (e : CompileEnv) (C : Wasm.Ctx) (h t : Nat)
@@ -943,16 +956,15 @@ theorem checkList_code {s : Sig} {p : Plan} {t : Sig} (hp : HasType s p t) :
       Nat.le_trans (Nat.le_max_right _ _) (Nat.le_max_right _ _)
     have hT : e.tempLocal d < C.numLocals := by
       unfold CompileEnv.tempLocal; omega
-    have hT' : ∀ k : Nat, e.tempLocal d < (pushLabel C k).numLocals := fun _ => hT
     simp only [code]
     refine checkList_app2 (checkList_classifyCode e C h _ hT) ?_
     refine checkList_dispatchOn C h _ 0 _ _ hT
-      (ihv e d scr _ h hreg (by simp only [pushLabel_numLocals]; omega)) ?_
-    refine checkList_dispatchOn _ h _ 1 _ _ (hT' h)
-      (ihi e d scr _ h hreg (by simp only [pushLabel_numLocals]; omega)) ?_
-    exact checkList_dispatchOn _ h _ 2 _ _ (hT' h)
-      (ihu e d scr _ h hreg (by simp only [pushLabel_numLocals]; omega))
-      (ihx e d scr _ h hreg (by simp only [pushLabel_numLocals]; omega))
+      (ihv e d scr _ 0 hreg (by simp only [pushLabel_numLocals]; omega)) ?_
+    refine checkList_dispatchOn _ 0 _ 1 _ _ hT
+      (ihi e d scr _ 0 hreg (by simp only [pushLabel_numLocals]; omega)) ?_
+    exact checkList_dispatchOn _ 0 _ 2 _ _ hT
+      (ihu e d scr _ 0 hreg (by simp only [pushLabel_numLocals]; omega))
+      (ihx e d scr _ 0 hreg (by simp only [pushLabel_numLocals]; omega))
   | @dispatchLayout s t r c g _ _ _ ihr ihc ihg =>
     intro e d scr C h hreg hloc
     simp only [Plan.depth] at hloc
@@ -963,14 +975,13 @@ theorem checkList_code {s : Sig} {p : Plan} {t : Sig} (hp : HasType s p t) :
       Nat.le_trans (Nat.le_max_right _ _) (Nat.le_max_right _ _)
     have hT : e.tempLocal d < C.numLocals := by
       unfold CompileEnv.tempLocal; omega
-    have hT' : ∀ k : Nat, e.tempLocal d < (pushLabel C k).numLocals := fun _ => hT
     simp only [code]
     refine checkList_app2 (checkList_layoutCode e C h _ hT) ?_
     refine checkList_dispatchOn C h _ 0 _ _ hT
-      (ihr e d scr _ h hreg (by simp only [pushLabel_numLocals]; omega)) ?_
-    exact checkList_dispatchOn _ h _ 1 _ _ (hT' h)
-      (ihc e d scr _ h hreg (by simp only [pushLabel_numLocals]; omega))
-      (ihg e d scr _ h hreg (by simp only [pushLabel_numLocals]; omega))
+      (ihr e d scr _ 0 hreg (by simp only [pushLabel_numLocals]; omega)) ?_
+    exact checkList_dispatchOn _ 0 _ 1 _ _ hT
+      (ihc e d scr _ 0 hreg (by simp only [pushLabel_numLocals]; omega))
+      (ihg e d scr _ 0 hreg (by simp only [pushLabel_numLocals]; omega))
   | @branch s t co x y hco _ _ ihx ihy =>
     intro e d scr C h hreg hloc
     simp only [Plan.depth] at hloc
@@ -987,8 +998,8 @@ theorem checkList_code {s : Sig} {p : Plan} {t : Sig} (hp : HasType s p t) :
         | scratchAtLeast _ => simp [Cond.readsReg] at hr
       unfold CompileEnv.regLocal; omega
     · exact checkList_ifE C h _ _
-        (ihx e d scr _ h hreg (by simp only [pushLabel_numLocals]; omega))
-        (ihy e d scr _ h hreg (by simp only [pushLabel_numLocals]; omega))
+        (ihx e d scr _ 0 hreg (by simp only [pushLabel_numLocals]; omega))
+        (ihy e d scr _ 0 hreg (by simp only [pushLabel_numLocals]; omega))
   | @pack s src dst map w _ _ _ =>
     intro e d scr C h hreg hloc
     simp only [Plan.depth] at hloc
@@ -1036,7 +1047,7 @@ theorem checkList_code {s : Sig} {p : Plan} {t : Sig} (hp : HasType s p t) :
     refine checkList_app2
       (a := [Wasm.Instr.localGet (e.tempLocal d),
              Wasm.Instr.localSet (e.regLocal ir)]) ?_
-      (ih e (d + 1) scr _ h hreg (by simp only [pushLabel_numLocals]; omega))
+      (ih e (d + 1) scr _ 0 hreg (by simp only [pushLabel_numLocals]; omega))
     simp [Wasm.checkInstr, hT, hI]
   | @loopNest s axis body hix _ ih =>
     intro e d scr C h hreg hloc
@@ -1049,7 +1060,7 @@ theorem checkList_code {s : Sig} {p : Plan} {t : Sig} (hp : HasType s p t) :
     refine checkList_app2
       (a := [Wasm.Instr.localGet (e.tempLocal d),
              Wasm.Instr.localSet (e.regLocal axis.indexReg)]) ?_
-      (ih e (d + 1) scr _ h hreg (by simp only [pushLabel_numLocals]; omega))
+      (ih e (d + 1) scr _ 0 hreg (by simp only [pushLabel_numLocals]; omega))
     simp [Wasm.checkInstr, hT, hR]
   | @tiled s o ti ex body _ _ ih =>
     intro e d scr C h hreg hloc
@@ -1058,7 +1069,7 @@ theorem checkList_code {s : Sig} {p : Plan} {t : Sig} (hp : HasType s p t) :
     have hT : e.tempLocal d < C.numLocals := by unfold CompileEnv.tempLocal; omega
     refine checkList_countLoop C h _ _ _ hT ?_
     refine checkList_app2 ?_
-      (ih e (d + 1) scr _ h hreg (by simp only [pushLabel_numLocals]; omega))
+      (ih e (d + 1) scr _ 0 hreg (by simp only [pushLabel_numLocals]; omega))
     by_cases hr : 0 < e.regs
     · have hR : e.regLocal 0 < C.numLocals := by unfold CompileEnv.regLocal; omega
       simp [hr, Wasm.checkInstr, hT, hR]
@@ -1225,7 +1236,7 @@ theorem gemmIndex_gemmExports (e : CompileEnv) (b : List Wasm.Instr) :
 body is accepted at the ABI arity. -/
 theorem validate_moduleOf (e : CompileEnv) (b : List Wasm.Instr)
     (hbody : Wasm.checkExpr
-      { numLocals := e.numLocals, globals := [], numTags := 0, labels := [] } 0
+      { numLocals := e.numLocals, globals := [], numTags := 0, labels := [1] } 0
       (Wasm.Expr.ofList b) = some 1) :
     Wasm.validate (moduleOf e b) = true := by
   have hfunc : Wasm.Module.checkFunc (moduleOf e b)
@@ -1237,7 +1248,7 @@ theorem validate_moduleOf (e : CompileEnv) (b : List Wasm.Instr)
           { type := 0
             locals := List.replicate e.declaredLocals (Wasm.ValType.num .i32)
             body := Wasm.Expr.ofList b } =
-        { numLocals := e.numLocals, globals := [], numTags := 0, labels := [] } := by
+        { numLocals := e.numLocals, globals := [], numTags := 0, labels := [1] } := by
       simp [Wasm.Module.funcCtx, moduleOf, Wasm.gemmFuncType, CompileEnv.numLocals]
     simp only [Wasm.Module.checkFunc, funcTypeAt_zero, hctx, hbody]
     simp [Wasm.gemmFuncType, Wasm.Module.isI32, all_replicate_isI32]
@@ -1258,8 +1269,22 @@ theorem validate_moduleOf (e : CompileEnv) (b : List Wasm.Instr)
       List.getElem?_cons_zero, funcTypeAt_zero]
     rfl
   have hstart : Wasm.Module.checkStart (moduleOf e b) = true := rfl
+  have htypes : Wasm.Module.checkTypes (moduleOf e b) = true := rfl
+  -- The two pinned export names are distinct.  `nameOfString` goes through
+  -- `String.toByteArray`, which the kernel will not unfold, so this is proved
+  -- from `Wasm.gemmExportName_ne_memoryExportName` rather than by `decide`;
+  -- that keeps the closure free of `Classical.choice`.
+  have hnames : Wasm.Module.checkExports (moduleOf e b) = true := by
+    have hne : Wasm.memoryExportName ≠ Wasm.gemmExportName :=
+      fun h => Wasm.gemmExportName_ne_memoryExportName h.symm
+    have hb : (Wasm.memoryExportName == Wasm.gemmExportName) = false :=
+      beq_eq_false_iff_ne.mpr hne
+    show (!((Wasm.memoryExportName == Wasm.gemmExportName) || false) &&
+          (!false && true)) = true
+    rw [hb]
+    rfl
   unfold Wasm.validate
-  rw [hclosed, hmems, hglobals, htags, hfuncs, hexpmem, hgemm, hstart]
+  rw [hclosed, hmems, hglobals, htags, hfuncs, hexpmem, hgemm, hstart, htypes, hnames]
   rfl
 
 /-- **SPEC §11.4 / §7.3.**  The compiler emits only modules that pass release
@@ -1269,11 +1294,11 @@ theorem compile_validates {s t : Sig} (c : CheckedPlan s t) :
   refine validate_moduleOf (envOf s c.plan) (bodyCode (envOf s c.plan) s.scratch c.plan) ?_
   have hloc : 2 + (envOf s c.plan).regs + 0 + c.plan.depth + 1 ≤
       ({ numLocals := (envOf s c.plan).numLocals, globals := [], numTags := 0,
-         labels := [] } : Wasm.Ctx).numLocals := by
+         labels := [1] } : Wasm.Ctx).numLocals := by
     simp only [envOf, CompileEnv.numLocals, CompileEnv.declaredLocals]
     omega
   have hcode := checkList_code c.typed (envOf s c.plan) 0 s.scratch
-    { numLocals := (envOf s c.plan).numLocals, globals := [], numTags := 0, labels := [] }
+    { numLocals := (envOf s c.plan).numLocals, globals := [], numTags := 0, labels := [1] }
     0 (by simp [envOf]) hloc
   exact checkList_app2 hcode (checkList_loadAt _ 0 _)
 

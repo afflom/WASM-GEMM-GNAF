@@ -27,6 +27,110 @@
   table, bulk-memory, tail-call, `try_table`, 64-bit and floating point --- is
   grammatically expressible and is rejected here.
 
+  ## Correspondence with the vendored Core 3.0 validation rules
+
+  The vendored normative text is `vendor/wasm-spec/document/core/valid/`.  Two
+  things about that text govern what can be checked against it here.
+
+  1. In the vendored tree the *bodies* of the typing rules are SpecTec macro
+     references --- `valid/instructions.rst` writes `${rule: Instr_ok/load-val}`
+     and `valid/modules.rst` writes `${rule: Module_ok}` --- and the `.watsup`
+     sources those expand from are not part of the vendored snapshot.  What the
+     snapshot does state in full is: the prose of `valid/conventions.rst`
+     (contexts, the label stack, polymorphism), the notes of
+     `valid/instructions.rst`, and --- decisively --- the complete
+     sound-and-complete type-checking algorithm of
+     `vendor/wasm-spec/document/core/appendix/algorithm.rst`, which
+     `valid/conventions.rst` ("Conventions") names as the algorithmic
+     counterpart of the declarative rules.  Every correspondence claimed below
+     is to text that is literally present in the snapshot.
+
+  2. `valid/conventions.rst` ("Contexts") fixes the shape of the context:
+     *Labels* are "the stack of labels accessible from the current position,
+     represented by their result type".  The judgment below therefore records a
+     label as its result *arity*; since every value of the subset is an `i32`,
+     an arity is a complete result type.
+
+  The judgment is stated frame-relative, exactly as
+  `appendix/algorithm.rst` prescribes.  There, `push_ctrl` records
+  `val_height := vals.size()` on entering a block, `pop_val` raises an error
+  when `vals.size() = ctrls[0].val_height` --- so a block may not consume
+  operands pushed before it was entered --- and `pop_ctrl` requires
+  `vals.size() = frame.val_height` after the block's results are popped.  Here
+  a block body is typed at height `0` and must return to `0`, so `Nat` itself
+  is the underflow check: the frame floor is structurally unreachable.  This is
+  what the earlier revision of this file got wrong: it typed a block body at
+  the *enclosing absolute* height, which admitted
+
+      i32.const 0 ; block (drop ; i32.const 0) ; drop
+
+  --- a module that Core validation rejects, because the `drop` inside the
+  block underflows the block's frame.
+
+  Instruction by instruction, and citing `appendix/algorithm.rst`'s
+  `func validate(opcode)` unless noted:
+
+  * `nop`, `i32.const`, `drop`, the `i32` binary/test/relational operators ---
+    the `i32.add` and `drop` cases; `drop` is value-polymorphic
+    (`valid/instructions.rst`, note under `_valid-drop`) but every subset value
+    is `i32`, so a height is a type.
+  * `local.get`/`local.set`/`local.tee` --- the `local.get x`/`local.set x`
+    cases.  Core's initialization tracking (`locals_init`) is vacuous here:
+    `i32` is defaultable, so `get_local` never fails.
+  * `global.get`/`global.set` --- `valid/instructions.rst` `_valid-global.get`
+    / `_valid-global.set`; the premises are `C.globals[x] = mut t` and, for
+    `global.set`, that the mutability is `var`.
+  * `t.load` / `t.store` --- `valid/instructions.rst` `_valid-load-val` /
+    `_valid-store-val`.  Two premises: the memory index must name a declared
+    memory (here memory `0`, and `Module.checkMems` declares exactly one), and
+    the alignment must not exceed the access width, `2 ^ memarg.align <= |t|/8`.
+    For full-width `i32` that is `2 ^ align <= 4`, i.e. `align <= 2`; see
+    `alignOk_iff_pow_le`.  `syntax/instructions.rst` ("Memory Instructions")
+    fixes `align` as the exponent of a power of two.
+  * `memory.size` / `memory.grow` --- `valid/instructions.rst`
+    `_valid-memory.size` / `_valid-memory.grow`, on the single declared memory.
+  * `block` / `loop` / `if` --- the `block`/`loop`/`if`/`end`/`else` cases, with
+    the frame discipline described above.  Only the empty block type is
+    admitted, so `Blocktype_ok` (`valid/types.rst`, "Block Types") is the
+    trivial instance and both `label_types` alternatives (start types for
+    `loop`, end types for `block`/`if`) are the empty result type.
+  * `br` / `br_if` --- the `br n` / `br_if n` cases, together with the note
+    under `valid/instructions.rst` `_valid-br` that the label index space
+    "contains the most recent label first".
+  * `throw` --- the `throw x` case; `Module.checkTag` pins every declared tag to
+    `[i32] -> []`, so popping one operand is popping `tags[x].type.params`.
+  * function bodies --- `valid/modules.rst` ("Functions"), plus
+    `appendix/algorithm.rst`: "every function has an implicit outermost label
+    that corresponds to an implicit block frame".  `Module.funcCtx` therefore
+    seeds the label stack with the function's own result arity.
+
+  ## What is deliberately *not* modelled
+
+  The judgment below is a **sound restriction** of Core 3.0 validation, not an
+  equivalent of it.  Two kinds of gap, both intentional:
+
+  * **Excluded families.**  SIMD/vector, GC (structures, arrays, `i31`),
+    reference types and `ref.*`, tables and element segments, bulk memory and
+    data segments, tail calls (`return_call`, `return_call_indirect`),
+    exception handling beyond a bare `throw` (`try_table`, `throw_ref`),
+    `call`/`call_indirect`/`return`, `br_table`, `select`, non-empty block
+    types, `i64`, `f32` and `f64`.  These are expressible in `Wasm/Syntax.lean`
+    and have no rule here, so they are rejected --- which is what SPEC section
+    7.2 prescribes for out-of-profile forms.
+  * **Stack polymorphism.**  `valid/instructions.rst` (`_polymorphism`, and the
+    notes under `_valid-unreachable` and `_valid-br`) makes `unreachable`, `br`
+    and `throw` stack-polymorphic: `appendix/algorithm.rst`'s `unreachable()`
+    purges the frame's operands and sets a flag under which `pop_val` yields
+    `Bot`.  The rules below instead type those three instructions concretely
+    (`h -> h`, `h -> h` at a label of arity `h`, and `h+1 -> h`), which
+    *rejects* code Core accepts, for example `(unreachable) (i32.add)` or a
+    `br` taken with operands still below the label's results.  The judgment is
+    therefore contained in Core validation, never wider than it.
+
+  Consequently `Wasm.validate_iff_declarative` is an equivalence between the
+  executable validator and the declarative judgment **for the modelled
+  subset**, and a one-way soundness statement with respect to full Core 3.0.
+
   Every declaration in this file is proved.  Nothing is assumed.
 -/
 import WasmGemmGnaf.Wasm.Syntax
@@ -42,8 +146,17 @@ open WasmGemmGnaf.Foundation
 /-! ## Validation contexts -/
 
 /-- A validation context: the number of locals in scope, the declared global
-types, the number of declared tags, and the stack heights required by the
-labels currently in scope (innermost first). -/
+types, the number of declared tags, and the result arity of each label
+currently in scope (innermost first).
+
+This is the fragment of the Core context of
+`vendor/wasm-spec/document/core/valid/conventions.rst` ("Contexts") that the
+released subset can use: *Locals* (all `i32`, so only their number matters),
+*Globals*, *Tags* and *Labels*.  The remaining fields of the Core context ---
+*Types*, *Recursive Types*, *Functions*, *Tables*, *Memories*, *Element
+Segments*, *Data Segments*, *Return* and *References* --- are either fixed by
+the profile (exactly one memory, no tables, no segments) or belong to families
+this judgment does not admit. -/
 structure Ctx where
   /-- Number of locals of the enclosing function. -/
   numLocals : Nat
@@ -51,9 +164,29 @@ structure Ctx where
   globals : List GlobalType
   /-- The number of declared tags. -/
   numTags : Nat
-  /-- Required operand-stack height at each label in scope, innermost first. -/
+  /-- Result arity of each label in scope, innermost first.  Core represents a
+  label by its result type; every subset value is an `i32`, so the length of
+  that result type is the whole of it. -/
   labels : List Nat
   deriving DecidableEq, Repr, Inhabited
+
+/-- The Core alignment premise of `valid/instructions.rst` `_valid-load-val` /
+`_valid-store-val`, `2 ^ memarg.align <= |t|/8`, specialised to full-width
+`i32` (`|i32|/8 = 4`) and restated as a bound on the exponent itself, which is
+what the checker tests.  Stating it on the exponent matters: `2 ^ align` for a
+decoded 32-bit `align` is not something a decision procedure should build. -/
+theorem alignOk_iff_pow_le (a : Nat) : a ≤ 2 ↔ 2 ^ a ≤ 4 := by
+  constructor
+  · intro h
+    have hp : (2 : Nat) ^ a ≤ 2 ^ 2 := Nat.pow_le_pow_right (by omega) h
+    have h4 : (2 : Nat) ^ 2 = 4 := by rfl
+    omega
+  · intro h
+    rcases Nat.lt_or_ge a 3 with hlt | hge
+    · omega
+    · have hp : (2 : Nat) ^ 3 ≤ 2 ^ a := Nat.pow_le_pow_right (by omega) hge
+      have h8 : (2 : Nat) ^ 3 = 8 := by rfl
+      omega
 
 /-- The `i32` binary operators of the declared subset: the wrapping arithmetic,
 the unsigned division/remainder (which trap on a zero divisor), the bitwise
@@ -90,21 +223,21 @@ inductive InstrTyping : Ctx → Nat → Instr → Nat → Prop
   | globalSet {C h i g} (hg : C.globals[i]? = some g)
       (ht : g.valType = .num .i32) (hm : g.mutable = true) :
       InstrTyping C (h + 1) (.globalSet i) h
-  | load {C h arg} (hm : arg.memory = 0) :
+  | load {C h arg} (hm : arg.memory = 0) (ha : arg.align ≤ 2) :
       InstrTyping C (h + 1) (.load .i32 none arg) (h + 1)
-  | store {C h arg} (hm : arg.memory = 0) :
+  | store {C h arg} (hm : arg.memory = 0) (ha : arg.align ≤ 2) :
       InstrTyping C (h + 2) (.store .i32 none arg) h
   | memorySize {C h} : InstrTyping C h (.memorySize 0) (h + 1)
   | memoryGrow {C h} : InstrTyping C (h + 1) (.memoryGrow 0) (h + 1)
   | block {C h body}
-      (hb : ExprTyping { C with labels := h :: C.labels } h body h) :
+      (hb : ExprTyping { C with labels := 0 :: C.labels } 0 body 0) :
       InstrTyping C h (.block .empty body) h
   | loop {C h body}
-      (hb : ExprTyping { C with labels := h :: C.labels } h body h) :
+      (hb : ExprTyping { C with labels := 0 :: C.labels } 0 body 0) :
       InstrTyping C h (.loop .empty body) h
   | ifThenElse {C h t e}
-      (ht : ExprTyping { C with labels := h :: C.labels } h t h)
-      (he : ExprTyping { C with labels := h :: C.labels } h e h) :
+      (ht : ExprTyping { C with labels := 0 :: C.labels } 0 t 0)
+      (he : ExprTyping { C with labels := 0 :: C.labels } 0 e 0) :
       InstrTyping C (h + 1) (.ifThenElse .empty t e) h
   | br {C h n} (hl : C.labels[n]? = some h) : InstrTyping C h (.br n) h
   | brIf {C h n} (hl : C.labels[n]? = some h) : InstrTyping C (h + 1) (.brIf n) h
@@ -159,11 +292,11 @@ def checkInstr (C : Ctx) (h : Nat) : Instr → Option Nat
           else none
       | none => none
   | .load t narrow arg =>
-      if t = .i32 ∧ narrow = none ∧ arg.memory = 0 then
+      if t = .i32 ∧ narrow = none ∧ (arg.memory = 0 ∧ arg.align ≤ 2) then
         (match h with | 0 => none | k + 1 => some (k + 1))
       else none
   | .store t narrow arg =>
-      if t = .i32 ∧ narrow = none ∧ arg.memory = 0 then
+      if t = .i32 ∧ narrow = none ∧ (arg.memory = 0 ∧ arg.align ≤ 2) then
         (match h with | k + 2 => some k | _ => none)
       else none
   | .memorySize mem => if mem = 0 then some (h + 1) else none
@@ -171,12 +304,12 @@ def checkInstr (C : Ctx) (h : Nat) : Instr → Option Nat
       if mem = 0 then (match h with | 0 => none | k + 1 => some (k + 1)) else none
   | .block bt body =>
       if bt = .empty then
-        (if checkExpr { C with labels := h :: C.labels } h body = some h then some h
+        (if checkExpr { C with labels := 0 :: C.labels } 0 body = some 0 then some h
          else none)
       else none
   | .loop bt body =>
       if bt = .empty then
-        (if checkExpr { C with labels := h :: C.labels } h body = some h then some h
+        (if checkExpr { C with labels := 0 :: C.labels } 0 body = some 0 then some h
          else none)
       else none
   | .ifThenElse bt t e =>
@@ -184,8 +317,8 @@ def checkInstr (C : Ctx) (h : Nat) : Instr → Option Nat
         (match h with
          | 0 => none
          | k + 1 =>
-             if checkExpr { C with labels := k :: C.labels } k t = some k ∧
-                checkExpr { C with labels := k :: C.labels } k e = some k then some k
+             if checkExpr { C with labels := 0 :: C.labels } 0 t = some 0 ∧
+                checkExpr { C with labels := 0 :: C.labels } 0 e = some 0 then some k
              else none)
       else none
   | .br n => if C.labels[n]? = some h then some h else none
@@ -410,21 +543,23 @@ theorem checkInstr_eq_some_iff (C : Ctx) (h : Nat) (i : Instr) (h' : Nat) :
   | .load t narrow arg =>
     match t, narrow with
     | .i32, none =>
-      by_cases hm : arg.memory = 0
+      by_cases hm : arg.memory = 0 ∧ arg.align ≤ 2
       · cases h with
         | zero =>
           constructor
-          · intro hc; simp [checkInstr, hm] at hc
+          · intro hc; simp [checkInstr, hm.1, hm.2] at hc
           · intro hd; cases hd
         | succ k =>
           constructor
           · intro hc
-            have : h' = k + 1 := by simp [checkInstr, hm] at hc; omega
-            subst this; exact .load hm
-          · intro hd; cases hd; simp [checkInstr, hm]
+            have : h' = k + 1 := by simp [checkInstr, hm.1, hm.2] at hc; omega
+            subst this; exact .load hm.1 hm.2
+          · intro hd; cases hd; simp [checkInstr, hm.1, hm.2]
       · constructor
         · intro hc; simp [checkInstr, hm] at hc
-        · intro hd; cases hd; rename_i hm'; exact absurd hm' hm
+        · intro hd
+          cases hd with
+          | load hm' ha' => exact absurd ⟨hm', ha'⟩ hm
     | .i32, some nw =>
       constructor
       · intro hc; simp [checkInstr] at hc
@@ -444,25 +579,27 @@ theorem checkInstr_eq_some_iff (C : Ctx) (h : Nat) (i : Instr) (h' : Nat) :
   | .store t narrow arg =>
     match t, narrow with
     | .i32, none =>
-      by_cases hm : arg.memory = 0
+      by_cases hm : arg.memory = 0 ∧ arg.align ≤ 2
       · match h with
         | 0 =>
           constructor
-          · intro hc; simp [checkInstr, hm] at hc
+          · intro hc; simp [checkInstr, hm.1, hm.2] at hc
           · intro hd; cases hd
         | 1 =>
           constructor
-          · intro hc; simp [checkInstr, hm] at hc
+          · intro hc; simp [checkInstr, hm.1, hm.2] at hc
           · intro hd; cases hd
         | k + 2 =>
           constructor
           · intro hc
-            have : h' = k := by simp [checkInstr, hm] at hc; omega
-            subst this; exact .store hm
-          · intro hd; cases hd; simp [checkInstr, hm]
+            have : h' = k := by simp [checkInstr, hm.1, hm.2] at hc; omega
+            subst this; exact .store hm.1 hm.2
+          · intro hd; cases hd; simp [checkInstr, hm.1, hm.2]
       · constructor
         · intro hc; simp [checkInstr, hm] at hc
-        · intro hd; cases hd; rename_i hm'; exact absurd hm' hm
+        · intro hd
+          cases hd with
+          | store hm' ha' => exact absurd ⟨hm', ha'⟩ hm
     | .i32, some nw =>
       constructor
       · intro hc; simp [checkInstr] at hc
@@ -510,7 +647,7 @@ theorem checkInstr_eq_some_iff (C : Ctx) (h : Nat) (i : Instr) (h' : Nat) :
   | .block bt body =>
     match bt with
     | .empty =>
-      by_cases hb : checkExpr { C with labels := h :: C.labels } h body = some h
+      by_cases hb : checkExpr { C with labels := 0 :: C.labels } 0 body = some 0
       · constructor
         · intro hc
           have : h' = h := by simp [checkInstr, hb] at hc; omega
@@ -534,7 +671,7 @@ theorem checkInstr_eq_some_iff (C : Ctx) (h : Nat) (i : Instr) (h' : Nat) :
   | .loop bt body =>
     match bt with
     | .empty =>
-      by_cases hb : checkExpr { C with labels := h :: C.labels } h body = some h
+      by_cases hb : checkExpr { C with labels := 0 :: C.labels } 0 body = some 0
       · constructor
         · intro hc
           have : h' = h := by simp [checkInstr, hb] at hc; omega
@@ -565,8 +702,8 @@ theorem checkInstr_eq_some_iff (C : Ctx) (h : Nat) (i : Instr) (h' : Nat) :
         · intro hd; cases hd
       | succ k =>
         by_cases hb :
-            checkExpr { C with labels := k :: C.labels } k thenBody = some k ∧
-              checkExpr { C with labels := k :: C.labels } k elseBody = some k
+            checkExpr { C with labels := 0 :: C.labels } 0 thenBody = some 0 ∧
+              checkExpr { C with labels := 0 :: C.labels } 0 elseBody = some 0
         · constructor
           · intro hc
             have : h' = k := by simp [checkInstr, hb.1, hb.2] at hc; omega
@@ -718,12 +855,44 @@ def funcTypeAt (m : Module) (i : Nat) : Option FuncType :=
 /-- All parameters, results and locals of the released subset are `i32`. -/
 def isI32 (t : ValType) : Bool := t = ValType.num .i32
 
-/-- The validation context of a defined function. -/
+/-- A declared sub type is admitted by the released subset when it is a final,
+supertype-free function type all of whose parameters and results are `i32`.
+
+`valid/modules.rst` ("Types") requires the module's whole type section to be
+valid, not merely the entries some function happens to name: `Module_ok` has
+`Types_ok` as a premise, and `Types_ok` validates the sequence of declared
+types incrementally.  The condition below is a *restriction* of `Subtype_ok`
+(`valid/types.rst`, "Recursive Types") that entails it: with no declared
+supertypes the side condition on supertype indices --- the one the note there
+says "ensures that a declared supertype is a previously defined type,
+preventing cyclic subtype hierarchies" --- is vacuous, and `Comptype_ok/func`
+reduces to validity of the parameter and result value types, which holds
+because number types are "universally valid" (`valid/types.rst`, opening
+paragraph).  Requiring it is what stops a module from carrying an ill-formed
+type declaration --- a supertype index pointing past the end of the type
+section, say --- through validation in an entry no function names. -/
+def checkSubType (st : SubType) : Bool :=
+  st.final && st.supertypes.isEmpty &&
+    (match st.body with
+     | .func ft => ft.params.all isI32 && ft.results.all isI32
+     | _ => false)
+
+/-- Every declared type of the module is admitted. -/
+def checkTypes (m : Module) : Bool := (flatTypes m).all checkSubType
+
+/-- The validation context of a defined function.
+
+`valid/modules.rst` ("Functions") types a function body under the context
+extended with the function's locals and with its result type as the sole label;
+`appendix/algorithm.rst` states the same fact operationally --- "every function
+has an implicit outermost label that corresponds to an implicit block frame".
+The label stack is therefore seeded with the function's result arity, so that a
+`br 0` at the top of a body is a return, exactly as in Core. -/
 def funcCtx (m : Module) (ft : FuncType) (f : Func) : Ctx :=
   { numLocals := ft.params.length + f.locals.length
     globals := m.globals.map (·.type)
     numTags := m.tags.length
-    labels := [] }
+    labels := [ft.results.length] }
 
 /-- A defined function is valid: its declared type exists, is entirely `i32`,
 its locals are `i32`, and its body takes the empty operand stack to exactly the
@@ -756,6 +925,21 @@ def checkMems (m : Module) : Bool :=
        | none => true
        | some k => decide (mem.type.limits.min ≤ k) && decide (k ≤ Memory.hardMaxPages))
   | _ => false
+
+/-- No name is exported twice.
+
+`syntax/modules.rst` ("Exports"): "Each export is labeled by a unique name",
+and, at "Imports", "unlike export names, import names are not necessarily
+unique".  `appendix/embedding.rst` reads the same constraint back out of
+validity: "due to validity of the module instance, all its export names are
+different".  Without this conjunct a module could export the same name twice
+and still be accepted here, which Core rejects. -/
+def distinctExportNames : List Export → Bool
+  | [] => true
+  | e :: rest => !rest.any (fun e' => e'.name == e.name) && distinctExportNames rest
+
+/-- The module's export names are pairwise distinct. -/
+def checkExports (m : Module) : Bool := distinctExportNames m.exports
 
 /-- The module exports the required memory. -/
 def exportsMemory (m : Module) : Bool :=
@@ -792,7 +976,14 @@ def checkClosed (m : Module) : Bool :=
 
 end Module
 
-/-- The decidable release validator. -/
+/-- The decidable release validator.
+
+The conjuncts are, in order: the profile's closedness restriction; the memory
+section (`valid/modules.rst` "Memories", `valid/types.rst` "Limits"); the
+globals (`valid/modules.rst` "Globals"); the tags ("Tags"); the functions
+("Functions"); the two export conjuncts the profile pins; the start function
+("Start Function"); the type section ("Types"); and the uniqueness of export
+names (`syntax/modules.rst` "Exports"). -/
 def validate (m : Module) : Bool :=
   Module.checkClosed m &&
   Module.checkMems m &&
@@ -801,12 +992,14 @@ def validate (m : Module) : Bool :=
   m.funcs.all (Module.checkFunc m) &&
   Module.exportsMemory m &&
   Module.checkGemmExport m &&
-  Module.checkStart m
+  Module.checkStart m &&
+  Module.checkTypes m &&
+  Module.checkExports m
 
 /-- The declarative validity judgment of the released profile: the conjunction
-of the closedness, memory, global, tag, function, export and start conditions
-of SPEC section 7.2, with every function body carrying a derivation of the
-declarative typing judgment. -/
+of the closedness, memory, global, tag, function, export, start, type-section
+and export-name conditions of SPEC section 7.2, with every function body
+carrying a derivation of the declarative typing judgment. -/
 def DeclarativelyValid (m : Module) : Prop :=
   Module.checkClosed m = true ∧
   Module.checkMems m = true ∧
@@ -820,7 +1013,9 @@ def DeclarativelyValid (m : Module) : Prop :=
       ExprTyping (Module.funcCtx m ft f) 0 f.body ft.results.length) ∧
   Module.exportsMemory m = true ∧
   Module.checkGemmExport m = true ∧
-  Module.checkStart m = true
+  Module.checkStart m = true ∧
+  Module.checkTypes m = true ∧
+  Module.checkExports m = true
 
 theorem checkFunc_eq_true_iff (m : Module) (f : Func) :
     Module.checkFunc m f = true ↔
@@ -857,12 +1052,15 @@ theorem validate_bool_iff (m : Module) :
   unfold validate DeclarativelyValid
   simp only [Bool.and_eq_true, List.all_eq_true]
   constructor
-  · rintro ⟨⟨⟨⟨⟨⟨⟨hclosed, hmems⟩, hglob⟩, htags⟩, hfuncs⟩, hexp⟩, hgemm⟩, hstart⟩
+  · rintro ⟨⟨⟨⟨⟨⟨⟨⟨⟨hclosed, hmems⟩, hglob⟩, htags⟩, hfuncs⟩, hexp⟩, hgemm⟩, hstart⟩,
+      htypes⟩, hnames⟩
     exact ⟨hclosed, hmems, hglob, htags,
-      fun f hf => (checkFunc_eq_true_iff m f).mp (hfuncs f hf), hexp, hgemm, hstart⟩
-  · rintro ⟨hclosed, hmems, hglob, htags, hfuncs, hexp, hgemm, hstart⟩
-    exact ⟨⟨⟨⟨⟨⟨⟨hclosed, hmems⟩, hglob⟩, htags⟩,
-      fun f hf => (checkFunc_eq_true_iff m f).mpr (hfuncs f hf)⟩, hexp⟩, hgemm⟩, hstart⟩
+      fun f hf => (checkFunc_eq_true_iff m f).mp (hfuncs f hf), hexp, hgemm, hstart,
+      htypes, hnames⟩
+  · rintro ⟨hclosed, hmems, hglob, htags, hfuncs, hexp, hgemm, hstart, htypes, hnames⟩
+    exact ⟨⟨⟨⟨⟨⟨⟨⟨⟨hclosed, hmems⟩, hglob⟩, htags⟩,
+      fun f hf => (checkFunc_eq_true_iff m f).mpr (hfuncs f hf)⟩, hexp⟩, hgemm⟩, hstart⟩,
+      htypes⟩, hnames⟩
 
 instance instDecidableDeclarativelyValid (m : Module) :
     Decidable (DeclarativelyValid m) :=

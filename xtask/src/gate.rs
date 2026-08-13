@@ -269,12 +269,40 @@ pub fn run(root: &Path, no_mutation: bool) -> Result<Outcome> {
     // definition with the frozen schema, not merely find a name. The binding is
     // definitional (Iff.rfl in Conformance/Schema.lean), so a weakened
     // GlobalOptimal or an artifact-specific ProfileValid stops elaborating.
+    //
+    // The two named here are the ones the release theorem is stated in, so they
+    // are answered from the presence probe already run. That is a spot check on
+    // two of thirteen, which is why the full audit follows it: the audit reads
+    // the authority's own `scopeCriticalDefinitions` array, so a definition
+    // added to the frozen authority cannot pass unnoticed for want of anyone
+    // remembering to extend this list.
     g.check(
         "2",
         "scope-critical definitions match the frozen WGG-GO-1 schema",
         declared("WasmGemmGnaf.Conformance.globalOptimal_matches_authority_schema")
             && declared("WasmGemmGnaf.Conformance.profileValid_matches_authority_schema"),
         "schema binding absent -- a name check alone cannot reject a weakened proposition",
+    );
+
+    let required_definitions = crate::schema::scope_critical_definitions()?;
+    let schema_source = std::fs::read_to_string(Path::new(
+        "WasmGemmGnaf/Conformance/Schema.lean",
+    ))
+    .map_err(|e| {
+        SpecError::io(CLAUSE, "cannot read", Path::new("WasmGemmGnaf/Conformance/Schema.lean"), e)
+    })?;
+    let unbound = crate::schema::audit(
+        &required_definitions,
+        &crate::schema::parse(&schema_source),
+    );
+    g.check(
+        "2",
+        &format!(
+            "all {} authority scope-critical definitions definitionally bound",
+            required_definitions.len()
+        ),
+        unbound.is_empty(),
+        &clip(&unbound.join("; "), 200),
     );
 
     // ---- 4-8. semantics, coverage, artifact, lower bound --------------------

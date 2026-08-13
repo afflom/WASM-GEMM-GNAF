@@ -80,10 +80,10 @@
     {
       "id": "M11",
       "family": "GO",
-      "plants": "a weakened GlobalOptimal whose competitor quantifier is restricted by a scope predicate",
-      "expectedRejector": "the Iff.rfl schema binding in WasmGemmGnaf/Conformance/Schema.lean",
+      "plants": "a weakened GlobalOptimal whose competitor quantifier is restricted by a scope predicate, and -- on a copy of the binding source -- a deleted binding and a tactic-proved one",
+      "expectedRejector": "the Iff.rfl schema binding in WasmGemmGnaf/Conformance/Schema.lean, and the authority-driven audit in `xtask schema`",
       "status": "rejects",
-      "note": "SPEC 1 requires the gate to compare the compiled UNFOLDED definition against the frozen WGG-GO-1 schema, and says a theorem scoped to a subset of the competitor universe SHALL have a different name. Iff.rfl is what makes that comparison definitional. The falsifier elaborates GlobalOptimalOver <scope> against the same frozen schema and requires it to FAIL, with the unweakened binding as a control so it cannot pass by failing for an unrelated reason."
+      "note": "SPEC 1 requires the gate to compare the compiled UNFOLDED definition against the frozen WGG-GO-1 schema, and says a theorem scoped to a subset of the competitor universe SHALL have a different name. Iff.rfl is what makes that comparison definitional. The falsifier elaborates GlobalOptimalOver <scope> against the same frozen schema and requires it to FAIL, with the unweakened binding as a control so it cannot pass by failing for an unrelated reason. It then attacks the WIRING that decides whether the elaborator is ever asked: on a COPY of Conformance/Schema.lean it deletes the GlobalOptimal binding and, separately, replaces Iff.rfl with `by simp`, and requires `xtask schema` -- whose list of scope-critical definitions is read from the authority JSON, not transcribed -- to report NO BINDING and 'not by definitional reduction' respectively."
     },
     {
       "id": "M12",

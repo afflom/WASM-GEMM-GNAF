@@ -891,7 +891,7 @@ theorem witnessModule_hasExactGemmExports :
   have h := witnessModule_validate
   unfold Wasm.validate at h
   simp only [Bool.and_eq_true] at h
-  refine ⟨h.1.1.2, h.1.2, ?_⟩
+  refine ⟨h.1.1.1.1.2, h.1.1.1.2, ?_⟩
   intro e he
   rw [witnessModule_exports] at he
   simp only [List.mem_cons, List.not_mem_nil, or_false] at he
@@ -1350,7 +1350,7 @@ theorem gemmKernelModule_hasExactGemmExports :
   have h := gemmKernelModule_validate
   unfold Wasm.validate at h
   simp only [Bool.and_eq_true] at h
-  refine ⟨h.1.1.2, h.1.2, ?_⟩
+  refine ⟨h.1.1.1.1.2, h.1.1.1.2, ?_⟩
   intro e he
   rw [gemmKernelModule_exports] at he
   simp only [List.mem_cons, List.not_mem_nil, or_false] at he

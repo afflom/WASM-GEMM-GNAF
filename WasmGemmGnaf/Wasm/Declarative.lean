@@ -1224,11 +1224,69 @@ theorem decode_iff_declarative (bytes : ByteArray) (module : Module) :
     decode bytes = .ok module ↔ DeclarativeBinaryRelation bytes module :=
   ⟨decode_sound, decode_complete⟩
 
-/-- **SPEC section 7.3 / 15, `Wasm.validate_iff_declarative`.**  The executable
+/--
+**SPEC section 7.3 / 15, `Wasm.validate_iff_declarative`.**  The executable
 validator decides the declarative validity judgment.  This is exactly the
 proposition `Wasm.validate_bool_iff` proves, restated under the name SPEC
 section 15 requires; the statement is not weakened, so it is discharged by
-`exact`. -/
+`exact`.
+
+## Which vendored validation rules `DeclarativelyValid` corresponds to
+
+`Wasm.DeclarativelyValid` is the conjunction of `Wasm.validate`'s ten
+conditions, with the function-body conjunct replaced by a derivation of
+`Wasm.ExprTyping`.  Reading them against
+`vendor/wasm-spec/document/core/valid/` (see `Wasm/Validate.lean` for the
+per-instruction table and for the two respects in which the vendored snapshot
+must be read carefully --- its rule *bodies* are unexpanded SpecTec macros, so
+the fully-stated normative content is the prose of `valid/conventions.rst`, the
+notes of `valid/instructions.rst`, and the sound-and-complete algorithm of
+`appendix/algorithm.rst`):
+
+* `Module.checkTypes` --- `valid/modules.rst` "Types" (`Types_ok`), restricted
+  through `valid/types.rst` "Recursive Types" (`Subtype_ok`) and "Composite
+  Types" (`Comptype_ok/func`) to final, supertype-free, all-`i32` function
+  types.
+* `Module.checkMems` --- `valid/modules.rst` "Memories" (`Mem_ok`) and
+  `valid/types.rst` "Memory Types" / "Limits" (`Memtype_ok`, `Limits_ok`): the
+  bounds are meaningful (`min <= max`) and within the `2 ^ 16` range for an
+  `i32` address type.
+* `Module.checkGlobal` --- `valid/modules.rst` "Globals" (`Global_ok`), with the
+  initializer restricted to the single constant instruction the profile admits.
+* `Module.checkTag` --- `valid/modules.rst` "Tags" (`Tag_ok`) and
+  `valid/types.rst` "Tag Types" (`Tagtype_ok`): a function type with empty
+  results, here pinned to `[i32] -> []`.
+* `Module.checkFunc` / `ExprTyping` --- `valid/modules.rst` "Functions"
+  (`Func_ok`) and "Locals" (`Local_ok`), with the body typed under
+  `Module.funcCtx`, whose label stack carries the function's own result arity
+  (`appendix/algorithm.rst`: "every function has an implicit outermost label
+  that corresponds to an implicit block frame").  The instruction rules are
+  `valid/instructions.rst` for the admitted forms; `Wasm/Validate.lean` lists
+  them one by one with their anchors.
+* `Module.checkStart` --- `valid/modules.rst` "Start Function" (`Start_ok`).
+* `Module.checkExports` --- `syntax/modules.rst` "Exports": "each export is
+  labeled by a unique name".
+* `Module.checkClosed`, `Module.exportsMemory`, `Module.checkGemmExport` ---
+  not Core rules but SPEC section 7.2 profile restrictions: no imports, no
+  tables, no element or data segments, and the two pinned exports.  They only
+  narrow the accepted set.
+
+## What is *not* covered, and what the equivalence therefore means
+
+Not modelled, and hence rejected rather than validated: SIMD/vector, GC
+(structures, arrays, `i31`), reference types and every `ref.*` form, tables and
+element segments, bulk memory and data segments, tail calls, exception handling
+beyond a bare `throw` (`try_table`, `throw_ref`), `call` / `call_indirect` /
+`return` / `br_table` / `select`, non-empty block types, and the `i64`, `f32`
+and `f64` families.  Nor is Core's **stack polymorphism** modelled:
+`valid/instructions.rst` (`_polymorphism`, and the notes at `_valid-unreachable`
+and `_valid-br`) makes `unreachable`, `br` and `throw` stack-polymorphic, while
+`Wasm.InstrTyping` types them concretely, which rejects programs Core accepts.
+
+So `DeclarativelyValid` is a *sound restriction* of Core 3.0 validation --- it
+accepts only modules Core accepts --- and this theorem is an equivalence
+between the executable validator and the declarative judgment **for the
+modelled subset**, not an equivalence with Core 3.0 validation as a whole. -/
 theorem validate_iff_declarative (module : Module) :
     validate module = true ↔ DeclarativelyValid module :=
   validate_bool_iff module

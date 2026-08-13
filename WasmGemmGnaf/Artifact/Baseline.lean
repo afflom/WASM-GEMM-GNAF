@@ -231,15 +231,16 @@ theorem baseline_validateUnder :
 
 `Wasm.validate` already carries the two export conjuncts, so they are read out
 of `baseline_validate` rather than reproved.  `&&` associates to the left, so
-the eight conjuncts of `Wasm.validate` are a left-nested tower and the two
-export conjuncts sit at `h.1.1.2` and `h.1.2`. -/
+the ten conjuncts of `Wasm.validate` are a left-nested tower and the two
+export conjuncts --- the sixth and seventh of ten --- sit at `h.1.1.1.1.2` and
+`h.1.1.1.2`. -/
 
 /-- The memory export, extracted from release validation itself. -/
 theorem baseline_exportsMemory : Wasm.Module.exportsMemory baselineModule = true := by
   have h := baseline_validate
   unfold Wasm.validate at h
   simp only [Bool.and_eq_true] at h
-  exact h.1.1.2
+  exact h.1.1.1.1.2
 
 /-- The pinned-ABI `gemm` export, extracted from release validation itself. -/
 theorem baseline_checkGemmExport :
@@ -247,7 +248,7 @@ theorem baseline_checkGemmExport :
   have h := baseline_validate
   unfold Wasm.validate at h
   simp only [Bool.and_eq_true] at h
-  exact h.1.2
+  exact h.1.1.1.2
 
 /-- The baseline module exports the `gemm` function and the memory, and nothing
 else at all. -/
