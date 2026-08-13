@@ -14,9 +14,12 @@
   their names.
 
   WHAT THIS FILE DOES NOT CLAIM, AND WHY.  There is no
-  `validate_iff_declarative` here, and no soundness theorem.  The reason is a
-  DEFECT IN THE PINNED DECLARATIVE RULES, proved in `Core/ValidateInstr.lean`
-  as `Instrs_ok.const_binop_untypable`:
+  `validate_iff_declarative` here, and no soundness theorem AGAINST THE PINNED
+  `Module_ok`.  (Soundness against the AMENDED `Module_ok'` is a theorem, but it
+  is `validate_sound` in `Core/ValidateModule.lean`, a later file; see the last
+  paragraph of this header.)  The reason no theorem here mentions the pinned
+  relation is a DEFECT IN THE PINNED DECLARATIVE RULES, proved in
+  `Core/ValidateInstr.lean` as `Instrs_ok.const_binop_untypable`:
 
       the pinned `Instrs_ok/seq` composes the head instruction, typed by
       `Instr_ok`, with the tail sequence, so the tail's domain must be exactly
@@ -59,8 +62,28 @@
   (`Instrs_ok'.binop_dom_length` is the pinned negative lemma re-proved against
   the amendment).  A soundness or `validate_iff_declarative` theorem may be
   attempted over `Instrs_ok'` with DEV-006 cited; it may NOT be stated over the
-  pinned relation, where it is false.  None is claimed yet, and SPEC 15's
-  `Wasm.validate_iff_declarative` stays OUTSTANDING.
+  pinned relation, where it is false.
+
+  WHAT HAS SINCE BEEN CLOSED, AND WHERE.  `Core/ValidateSeq.lean` proves the
+  instruction-level equivalence of `checkSeq` with `Instrs_ok'` in both
+  directions --- `checkSeq_sound` (every context, no fragment hypothesis) and
+  `checkSeq_complete` (over `Context.frag` / `Instr.frag`) --- together with
+  `checkExpr_sound` and `checkExpr_complete`.  `Core/ValidateModule.lean` then
+  proves `validate_sound : validate m = true -> exists mt, Module_ok' m mt`, at
+  the whole-module level, for every module and with no side hypothesis.
+  `Core/ValidateComplete.lean` proves the CONVERSE, `validate_complete`, and
+  the equivalence `validate_iff_declarative`:
+
+      `validate m = true <-> Module.frag m = true /\ exists mt, Module_ok' m mt`
+
+  with no hypothesis --- the fragment condition is a conjunct, because
+  `validate` decides it.  What is still outside that fragment is imports, tags,
+  tables and element segments, and what they cost is a decision procedure for
+  `Heaptype_sub`.
+
+  SPEC 15's `Wasm.validate_iff_declarative` is a different declaration, in
+  `Wasm/Declarative.lean`, over the i32-subset model; it stays OUTSTANDING
+  until the release path is migrated onto `Wasm.Core`.
 
   So what this file delivers is the ALGORITHM, executable and checked on
   concrete modules, plus the exact statement of what stands between it and the

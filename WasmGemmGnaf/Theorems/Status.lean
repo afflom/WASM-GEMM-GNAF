@@ -9,7 +9,7 @@ proposition exists in this repository.  Where the repository proves something
 *near* a required name but strictly weaker, the required name is recorded as
 OUTSTANDING and the nearer result is named as such — never promoted.
 
-Score: **37 of 58 discharged, 21 outstanding**, as `xtask claims required`
+Score: **34 of 58 discharged, 24 outstanding**, as `xtask claims required`
 reports it against the compiled environment.  This header is prose and can
 drift; that command is the ledger, and where the two disagree the command wins.
 
@@ -20,17 +20,39 @@ three rather than the one that flatters it:
 
 | Count | Value | What it measures |
 |---|---|---|
-| Repository report | **37 of 58** | the name exists AND carries SPEC's proposition |
-| Exact-proposition audit | **26 of 58** | the above, independently re-derived |
-| Release-connected, full-Core | **at most 21 of 58** | the above, AND stated over the pinned Core model rather than the i32 subset |
+| Repository report | **34 of 58** | the name exists AND carries SPEC's proposition AND is not circular |
+| Independent proposition audit | **29 of 58** | the above, re-derived by an external reviewer |
+| Release-connected, full-Core | **24 of 58** | the above, AND stated over the pinned Core model rather than the i32 subset |
 
-The second and third rows are the external reviewer's figures, taken when the
-first row read **34**; they have not been re-derived since, so the three
-declarations added after that review (`Atlas.lifecycle_full_rebuild_comparator_exact`
-and `Atlas.lifecycle_native_bound`, both over `Atlas/Lifecycle.lean`, and
-`Atlas.seal_verifier_reconstructs_every_preimage` over `Atlas/Reconstruct.lean`;
-none of them touches the Wasm model) are counted in the first row only.  Quoting a stale
-lower bound is the safe direction; inventing a new one would not be.
+The second and third rows are the external reviewer's figures at this commit.
+The reviewer credits three of this round's additions and no more:
+`Atlas.seal_verifier_reconstructs_every_preimage` (narrowly, for retained
+objects — not universal coverage), `Atlas.lifecycle_native_bound` (with the
+four-of-seventeen caveat below) and `Atlas.lifecycle_full_rebuild_comparator_exact`
+(definitional wiring, not a regret bound).  **No Core theorem is credited**: the
+new decoder has no completeness theorem and omits the GC and SIMD opcode spaces,
+and the new validator has neither soundness nor declarative equivalence.
+
+Both decoder findings are answered in this commit, and neither answer moves the
+third row on its own.  `Wasm.Core.decode_complete` is closed at full Core --
+`Bmodule (ByteArray.toBytes bytes) m -> decode bytes = .ok m`, choice free
+(`[propext, Quot.sound]`), proved against the transcribed grammar with no
+encoder anywhere in its import graph -- and `Wasm/Core/DecodeInstructions.lean`
+now implements the `0xFB` (31 productions) and `0xFD` (256 productions) opcode
+spaces, which `Wasm.Core.decode_complete` is what makes checkable: an omitted
+production would be a `Binstr` derivation the decoder rejected.  The third row
+does not move for it because SPEC 15's `Wasm.decode_complete` is still bound to
+`Wasm/Declarative.lean`'s theorem over the i32 subset and the repository's own
+encoder, which `xtask independence` reports CIRCULAR.  Re-pointing that name at
+the Core theorem is the migration this file's debt list below describes; until
+it happens, the Core theorem is a discharged obligation that the ledger does not
+count.
+
+Of the three counts, the third is the one that matters, because it is the only
+one that measures progress toward the release theorem.  Where this file's prose
+and `xtask claims required` disagree, the command wins; where the command and
+the external audit disagree, the audit is measuring something stricter and its
+number is the honest one to quote.
 
 The gap between the first and third rows is not a dispute about any Lean term.  It is that five
 credited declarations are proved about the **obsolete subset machine and the

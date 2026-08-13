@@ -38,6 +38,17 @@
   SOUNDNESS (`checkSeq_sound`) holds for EVERY context and every instruction,
   with no fragment hypothesis; only COMPLETENESS (`checkSeq_complete`) is
   fragment-scoped.
+
+  WHERE THE TWO EQUIVALENCE THEOREMS LIVE.  Not in this file: they are stated
+  over the AMENDED judgment `Instrs_ok'`, which is declared in
+  `Core/Validation/InstructionsAmended.lean` --- a file that imports this one's
+  declarative dependency but not this one.  `Core/ValidateSeq.lean` imports both
+  and carries `checkSeq_sound`, `checkSeq_complete`, `checkExpr_sound` and
+  `checkExpr_complete`.  What this file contributes to them is the opcode
+  dispatch (`instrType`, `checkInstr`, `checkSeq`) together with
+  `instrType_sound` and `instrType_complete`, which are the per-instruction
+  halves both directions consume.  The reason the equivalence cannot be stated
+  over the PINNED `Instrs_ok` is the negative result at the end of this file.
 -/
 import WasmGemmGnaf.Wasm.Core.ValidateStack
 import WasmGemmGnaf.Wasm.Core.Validation.Instructions
@@ -1233,7 +1244,10 @@ as DEV-006 in `model/spec-deviations.json`, and
 `Core/Validation/InstructionsAmended.lean` states the amended judgment the
 repository uses (`Instrs_ok'`), proves it CONTAINS the pinned one
 (`Instrs_ok.to_amended`), derives the compositions the pinned rules cannot
-express, and proves the amendment did not widen the arity discipline. -/
+express, and proves the amendment did not widen the arity discipline.
+`Core/ValidateSeq.lean` then proves the equivalence of the algorithm with THAT
+judgment in both directions; `Core/ValidateModule.lean` carries the soundness
+half up to whole modules as `validate_sound`. -/
 
 /-! ### The defect, stated in general
 

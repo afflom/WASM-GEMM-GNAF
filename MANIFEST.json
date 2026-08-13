@@ -73,8 +73,8 @@
       },
       {
         "path": "SPEC.md",
-        "sha256": "efb736edf4d7187201992ce6e386dd119e79970aed196fdeecae170010682b5e",
-        "bytes": 151804
+        "sha256": "c58d1a19c13a8a175341d2720a26346be9191864bf0c0aefae8e8bea9b83c223",
+        "bytes": 173657
       },
       {
         "path": "Tests/README.md",
@@ -208,8 +208,8 @@
       },
       {
         "path": "WasmGemmGnaf/Conformance/RequiredSignatures.lean",
-        "sha256": "ea36ef44ea32e6ff3dd04eecd7f723d7dbe00a2d7ffd6c14a0c81edb66c15176",
-        "bytes": 49540
+        "sha256": "34bb1bf15d95b2288f6bc9ae15529c34e5d6fd25fc53990fca6fbbf746d0079a",
+        "bytes": 50753
       },
       {
         "path": "WasmGemmGnaf/Conformance/Schema.lean",
@@ -428,8 +428,8 @@
       },
       {
         "path": "WasmGemmGnaf/Theorems/Status.lean",
-        "sha256": "75b6d38a4819a4ea5e836c07d9514354b985633bfee0d884e6269996db0d2a5e",
-        "bytes": 52560
+        "sha256": "9f7052c5bea42186a262e4519b1104a7154e300a9ffcede98c0e8f78e493b599",
+        "bytes": 54034
       },
       {
         "path": "WasmGemmGnaf/Theorems/WasmModel.lean",
@@ -538,18 +538,28 @@
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/Decode.lean",
-        "sha256": "c1dfef740adf3f4d60cf6a4eafd7f09c74035450f0c4363b75f1562b0ba5ca04",
-        "bytes": 5927
+        "sha256": "f83c9cd6c2a5137ef615896f50f69a636625afff1bee36916ee59c7b3fd52162",
+        "bytes": 8837
+      },
+      {
+        "path": "WasmGemmGnaf/Wasm/Core/DecodeInstrComplete.lean",
+        "sha256": "9b477aef67d3cc0d1f660e3baa6f367746fc2ef5b11a1b9cd59cd8055529afa7",
+        "bytes": 100845
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/DecodeInstructions.lean",
-        "sha256": "af787d6ab9f6556ac6789c1dc4dc956c97f63779d98a6eeb227c8be820519eab",
-        "bytes": 62706
+        "sha256": "021bba3b9ec9f7cb9b635b0d86597aa50f52f0c08062d841c392fb4c5d4977a8",
+        "bytes": 124609
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/DecodeModules.lean",
         "sha256": "087b675e44a272677f8b9a6f8496e21d8963d2cdc44ef0883b7fdec4d4240dbf",
         "bytes": 49209
+      },
+      {
+        "path": "WasmGemmGnaf/Wasm/Core/DecodeModulesComplete.lean",
+        "sha256": "f512ef23d60aad5983a54770dcf0276a7f9ae6093a59997572cfdd9160ad7ec7",
+        "bytes": 69949
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/DecodeParser.lean",
@@ -563,8 +573,8 @@
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/DecodeUtf8.lean",
-        "sha256": "0562441a7bd82637bc61bdfab728845ffd22b3b124130e2284996818457fa743",
-        "bytes": 25909
+        "sha256": "b40bcd0dc7417a29ee6cb25d4c1498c29f178c2c631810dac5a9e12c64b10623",
+        "bytes": 26400
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/Execution.lean",
@@ -618,13 +628,28 @@
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/Validate.lean",
-        "sha256": "7d87aac6950e9ef1743730fcb0ab9bf4f8f49a852755066ffe8e6666cc8f396a",
-        "bytes": 18107
+        "sha256": "0071c6ad6b7dd58e5128968264cd5f14f43d0e9751f28a5470bcaf033f796e5d",
+        "bytes": 19466
+      },
+      {
+        "path": "WasmGemmGnaf/Wasm/Core/ValidateComplete.lean",
+        "sha256": "40b4f4baa66f735199c0829ea5b9649b5354ac3b35451e96ff57ed23185695e7",
+        "bytes": 36058
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/ValidateInstr.lean",
-        "sha256": "4b821e52515e37a8e6efb3c7d2943b98ffc4a1ef1ac1595cd361611edcaa9d7e",
-        "bytes": 54414
+        "sha256": "eb7457921704413675e50630e2d0fb05f5a0835555f6404d092288be3bf30368",
+        "bytes": 55367
+      },
+      {
+        "path": "WasmGemmGnaf/Wasm/Core/ValidateModule.lean",
+        "sha256": "7beee4a73ebb4a1e2a25b1c4ef5d5151b03a92a5f11dbd480635c524de0af69a",
+        "bytes": 23197
+      },
+      {
+        "path": "WasmGemmGnaf/Wasm/Core/ValidateSeq.lean",
+        "sha256": "6e215a43a4c627ba8f45ab8795a9e13d9b009b74ea6941556518991edde96ec4",
+        "bytes": 73244
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/ValidateStack.lean",
@@ -638,8 +663,8 @@
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/Validation/InstructionsAmended.lean",
-        "sha256": "7df41ff3df8d4b6a6bf3ba6ea096174512eb6863d4f5f3e1e69545be7dc316a6",
-        "bytes": 25465
+        "sha256": "cda84b89efff9877e75812e780a0d7e9eb6823add37395781ea9fc51434f1046",
+        "bytes": 25837
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/Validation/Modules.lean",
@@ -648,8 +673,8 @@
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/Validation/ModulesAmended.lean",
-        "sha256": "fbf0f15e095dbdb10e8339d0b9a74c4c91fed1b524c49d74763099a0031c5ac2",
-        "bytes": 3799
+        "sha256": "30ab8cd5715b2e011a82b78bc5ffa93156f7880de4caa00d3fab19006c44435f",
+        "bytes": 11965
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/Validation/Types.lean",
@@ -660,6 +685,11 @@
         "path": "WasmGemmGnaf/Wasm/Core/Values.lean",
         "sha256": "aad9b819654916f1d425460341ef171e45db72d87a973af0277d5d819f352f57",
         "bytes": 14302
+      },
+      {
+        "path": "WasmGemmGnaf/Wasm/CoreGap.lean",
+        "sha256": "d8862d75614d02f95294049f58d154d721eebb0ed6ade4a8d8187e424dfe43cf",
+        "bytes": 9804
       },
       {
         "path": "WasmGemmGnaf/Wasm/Costed.lean",
@@ -833,8 +863,8 @@
       },
       {
         "path": "model/spec-deviations.json",
-        "sha256": "da2af14bd12b76716d59731457afd6cdacc1f0d57a7f34651255221bc53c1233",
-        "bytes": 30919
+        "sha256": "4d8dab4230a84fdc8220ed2e79793a22429e7e1fd59ca73141e44f189d879e45",
+        "bytes": 55272
       },
       {
         "path": "xtask/Cargo.toml",
@@ -868,8 +898,8 @@
       },
       {
         "path": "xtask/src/independence.rs",
-        "sha256": "89004801f7f05c3b7baf5187ea6a49a7dbf4cab2fce62f59f773bdb5fea64794",
-        "bytes": 9574
+        "sha256": "3f10f10e54a6bbd69e72db24632f14507ef2a222c4a916868c5e653e3bb4d067",
+        "bytes": 12258
       },
       {
         "path": "xtask/src/json.rs",
@@ -953,11 +983,11 @@
       }
     ]
   },
-  "sourceManifestCoreIdentity": "e30097d90ab91094fb60df4f905c509509407357a29e59f41df8c96496068a4b",
+  "sourceManifestCoreIdentity": "ebdc9fa4464f74c8fdb0973613851eb286af7be814da31d92f66ea062a84b8be",
   "generatedProofInputBody": {
     "schemaVersion": 1,
     "stage": "GeneratedProofInputBody",
-    "sourceManifestCoreIdentity": "e30097d90ab91094fb60df4f905c509509407357a29e59f41df8c96496068a4b",
+    "sourceManifestCoreIdentity": "ebdc9fa4464f74c8fdb0973613851eb286af7be814da31d92f66ea062a84b8be",
     "excludes": [
       "its own JSON encoding",
       "every later output"
@@ -965,30 +995,30 @@
     "generatedLeanSources": [
       {
         "path": "WasmGemmGnaf.lean",
-        "sha256": "4dd9e0a3c3d302d71c04a056550331e7a8e6dbda91cf8c6301521aa693f7f9a9",
-        "bytes": 5377
+        "sha256": "cb06aa63fdc1bbf8f85b6a55453cb6af3926001fa7018b6d375e8c2f72fe8bb0",
+        "bytes": 5646
       }
     ],
     "note": "Artifact/Bytes.lean is NOT present: no artifact has been emitted, because emission requires WS-001 and BI-002. SPEC 13 Phase F step 4 is therefore not reached."
   },
-  "generatedProofInputIdentity": "76dccf556a0e41f562859f2e10c2953d8d6de5ab4c24698ca3fc19649d130cb9",
+  "generatedProofInputIdentity": "d25e26c3555bb4e942fc3efe4bd9de90eb2b23baffe21189125f162998c18e52",
   "preFinalEnvironmentBody": {
     "schemaVersion": 1,
     "stage": "PreFinalEnvironmentBody",
-    "generatedProofInputIdentity": "76dccf556a0e41f562859f2e10c2953d8d6de5ab4c24698ca3fc19649d130cb9",
+    "generatedProofInputIdentity": "d25e26c3555bb4e942fc3efe4bd9de90eb2b23baffe21189125f162998c18e52",
     "leanToolchain": "leanprover/lean4:v4.30.0",
     "leanCommit": "d024af099ca4bf2c86f649261ebf59565dc8c622",
     "dependencies": [],
     "compiledEnvironmentDigest": null,
     "note": "compiledEnvironmentDigest is null: SPEC 13 Phase F step 5 records the checked final declaration-environment digest, which is only meaningful once the final theorem is on the path. GO-001 is outstanding."
   },
-  "preFinalEnvironmentIdentity": "f51d94ca24f6ef154e6d9d4ed37ef94f60928c2638b0cefa70ea6e86d6f318f9",
+  "preFinalEnvironmentIdentity": "72e9b5ba33f719d78452f1c219ca1d5bc222d18da17f3d4005a740bf89360bc9",
   "outputManifestBody": {
     "schemaVersion": 1,
     "stage": "OutputManifestBody",
-    "sourceManifestCoreIdentity": "e30097d90ab91094fb60df4f905c509509407357a29e59f41df8c96496068a4b",
-    "generatedProofInputIdentity": "76dccf556a0e41f562859f2e10c2953d8d6de5ab4c24698ca3fc19649d130cb9",
-    "preFinalEnvironmentIdentity": "f51d94ca24f6ef154e6d9d4ed37ef94f60928c2638b0cefa70ea6e86d6f318f9",
+    "sourceManifestCoreIdentity": "ebdc9fa4464f74c8fdb0973613851eb286af7be814da31d92f66ea062a84b8be",
+    "generatedProofInputIdentity": "d25e26c3555bb4e942fc3efe4bd9de90eb2b23baffe21189125f162998c18e52",
+    "preFinalEnvironmentIdentity": "72e9b5ba33f719d78452f1c219ca1d5bc222d18da17f3d4005a740bf89360bc9",
     "excludes": [
       "MANIFEST.json itself"
     ],

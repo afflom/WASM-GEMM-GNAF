@@ -26,8 +26,10 @@ import WasmGemmGnaf.Wasm.Core.BinaryGrammar.Values
 import WasmGemmGnaf.Wasm.Core.BinaryGrammar.Vector
 import WasmGemmGnaf.Wasm.Core.Context
 import WasmGemmGnaf.Wasm.Core.Decode
+import WasmGemmGnaf.Wasm.Core.DecodeInstrComplete
 import WasmGemmGnaf.Wasm.Core.DecodeInstructions
 import WasmGemmGnaf.Wasm.Core.DecodeModules
+import WasmGemmGnaf.Wasm.Core.DecodeModulesComplete
 import WasmGemmGnaf.Wasm.Core.DecodeParser
 import WasmGemmGnaf.Wasm.Core.DecodeTypes
 import WasmGemmGnaf.Wasm.Core.DecodeUtf8
@@ -42,7 +44,10 @@ import WasmGemmGnaf.Wasm.Core.Runtime
 import WasmGemmGnaf.Wasm.Core.Subst
 import WasmGemmGnaf.Wasm.Core.Types
 import WasmGemmGnaf.Wasm.Core.Validate
+import WasmGemmGnaf.Wasm.Core.ValidateComplete
 import WasmGemmGnaf.Wasm.Core.ValidateInstr
+import WasmGemmGnaf.Wasm.Core.ValidateModule
+import WasmGemmGnaf.Wasm.Core.ValidateSeq
 import WasmGemmGnaf.Wasm.Core.ValidateStack
 import WasmGemmGnaf.Wasm.Core.Validation.Instructions
 import WasmGemmGnaf.Wasm.Core.Validation.InstructionsAmended
@@ -50,6 +55,7 @@ import WasmGemmGnaf.Wasm.Core.Validation.Modules
 import WasmGemmGnaf.Wasm.Core.Validation.ModulesAmended
 import WasmGemmGnaf.Wasm.Core.Validation.Types
 import WasmGemmGnaf.Wasm.Core.Values
+import WasmGemmGnaf.Wasm.CoreGap
 import WasmGemmGnaf.Wasm.Costed
 import WasmGemmGnaf.Wasm.CostedExplore
 import WasmGemmGnaf.Wasm.Declarative

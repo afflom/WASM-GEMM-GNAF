@@ -40,8 +40,8 @@
   NOT machine-checked, and nothing here pretends otherwise: that the proposition
   written below IS what SPEC means, wherever SPEC states no fenced theorem.
   Twenty-nine of SPEC §15's fifty-eight names have no fenced statement anywhere in
-  `SPEC.md`; of the thirty-six bound below, eighteen quote a verbatim SPEC block
-  and eighteen quote governing prose instead.  For the second eighteen a reader
+  `SPEC.md`; of the thirty-nine bound below, twenty quote a verbatim SPEC block
+  and nineteen quote governing prose instead.  For the second nineteen a reader
   closes the last step.  That residual is real and is the same one `Schema.lean`
   has.
 
@@ -54,6 +54,14 @@
   differs from SPEC's literal text, under a deviation filed in
   `model/spec-deviations.json`, whose id the marker cites.  `xtask signature`
   checks that the id exists.  Does NOT count as discharged.
+
+  The gap an AMENDED binding discloses can point either way, and after SPEC's
+  §24 amendment log it does.  It used to mean only "the repository proves
+  something other than the literal text, because the literal text is false".
+  Since `AMD-003` corrected SPEC §12.5 to the *stronger* scope-free form, the
+  surviving AMENDED binding means the opposite: SPEC now asks for more than the
+  declaration wearing the required name proves.  Either way the binding pins the
+  proposition that IS carried, and either way it does not count.
 
   `-- spec-signature-weaker:` — the declaration is strictly weaker than SPEC's
   literal text and no deviation is filed.  The binding still pins the weaker
@@ -254,39 +262,39 @@ theorem runFuel_complete_with_bound_signature :
   @Wasm.runFuel_complete_with_bound
 
 /--
-**SPEC §7.5**, quoted verbatim:
+**SPEC §7.5**, quoted verbatim, as amended by `AMD-002` (SPEC §24):
 
 ```lean
 theorem costed_erase_iff_plain_run :
   Wasm.CostedRun P module invocation costedTrace observation ↔
-    Wasm.Run module invocation (eraseCosts costedTrace) observation
+    (Wasm.Run module invocation (eraseCosts costedTrace) observation ∧
+     Wasm.CostedLabelling module invocation costedTrace)
 ```
 
-AMENDED under `DEV-001` (`model/spec-deviations.json`).  The repository's
-right-hand side carries an extra conjunct, `Wasm.CostedLabelling module
-invocation costedTrace`.  That is a genuine difference and it is NOT SPEC's
-proposition: the forward direction becomes strictly stronger, and the backward
-direction strictly weaker.
+EXACT.  This binding was `spec-signature-amended` under `DEV-001` while SPEC
+stated the bare biconditional.  SPEC has since been corrected: the literal text
+was **proved false**, for every profile, by `Wasm.not_costed_erase_iff_plain_run`
+in `Wasm/Erasure.lean`.  The witness is a module that passes `Wasm.validate`
+together with a costed trace whose erasure is exactly the plain trace of a
+maximal run of that module, and which differs from the machine's own labelling
+in one payload — the installed byte count of the harness transition — that
+`Wasm.CostedEvent.erase` discards (`Wasm.erase_enterGemm_eq`).  The old
+right-hand side holds of it (`Counterexample.minimal_run`) and the left-hand
+side does not (`Counterexample.minimal_not_costedRun`), so no theorem of the
+superseded shape exists and the amendment is the strongest true form.
 
-`DEV-001` no longer merely *argues* that SPEC's literal biconditional is false;
-it is **proved** false, for every profile, by
-`Wasm.not_costed_erase_iff_plain_run` in `Wasm/Erasure.lean`.  The witness is a
-module that passes `Wasm.validate` together with a costed trace whose erasure is
-exactly the plain trace of a maximal run of that module, and which differs
-from the machine's own labelling in one payload — the installed byte count of
-the harness transition — that `Wasm.CostedEvent.erase` discards
-(`Wasm.erase_enterGemm_eq`).  SPEC's right-hand side holds of it
-(`Counterexample.minimal_run`) and SPEC's left-hand side does not
-(`Counterexample.minimal_not_costedRun`).  `Wasm.costed_run_iff_plain_run`
-carries the intended content with no side condition at all.
+The side condition is a condition on LABELS alone: `Wasm.CostedLabelling`
+mentions no observation, no store and no terminal status, so it does not smuggle
+the conclusion into the hypothesis.  The forward direction is strictly stronger
+than the superseded text (`CostedRun` now yields the plain run *and* that the
+labelling is machine-produced), and SPEC §7.5 additionally requires
+`Wasm.costed_run_iff_plain_run`, which carries the intent with no side condition
+at all.
 
-A refuted proposition is still a proposition this binding does not carry, so it
-does not count towards the SPEC §15 total; `xtask signature` reports it as
-AMENDED and `xtask claims required` reports the name OUTSTANDING.  What the
-counterexample changes is that the disclosure is now a proof rather than a
-claim.
+`DEV-001` stays on file with its refutation theorems cited, recorded there as
+adopted into SPEC.
 -/
--- spec-signature-amended: Wasm.costed_erase_iff_plain_run (deviation DEV-001)
+-- spec-signature: Wasm.costed_erase_iff_plain_run
 theorem costed_erase_iff_plain_run_signature :
     ∀ {P : Wasm.Profile} {module : Wasm.Module} {invocation : Wasm.RawInvocation}
       {costedTrace : List Wasm.CostedEvent} {observation : Wasm.ExecutionObservation},
@@ -937,45 +945,51 @@ theorem invalidation_complete_signature :
   @Atlas.invalidation_complete
 
 /--
-**SPEC §12.5**, quoted verbatim:
+**SPEC §12.5**, quoted verbatim, as amended by `AMD-003` (SPEC §24):
 
 ```lean
 theorem incremental_eq_full_rebuild
+    (hcoherent : Atlas.Coherent state.body)
     (hupdate : (Atlas.accumulate budget state delta).result = .complete successor) :
   Atlas.canonicalize successor.body =
     Atlas.canonicalize
-      (Atlas.semanticRebuildBody
+      (Atlas.semanticRebuildBodyWith state.body.scope
         (state.body.declarationBase ∪ delta.declarations))
 ```
 
-AMENDED under `DEV-004` (`model/spec-deviations.json`).  The repository's
-theorem carries two hypotheses SPEC's statement does not:
+STILL AMENDED under `DEV-004` (`model/spec-deviations.json`), and the direction
+of the gap has REVERSED — this is the point of the entry, so it is stated
+plainly.
 
-* `Atlas.Coherent state.body`;
-* `state.body.scope = Atlas.Scope.unscoped`.
-
-Neither is a convenience, and neither is asserted to be necessary: both are
-**proved** necessary in `Atlas/Rebuild.lean`.
+SPEC's superseded text carried no hypothesis and rebuilt through
+`Atlas.semanticRebuildBody`.  That statement was **proved false**
+(`Atlas.not_incremental_eq_full_rebuild`), in two independent ways:
 
 * `Atlas.incremental_ne_full_rebuild_of_objectiveId` — `semanticRebuildBody`
   takes only the declaration base, which names no scope, so it always answers
   `Atlas.Scope.unscoped`, while `semanticApplyBody` preserves the state's scope
   and `canonicalize` copies the three identities verbatim.  Every state whose
-  objective identity is not `nullId` therefore falsifies SPEC's equation, for
-  every budget and every delta.
-* `Atlas.not_incremental_eq_full_rebuild_unscoped` — restricting SPEC's
-  statement to unscoped states does not save it either: the witness is a state
-  that records one semantic object its empty declaration base does not derive,
-  on which the equation fails for `Delta.empty`.
+  objective identity is not `nullId` therefore falsified it, for every budget
+  and every delta.
+* `Atlas.not_incremental_eq_full_rebuild_unscoped` — restricting it to unscoped
+  states did not save it either: the witness is a state that records one
+  semantic object its empty declaration base does not derive, on which the
+  equation fails for `Delta.empty`.
 
-`Atlas.not_incremental_eq_full_rebuild` is the resulting refutation of SPEC's
-literal statement, and `Atlas.incremental_eq_full_rebuild_scoped` proves the
-general form, which quantifies over the scope instead of fixing it, without the
-scope hypothesis.
+SPEC was corrected to the STRONGER form: the scope objection is fixed by
+rebuilding in the state's own scope rather than assumed away, so the amended
+statement implies the repaired literal one and constrains scoped states as well.
 
-A refuted proposition is still a proposition this binding does not carry, so the
-binding does not count towards the SPEC §15 total; `xtask signature` reports it
-as AMENDED and `xtask claims required` reports the name OUTSTANDING.
+The declaration bound below, `Atlas.incremental_eq_full_rebuild`, is the LITERAL
+form — it additionally hypothesises `state.body.scope = Atlas.Scope.unscoped`
+— and is therefore weaker than SPEC now asks.  The proposition SPEC now asks for
+IS proved in this repository, by `Atlas.incremental_eq_full_rebuild_scoped` in
+`Atlas/Rebuild.lean`, under a different name; `xtask signature` accepts a binding
+only when it is closed by `:= @<the SPEC name>`, and renaming a declaration in
+`Atlas/Rebuild.lean` is outside the change that amended SPEC.  Until the name
+`Atlas.incremental_eq_full_rebuild` carries the amended proposition, this binding
+stays AMENDED and `xtask claims required` reports the name OUTSTANDING.  Nothing
+here is counted as discharged.
 -/
 -- spec-signature-amended: Atlas.incremental_eq_full_rebuild (deviation DEV-004)
 theorem incremental_eq_full_rebuild_signature :

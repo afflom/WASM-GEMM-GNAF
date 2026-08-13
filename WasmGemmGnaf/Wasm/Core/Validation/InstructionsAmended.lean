@@ -63,12 +63,18 @@
   rejects" theorem is not merely unproved, it is FALSE by construction.  What is
   proved is the two-sided bound that can be proved: containment of the pinned
   relation (no regression) and preservation of arity discipline in every context
-  at every instruction type (no runaway).  The stronger statement --- that
-  `Instrs_ok'` is contained in what the appendix ALGORITHM accepts --- is NOT
-  proved here, because `Core/ValidateInstr.lean` carries no `checkSeq_complete`
-  to contain it in; that remains an open obligation and is not claimed.  The
-  arity theorems are the evidence actually available, and they are exactly the
+  at every instruction type (no runaway).  The arity theorems are exactly the
   properties an over-wide repair would break.
+
+  THE UPPER BOUND IS NOW A THEOREM, IN A LATER FILE.  `Core/ValidateSeq.lean`
+  proves `checkSeq_complete`: over the decided fragment (`Context.frag`,
+  `Instr.frag`) every instruction type `Instrs_ok'` gives a sequence is one the
+  appendix ALGORITHM computes.  So the amendment is contained in what the
+  algorithm accepts, on that fragment, and `checkSeq_sound` there is the
+  converse in every context with no fragment hypothesis at all.  Containment in
+  the CORRECTED UPSTREAM rules (`bd4633ac`) is a different statement and is
+  still not proved: the pin is not advanced, so those rules are not transcribed
+  in this repository and there is nothing here to state it against.
 
   NO COVERAGE MARKERS.  Nothing here is a transcription of a pinned rule, so no
   declaration in this file carries a coverage marker of any kind.  The Core 3.0

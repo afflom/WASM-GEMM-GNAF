@@ -370,8 +370,8 @@ theorem utf8Char?_complete (c : UChar) (rest : List Byte) :
       have hcond : 0x80 ≤ (Byte.ofNat (0x80 + c.val % 0x40)).val ∧
           (Byte.ofNat (0x80 + c.val % 0x40)).val < 0xC0 ∧
           0x80 ≤ (0xC0 + c.val / 0x40 - 0xC0) * 0x40
-            + ((Byte.ofNat (0x80 + c.val % 0x40)).val - 0x80) := by
-        rw [hv1]; omega
+            + ((Byte.ofNat (0x80 + c.val % 0x40)).val - 0x80) :=
+        ⟨by simp only [hv1]; omega, by simp only [hv1]; omega, by simp only [hv1]; omega⟩
       have hval : (0xC0 + c.val / 0x40 - 0xC0) * 0x40
           + ((Byte.ofNat (0x80 + c.val % 0x40)).val - 0x80) = c.val := by
         rw [hv1]; omega
@@ -404,8 +404,9 @@ theorem utf8Char?_complete (c : UChar) (rest : List Byte) :
             (Byte.ofNat (0x80 + c.val % 0x40)).val < 0xC0 ∧
             0x800 ≤ (0xE0 + c.val / 0x1000 - 0xE0) * 0x1000
               + ((Byte.ofNat (0x80 + c.val / 0x40 % 0x40)).val - 0x80) * 0x40
-              + ((Byte.ofNat (0x80 + c.val % 0x40)).val - 0x80) := by
-          rw [hv1, hv2]; omega
+              + ((Byte.ofNat (0x80 + c.val % 0x40)).val - 0x80) :=
+          ⟨by simp only [hv1, hv2]; omega, by simp only [hv1, hv2]; omega, by simp only [hv1, hv2]; omega,
+            by simp only [hv1, hv2]; omega, by simp only [hv1, hv2]; omega⟩
         have hval : (0xE0 + c.val / 0x1000 - 0xE0) * 0x1000
             + ((Byte.ofNat (0x80 + c.val / 0x40 % 0x40)).val - 0x80) * 0x40
             + ((Byte.ofNat (0x80 + c.val % 0x40)).val - 0x80) = c.val := by
@@ -447,8 +448,11 @@ theorem utf8Char?_complete (c : UChar) (rest : List Byte) :
             0x10000 ≤ (0xF0 + c.val / 0x40000 - 0xF0) * 0x40000
               + ((Byte.ofNat (0x80 + c.val / 0x1000 % 0x40)).val - 0x80) * 0x1000
               + ((Byte.ofNat (0x80 + c.val / 0x40 % 0x40)).val - 0x80) * 0x40
-              + ((Byte.ofNat (0x80 + c.val % 0x40)).val - 0x80) := by
-          rw [hv1, hv2, hv3]; omega
+              + ((Byte.ofNat (0x80 + c.val % 0x40)).val - 0x80) :=
+          ⟨by simp only [hv1, hv2, hv3]; omega, by simp only [hv1, hv2, hv3]; omega,
+            by simp only [hv1, hv2, hv3]; omega, by simp only [hv1, hv2, hv3]; omega,
+            by simp only [hv1, hv2, hv3]; omega, by simp only [hv1, hv2, hv3]; omega,
+            by simp only [hv1, hv2, hv3]; omega⟩
         have hval : (0xF0 + c.val / 0x40000 - 0xF0) * 0x40000
             + ((Byte.ofNat (0x80 + c.val / 0x1000 % 0x40)).val - 0x80) * 0x1000
             + ((Byte.ofNat (0x80 + c.val / 0x40 % 0x40)).val - 0x80) * 0x40

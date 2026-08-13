@@ -84,8 +84,14 @@ const ENTRIES: &[Entry] = &[
     Entry {
         required: "WasmGemmGnaf.Wasm.validate_iff_declarative",
         declarative: "WasmGemmGnaf.Wasm.DeclarativelyValid",
+        // `WasmGemmGnaf.Wasm.validate` is deliberately NOT here. A reflection
+        // theorem's STATEMENT necessarily names the executable procedure it is
+        // about -- `validate m = true <-> ...` -- so its proof term mentions it
+        // unavoidably, and forbidding it would make the obligation unpassable
+        // for a theorem that had been repaired. The circularity signal is the
+        // checker's INTERNALS appearing in the declarative side, which is what
+        // the rest of this list is, and which `DeclarativelyValid` trips.
         forbidden: &[
-            "WasmGemmGnaf.Wasm.validate",
             "WasmGemmGnaf.Wasm.Module.checkClosed",
             "WasmGemmGnaf.Wasm.Module.checkMems",
             "WasmGemmGnaf.Wasm.Module.checkGlobal",
@@ -189,7 +195,7 @@ pub fn report_over(root: &Path, entries: &[Entry]) -> Result<Report> {
                 ));
             };
             for name in entry.forbidden {
-                if block.contains(name) {
+                if mentions(block, name) {
                     findings.push(Finding {
                         required: entry.required.to_string(),
                         detail: format!(
@@ -204,6 +210,34 @@ pub fn report_over(root: &Path, entries: &[Entry]) -> Result<Report> {
     }
 
     Ok(Report { checked: entries.len(), findings })
+}
+
+/// Whether `block` mentions the Lean constant `name` as a WHOLE identifier.
+///
+/// A plain substring test is wrong here and was wrong in the first version, in a
+/// way that made one obligation permanently unpassable rather than merely
+/// noisy: `WasmGemmGnaf.Wasm.validate` is a PREFIX of
+/// `WasmGemmGnaf.Wasm.validate_iff_declarative`, so the check fired on the
+/// theorem's own name and would have gone on firing after the circularity was
+/// repaired. Adversarial review caught it.
+///
+/// Lean identifiers are made of alphanumerics, `_`, `'` and `.`, so an
+/// occurrence counts only when neither neighbour is one of those.
+fn mentions(block: &str, name: &str) -> bool {
+    let is_ident = |c: char| c.is_alphanumeric() || c == '_' || c == '\'' || c == '.';
+    let bytes = block.as_bytes();
+    let mut from = 0usize;
+    while let Some(offset) = block[from..].find(name) {
+        let start = from + offset;
+        let end = start + name.len();
+        let before_ok = start == 0 || !is_ident(bytes[start - 1] as char);
+        let after_ok = end >= bytes.len() || !is_ident(bytes[end] as char);
+        if before_ok && after_ok {
+            return true;
+        }
+        from = start + 1;
+    }
+    false
 }
 
 /// The text Lean printed for `#print name`, up to the next printed declaration.
@@ -228,4 +262,31 @@ pub fn run(root: &Path) -> Result<Outcome> {
     let report = report(root)?;
     println!("{}", report.render());
     Ok(if report.is_ok() { Outcome::Pass } else { Outcome::Fail })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_prefix_is_not_a_mention() {
+        // The bug this test exists for: `...Wasm.validate` is a prefix of
+        // `...Wasm.validate_iff_declarative`, so a substring test fired on the
+        // theorem's own name and made the obligation permanently unpassable.
+        let block = "theorem WasmGemmGnaf.Wasm.validate_iff_declarative : ...";
+        assert!(!mentions(block, "WasmGemmGnaf.Wasm.validate"));
+        assert!(mentions(block, "WasmGemmGnaf.Wasm.validate_iff_declarative"));
+    }
+
+    #[test]
+    fn a_real_mention_is_found() {
+        let block = "theorem foo : ... := WasmGemmGnaf.Wasm.validate m";
+        assert!(mentions(block, "WasmGemmGnaf.Wasm.validate"));
+    }
+
+    #[test]
+    fn a_suffix_is_not_a_mention() {
+        let block = "theorem foo : ... := MyWasmGemmGnaf.Wasm.validate m";
+        assert!(!mentions(block, "WasmGemmGnaf.Wasm.validate"));
+    }
 }

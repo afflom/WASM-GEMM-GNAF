@@ -145,6 +145,13 @@ The following identities SHALL be recorded in `authority/manifest.json`, checked
 
 Changing an authority creates a new profile and invalidates dependent certificates. No floating tags, mutable action revisions, unpinned package revisions, or network-fetched proof inputs are allowed in release verification.
 
+The pinned WebAssembly Core revision is known to carry an upstream defect in its
+instruction-sequence typing rule, repaired upstream only after the pin. It is
+recorded and worked around under §7.3 and deviation `DEV-006`; the pin SHALL NOT be
+advanced on account of it, and a repository that carries a defect in a pinned
+authority SHALL record it here and in the governing clause rather than silently
+tracking the fix.
+
 The mathematical theorem is relative to the Lean mechanization of the pinned WebAssembly semantics. The repository SHALL include a clause-by-clause conformance map from the pinned normative source to Lean declarations. Tests against an external reference interpreter are additional evidence, not a replacement for the formal semantics.
 
 The disclosed logical trust base SHALL be exactly:
@@ -713,6 +720,67 @@ gate; it has no default-feature or environment argument.
 
 `Wasm/Binary.lean` SHALL implement canonical and permissive LEB128 handling exactly as pinned by the spec, section ordering, sizes, names, types, instructions, and malformed input behavior.
 
+**The pinned revision carries a known upstream defect, recorded by `AMD-005` (§24).**
+`validate_bool_iff` below is the right proposition and is **not** amended; what is
+amended is the reading of `Wasm.DeclarativelyValid` on its right-hand side, because
+the declarative side **as pinned** cannot type ordinary WebAssembly. `Instrs_ok/seq`
+of `vendor/wasm-spec/specification/wasm-3.0/2.3-validation.instructions.spectec`
+types the head instruction with the principal relation `Instr_ok` and requires the
+tail's domain to be *exactly* the head's codomain. The only rules that can adjust a
+type are `Instrs_ok/sub`, which preserves domain length, and `Instrs_ok/frame`, which
+only makes a domain longer; both apply to **sequences**, and the vendored tree
+contains no `Instr_ok/sub` and no `Instr_ok/frame`. A head producing fewer operands
+than the tail consumes therefore can never be composed, and `i32.const c; i32.add` is
+the smallest instance: the pinned rules give it no instruction type in any context,
+so no function body performing binary arithmetic is `Expr_ok`, no module containing
+one is `Module_ok`, and the pinned `DeclarativelyValid` is close to vacuous while the
+appendix algorithm `Wasm.validate` accepts such modules. This repository has proved
+that gap, in full generality and at module level
+(`Wasm.Core.Validate.Instrs_ok.cons_inv`, `…cons_untypable_of_arity`,
+`Wasm.Core.gapModule_not_ok`; deviation `DEV-006`).
+
+The defect is in the **vendored pinned source**, not in this document and not in the
+transcription: the vendored file is byte-identical to the upstream blob at the pin,
+the argument is about operand-sequence lengths alone, and the pinned prose at
+`vendor/wasm-spec/document/core/valid/instructions.rst` contradicts the pinned rules
+on the same point — rendered prose cannot distinguish `Instr_ok` from `Instrs_ok`,
+which is why the gap is invisible in the published document and bites only a
+mechanization. Upstream agrees, **after** the pin: WebAssembly/spec issue #2194
+reports it in the same terms and PR #2197 merged the repair as commit
+`bd4633aced30b720ff62b44cf00c03ece792f008`, nine months after the pinned commit.
+
+Therefore, normatively:
+
+- The pin in §4 **SHALL NOT** be advanced on account of this defect. Advancing past
+  `bd4633a` would change the vendored blob set and the Core 3.0 rule inventory, which
+  §4 makes a new-profile event; the defect is recorded instead.
+- `Wasm.DeclarativelyValid` SHALL be defined over the **amended** judgments
+  `Wasm.Core.Instr_ok'` / `Instrs_ok'` / `Expr_ok'` / `Func_ok'` and their module-level
+  lifts, stated explicitly in `Wasm/Core/Validation/InstructionsAmended.lean` and
+  `Wasm/Core/Validation/ModulesAmended.lean`.
+- The amendment SHALL be **one modified premise and no new rule**: `Instrs_ok'/seq`
+  carries the frame `t_0*` inside the composition, so `C ⊢ instr_1 instr_2* :
+  (t_0* t_1*) →_(x_1* x_2*) t_3*` follows from `C ⊢ instr_1 : t_1* →_(x_1*) t_2*`,
+  `C ⊢ t_0* : OK` and `C ⊢ instr_2* : (t_0* t_2*) →_(x_2*) t_3*`. `empty`, `sub` and
+  `frame` are unchanged, and `t_0* = ε` is exactly the pinned rule. Because
+  `Instr_ok/block`, `/loop` and `/if` type their bodies with the sequence judgment,
+  the amendment SHALL be propagated through them by a mutual `Instr_ok'` that lifts
+  every pinned instruction rule unchanged and restates only those three; otherwise
+  the vacuity survives one nesting level down.
+- The amendment SHALL be accompanied by a **no-regression** theorem at every level —
+  `Instrs_ok.to_amended`, `Expr_ok.to_amended`, `Func_ok.to_amended` — so it rejects
+  nothing the pinned rules accept, and by the arity theorems of the pinned relation
+  **re-proved against the amended one** (`Instrs_ok'.binop_dom_length`,
+  `…nil_length`, `…const_length`, `…binop_length`, `…not_const_nil`,
+  `…not_binop_unary`, `…not_binop_balanced`), so that composability is bought by
+  supplying operands from the frame and not by letting a domain shrink.
+- No coverage marker SHALL be attached to a declaration in the amended files: the
+  Core 3.0 rule inventory measures the **pinned** tree and SHALL NOT be inflated by
+  the amendment.
+- `validate_bool_iff` SHALL be stated over the amended relation with `DEV-006` cited,
+  never over the pinned relation, and it remains **outstanding**: nothing in this
+  amendment discharges it.
+
 Required theorems include:
 
 ```lean
@@ -889,12 +957,41 @@ Soundness SHALL map every returned observation to a relational execution. Comple
 
 ### 7.5 Costed semantics
 
-`Wasm/Costed.lean` SHALL label every semantic transition with exact abstract events. `Wasm/Erasure.lean` SHALL prove that removing cost labels yields exactly the ordinary execution:
+`Wasm/Costed.lean` SHALL label every semantic transition with exact abstract events. `Wasm/Erasure.lean` SHALL prove that removing cost labels yields exactly the ordinary execution.
+
+**Amended by `AMD-002` (§24).** This clause previously stated the erasure law as the
+bare biconditional `Wasm.CostedRun … ↔ Wasm.Run module invocation (eraseCosts
+costedTrace) observation`. That proposition is **false**, and the repository has
+proved it false for every profile (`Wasm.not_costed_erase_iff_plain_run`, deviation
+`DEV-001`): `costedTrace` is universally quantified while the right-hand side sees it
+only through `eraseCosts`, which discards the payload of `enterGemm` and
+`memoryGrowSucceed` and collapses the ordinary-rule family into `Event.step`, so a
+trace carrying forged cost labels satisfies the right-hand side without being a run
+the machine can produce. The amendment adds the one side condition that closes
+exactly that gap — that `costedTrace` is a labelling the machine emits — and states
+separately the side-condition-free law that carries the clause's intent. The forward
+direction is thereby **strictly stronger** than the text it replaces; the backward
+direction is the strongest true form, since no theorem of the original shape exists.
+The side condition SHALL be a condition on labels alone: `Wasm.CostedLabelling`
+mentions no observation, no store and no terminal status, so it cannot smuggle the
+conclusion back into the hypothesis.
 
 ```lean
 theorem costed_erase_iff_plain_run :
   Wasm.CostedRun P module invocation costedTrace observation ↔
-    Wasm.Run module invocation (eraseCosts costedTrace) observation
+    (Wasm.Run module invocation (eraseCosts costedTrace) observation ∧
+     Wasm.CostedLabelling module invocation costedTrace)
+
+theorem costed_run_iff_plain_run :
+  (∃ costedTrace, Wasm.CostedRun P module invocation costedTrace observation) ↔
+    Wasm.Run module invocation observation.trace observation
+
+def Wasm.CostedLabelling
+    (module : Wasm.Module) (invocation : Wasm.RawInvocation)
+    (costedTrace : List Wasm.CostedEvent) : Prop :=
+  ∃ initial final visited,
+    Wasm.initialConfig module invocation = .ok initial ∧
+      Wasm.CostedReduces initial costedTrace visited final
 
 structure Wasm.InitializationObservation (P : Wasm.Profile) where
   initial : Wasm.Config
@@ -2091,6 +2188,18 @@ The GNAF grammar is the constructive proposal language and the native representa
 - code/data tables;
 - status and output construction.
 
+A loop whose trip count is read from a register SHALL clamp that count at the
+profile's address-space ceiling (`Plan.loopRegMaxTrips = 2^32 - 1`, the released i32
+ceiling, equal to `maxRawExtent`), so that a static step bound remains derivable from
+the plan text alone. This is `AMD-006` (§24), filed as `DEV-002`: an unclamped
+register-bounded loop would falsify `Plan.steps_le_stepBound`, which bounds executed
+steps by a `Nat` computed from the plan text, and no fixed number bounds a loop whose
+trip count is an arbitrary register value. The clamp is unreachable for any
+configuration the released ABI can present or any value the compiled `i32` locals can
+hold, so it is neutral in reach; it preserves an existing theorem rather than
+weakening one, and the trip count SHALL still be exactly the memory word below the
+ceiling.
+
 An embedded validated Wasm process may be represented as a canonical opaque process node only when its exact semantics, resource behavior, and cost certificate are retained. "Opaque" SHALL not mean "trusted."
 
 ### 11.2 Typing and semantics
@@ -2353,7 +2462,83 @@ def Atlas.attend
     (s : StateBody) (request : RequestSignature) : CanonicalSet CanonicalObjectId
 ```
 
-For artifact selection, an omitted candidate or partition is legal only when a retained proof shows that it is empty, cannot beat the current bound, or is exactly reconstructible elsewhere. Required theorem:
+For artifact selection, an omitted candidate or partition is legal only when a retained proof shows that it is empty, cannot beat the current bound, or is exactly reconstructible elsewhere.
+
+**Amended by `AMD-004` (§24), and this amendment SHRINKS an obligation.** The
+predicates this clause names SHALL be defined rather than left open; leaving them
+open is what made a vacuous discharge available, and a reader SHALL treat the
+definitions below as normative:
+
+```lean
+def Atlas.AttentionContains
+    (core : Atlas.SealCore) (candidateBytes : ByteArray) : Prop :=
+  Atlas.candidateSignature candidateBytes ∈ core.attentionRoot.signatures
+
+def Atlas.AttentionRoutes
+    (s : Atlas.StateBody) (candidateBytes : ByteArray) : Prop :=
+  Atlas.candidateObjectId candidateBytes ∈
+    Atlas.attend s (Atlas.candidateRequest candidateBytes)
+
+def Atlas.HasSoundExclusionCertificate
+    (core : Atlas.SealCore) (candidateBytes : ByteArray)
+    (evaluation : Universal.SystemEvaluation profile problem candidateBytes) :
+    Prop :=
+  Atlas.candidateObjectId candidateBytes ∈ core.certificateRoot.certificateIds ∧
+    ∃ ground : Atlas.ExclusionGround,
+      Atlas.SoundExclusion core candidateBytes evaluation ground
+
+def Atlas.OptimumRelevant
+    (profile : Wasm.Profile) (problem : Gemm.Problem profile)
+    (objective : Cost.ProperObjective profile problem)
+    (core : Atlas.SealCore) (candidateBytes : ByteArray) : Prop :=
+  Universal.ProfileValid profile candidateBytes ∧
+  Wasm.ProfileId profile = core.profileId ∧
+  Gemm.ProblemId problem = core.problemId ∧
+  Cost.ObjectiveId objective = core.objectiveId ∧
+  ∃ evaluation : Universal.SystemEvaluation profile problem candidateBytes,
+    Universal.SystemEvaluationRel profile problem candidateBytes evaluation ∧
+    objective.score evaluation.cost ≤ core.baselineScore
+```
+
+Two honesty conditions SHALL hold of any admissible reading of them: an attention
+root listing no signature contains no candidate, and a certificate root listing no
+certificate identity supplies no *retained* exclusion certificate. Both follow from
+the definitions above, and it is exactly those two conditions that make the
+following refutation unavoidable.
+
+This clause previously required `attention_no_optimum_relevant_false_negative` with
+no hypothesis about the state beyond the seal, and with `candidateBytes` an arbitrary
+byte string. That proposition is **false**, and the repository has proved it false
+(`Atlas.attention_no_optimum_relevant_false_negative_is_false`, deviation `DEV-005`)
+*parametrically* in the two predicates, so no reading satisfying the honesty
+conditions rescues it. `Atlas.SealCertificate` is the conjunction of seven
+deterministic checkers, not one of which mentions a byte string, a decoder, a
+semantics or a cost; `attentionCompleteCheck` asks only that every object the state
+**records** is routed by some indexed signature, and it is satisfied — with every
+root empty — by a state that recorded nothing at all. Nothing links such a seal to an
+arbitrary candidate whose evaluated score is within the baseline, and no exclusion
+certificate could have been sound either: of the three grounds listed above, `empty`
+is contradicted by the witness's profile validity, `cannotBeatBound` by its tying the
+baseline, and `reconstructibleElsewhere` by the core attending nothing
+(`Atlas.no_listed_exclusion_ground_for_witness`).
+
+The amendment therefore states attention completeness **relative to what the Atlas
+was given**: over a coherent state and a candidate in its declaration base. Within
+that scope the conclusion is **strictly stronger** than the disjunction it replaces —
+the left disjunct is proved outright, at the `attend`-level reading as well as the
+core-level one, so no exclusion certificate is needed and none is offered, and the
+`Atlas.OptimumRelevant` witness is returned so that no hypothesis is idle. The two
+added hypotheses are proved load-bearing and neither is an assumption that the index
+already holds the candidate: `hdeclared` says only that the candidate reached the
+Atlas as a declaration, and the indexing and routing are then derived.
+
+**What this amendment gives up, stated plainly.** The obligation shrank. The residue
+— that every profile-valid byte string is declared to the Atlas — is §10.5's
+universal coverage obligation, which is stated there with no coverage hypothesis and
+is **not** discharged by this clause, by the seal, or by anything in §12. A seal
+built from seven checkers that never read a byte SHALL NOT be presented as carrying a
+proposition quantified over all byte strings; §10.5 is where that quantifier lives,
+and it remains open.
 
 ```lean
 theorem attention_no_optimum_relevant_false_negative
@@ -2370,10 +2555,20 @@ theorem attention_no_optimum_relevant_false_negative
     (hobjective : Cost.ObjectiveId objective = core.objectiveId)
     (hc : Universal.ProfileValid profile candidateBytes)
     (heval : Universal.SystemEvaluationRel profile problem candidateBytes evaluation)
-    (hscore : objective.score evaluation.cost ≤ core.baselineScore) :
-  Atlas.AttentionContains core candidateBytes ∨
-  Atlas.HasSoundExclusionCertificate core candidateBytes evaluation
+    (hscore : objective.score evaluation.cost ≤ core.baselineScore)
+    (hcoherent : Atlas.Coherent state.body)
+    (hdeclared : candidateBytes ∈ state.body.declarationBase.declarations) :
+  Atlas.OptimumRelevant profile problem objective core candidateBytes ∧
+  Atlas.AttentionRoutes state.body candidateBytes ∧
+  Atlas.AttentionContains core candidateBytes
 ```
+
+The class this theorem speaks about SHALL be shown inhabited by a real candidate
+actually returned by the index, so that it is not a statement about an empty class,
+and `Atlas.OptimumRelevant` SHALL be defined from the objective, the candidate bytes
+and the decider alone — mentioning no attention index, no `attend`, no signature and
+no seal check — so that relevance is not defined through the mechanism the theorem
+is about.
 
 An attention score alone is never an optimality proof.
 
@@ -2418,9 +2613,16 @@ def Atlas.seal :
     BudgetedResult budget SealedState SealError
 
 def Atlas.semanticApplyBody : StateBody → Delta → StateBody
-def Atlas.semanticRebuildBody : CanonicalDeclarationSet → StateBody
+def Atlas.semanticRebuildBodyWith :
+  Scope → CanonicalDeclarationSet → StateBody
+def Atlas.semanticRebuildBody (declarations : CanonicalDeclarationSet) :
+    StateBody :=
+  Atlas.semanticRebuildBodyWith Atlas.Scope.unscoped declarations
 def Atlas.replayRecognitionCost : UnsealedState → Delta → BuildBudget
 def Atlas.rebuildSufficientBudget : CanonicalDeclarationSet → BuildBudget
+
+def Atlas.Coherent (b : StateBody) : Prop :=
+  b = Atlas.derivedBody b.scope b.declarationBase
 ```
 
 `semanticApplyBody` and `semanticRebuildBody` are total, structurally recursive
@@ -2441,6 +2643,33 @@ The implementation sequence is:
 7. recompute exact cost surfaces and envelope cells;
 8. verify all certificates from canonical preimages;
 9. construct the immutable seal only when coverage is complete.
+
+**Amended by `AMD-003` (§24).** `incremental_eq_full_rebuild` previously carried no
+hypothesis and rebuilt through `Atlas.semanticRebuildBody`. That proposition is
+**false**, and the repository has proved it false
+(`Atlas.not_incremental_eq_full_rebuild`, deviation `DEV-004`), in two independent
+ways. *Scope*: `semanticRebuildBody`'s only input is the declaration base, which
+names no objective, profile or problem identity, so it always answers
+`Scope.unscoped`, while `semanticApplyBody` preserves the scope of the state it
+updates and `canonicalize` copies the three identities verbatim; every state whose
+objective identity is not `nullId` therefore falsifies the equation for **every**
+budget and delta (`Atlas.incremental_ne_full_rebuild_of_objectiveId`). *Coherence*: a
+hand-built state may record a semantic object its declaration base does not derive,
+and the surplus survives canonicalisation, so restricting the equation to unscoped
+states does not rescue it either
+(`Atlas.not_incremental_eq_full_rebuild_unscoped`).
+
+The amendment fixes the scope objection by rebuilding in the state's **own** scope
+rather than by assuming the scope away, so it is **strictly stronger** than a
+repaired literal form: with `state.body.scope = Atlas.Scope.unscoped` it yields the
+original equation verbatim, and it also constrains every scoped state, about which
+the original text said nothing true. `Atlas.Coherent` is the standing
+well-formedness condition of the update model, not an escape hatch: it is
+established by every rebuild (`rebuild_coherent`) and preserved by every update
+(`semanticApplyBody_coherent`), so it excludes only states the pipeline cannot
+produce, and both facts are required below so that it is discharged rather than
+assumed. `incremental_eq_full_rebuild_exact` states the same equation *before*
+canonicalisation and is required as well, since it is stronger again.
 
 Required laws:
 
@@ -2476,11 +2705,27 @@ theorem update_batch_confluent
     Atlas.canonicalize (Atlas.applyBatch state [right, left])
 
 theorem incremental_eq_full_rebuild
+    (hcoherent : Atlas.Coherent state.body)
     (hupdate : (Atlas.accumulate budget state delta).result = .complete successor) :
   Atlas.canonicalize successor.body =
     Atlas.canonicalize
-      (Atlas.semanticRebuildBody
+      (Atlas.semanticRebuildBodyWith state.body.scope
         (state.body.declarationBase ∪ delta.declarations))
+
+theorem incremental_eq_full_rebuild_exact
+    (hcoherent : Atlas.Coherent state.body)
+    (hupdate : (Atlas.accumulate budget state delta).result = .complete successor) :
+  successor.body =
+    Atlas.semanticRebuildBodyWith state.body.scope
+      (state.body.declarationBase ∪ delta.declarations)
+
+theorem semanticApplyBody_coherent
+    (hcoherent : Atlas.Coherent state.body) :
+  Atlas.Coherent (Atlas.semanticApplyBody state.body delta)
+
+theorem rebuild_coherent (declarations : CanonicalDeclarationSet) :
+  Atlas.Coherent
+    (Atlas.unsealedFromBody (Atlas.semanticRebuildBody declarations)).body
 
 theorem candidate_expansion_value_monotone
     (honlyAdds : Atlas.OnlyAddsCandidates oldState newState) :
@@ -3182,3 +3427,64 @@ The repository is complete only when:
 - public prose uses exactly the theorem's scope.
 
 Anything less is an intermediate research state, not proven global optimality.
+
+## 24. Amendment log
+
+This document is normative, so an error in it is not a licence to deviate from it: it
+is a defect in the contract, and the contract is corrected here. Every amendment
+below is recorded in `model/spec-deviations.json` under `amendments`, keeps the
+declarations that refuted the superseded text cited so the reason survives, and was
+adopted together with the theorem that replaces it.
+
+Three rules govern this log.
+
+1. An amendment SHALL be the **smallest** change that makes the clause true, and
+   SHALL NOT weaken what the clause demanded. Where the repository proves something
+   **stronger** than the clause asked, the clause is amended to the stronger
+   statement, not to what happens to be convenient.
+2. Amending a clause to match a weaker theorem the repository already has is
+   **forbidden**. If a required proposition is false and nothing stronger is proved,
+   the clause is amended to the strongest true statement and the amendment SHALL say
+   that the obligation shrank, so the ledger reflects the loss rather than absorbing
+   it.
+3. An amendment SHALL NOT, by itself, mark anything discharged. A required
+   declaration counts only when a declaration of that name carries the amended
+   proposition, bound by `:= @Name` in `Conformance/RequiredSignatures.lean` and
+   checked by `xtask signature`.
+
+| Id | Clause | Was | Now | Effect |
+|---|---|---|---|---|
+| `AMD-001` | §5, new §5.1 | Lean tooling under `Tools/`; "the Rust workspace SHALL be removed after the Lean conformance replacement passes" | §5.1 fixes two languages: Lean 4 is the proof and implementation language under `WasmGemmGnaf/`; Rust is the infrastructure and tooling language under `xtask/`, one-directional and off the proof path | Neutral. The trust base stays the Lean kernel: `xtask` **checks** whether the kernel discharged an obligation, never **decides** one. Supersedes an unfiled `DEV-003`. |
+| `AMD-002` | §7.5 | `costed_erase_iff_plain_run` as a bare biconditional between `CostedRun` and the plain run of the erased trace | The biconditional's right-hand side carries `Wasm.CostedLabelling`, plus the side-condition-free existential law `costed_run_iff_plain_run` and the definition of `CostedLabelling` | Strengthening. The old text is **proved false** (`DEV-001`); the forward direction is now strictly stronger, and the intent is stated unconditionally. |
+| `AMD-003` | §12.5 | `incremental_eq_full_rebuild` with no hypothesis, rebuilding through `semanticRebuildBody` | The same equation under `Atlas.Coherent state.body`, rebuilt in the state's **own** scope through `semanticRebuildBodyWith`, with `incremental_eq_full_rebuild_exact`, `semanticApplyBody_coherent` and `rebuild_coherent` required beside it | Strengthening. The old text is **proved false** six ways (`DEV-004`), including that restricting to unscoped states does not rescue it. The scope objection is fixed rather than assumed away, so the amended form implies the repaired literal form and constrains scoped states as well. |
+| `AMD-004` | §12.2 | `attention_no_optimum_relevant_false_negative` over an arbitrary byte string, concluding a disjunction with an undefined exclusion predicate; `AttentionContains` and `HasSoundExclusionCertificate` left undefined | The four predicates defined normatively; the theorem restricted to a coherent state and a candidate in its declaration base, concluding the strictly stronger conjunction of relevance, `attend`-level routing and core-level containment | **Obligation shrank, and this is the disclosure.** The old text is **proved false** parametrically in the two undefined predicates (`DEV-005`); no honest reading rescues it. The byte-universe residue is §10.5's universal coverage obligation and stays open there. Within its scope the conclusion is stronger than the disjunction it replaces. |
+| `AMD-005` | §4, §7.3 | Silence on the pinned Core 3.0 revision's instruction-sequence typing defect | The defect recorded, the pin explicitly **not** advanced, `DeclarativelyValid` read over the amended `Instr_ok'`/`Instrs_ok'` judgments, with no-regression and re-proved arity discipline required and the coverage inventory forbidden to count the amendment | Strictly wider declarative side, disclosed and bounded. The defect is in the **vendored pinned source**, not in this document (`DEV-006`); upstream repaired it in PR #2197, after the pin. `validate_bool_iff` is unchanged and remains outstanding. |
+| `AMD-006` | §11.1 | Silence on the trip count of a register-bounded plan loop | The trip count clamped at the profile's address-space ceiling, so a static step bound stays derivable from plan text | Neutral in reach (`DEV-002`). The ceiling equals `maxRawExtent` and is unreachable for the released ABI; the clamp preserves `Plan.steps_le_stepBound` instead of weakening it. |
+
+**`AMD-002` moved the ledger by itself, and that is a defect in the process rather
+than a result.** An earlier draft of this paragraph asserted that none of
+`AMD-002` through `AMD-006` moves a name from outstanding to discharged; that
+sentence was false and adversarial review caught it. `AMD-002` makes §7.5's
+required declaration bindable by a theorem the repository **already proved**, so
+`xtask claims required` went from 34 to 35 discharged while
+`WasmGemmGnaf/Wasm/Erasure.lean` was not modified at all. **Net new proof for
+that credit: zero lines.**
+
+The amendment itself stands — §7.5's literal biconditional is refuted by
+`Wasm.not_costed_erase_iff_plain_run` over a non-degenerate witness, so the text
+was wrong and correcting it was required. What must not stand is reading the
+resulting +1 as progress. A repository cannot discharge an obligation by editing
+the document that imposes it, and the release-connected count, which is the only
+one that measures progress toward the release theorem, does not move for
+`AMD-002`.
+
+The rest: `AMD-003` and `AMD-004` state propositions the repository proves under
+*other* names, so those two SPEC §15 names stay outstanding until a declaration
+of the required name carries the amended proposition; `AMD-005` leaves
+`Wasm.validate_iff_declarative` outstanding and circular; `AMD-006` concerns no
+required name.
+
+**Rule, added because this happened.** An amendment that makes an existing
+theorem bindable SHALL be recorded in `model/spec-deviations.json` with
+`ledgerEffect` naming the count it moves and the number of new proof lines that
+earned it. Where that number is zero, the entry SHALL say so in those words.

@@ -19,26 +19,32 @@
   written from different documents and neither can be adjusted to make the other
   true without visibly changing a transcription of a vendored file.
 
-  WHAT IS NOT CLAIMED.  There is no `decode_complete` here, and none is
-  asserted.  Completeness of the decoder against `Bmodule` is an open
-  obligation; the component-level completeness lemmas that a proof of it would
-  need (`decU32_complete`, `decName_complete`, `decValtype_complete`,
-  `decRectype_complete`, `decExterntype_complete`, ...) are proved in the layers
-  below, and what is missing is the instruction and module level.  Omitting the
-  theorem is the conforming representation of that gap.
+  COMPLETENESS, AND WHY IT IS THE DIRECTION THAT MATTERS.  `decode_complete`
+  below is the converse: every derivation of `Bmodule` is decoded, to the module
+  the derivation produces.  Soundness alone is satisfied by a decoder that
+  rejects everything, and a decoder that silently rejected a valid module would
+  SHRINK the set of programs the release optimality statement quantifies over.
+  The proof is in `Wasm/Core/DecodeInstrComplete.lean` (the instruction format,
+  including both prefixed opcode spaces) and `Wasm/Core/DecodeModulesComplete.lean`
+  (the section structure and the three starred side conditions), and it routes
+  through no encoder: there is no encoder in this import graph at all.
+
+  `decode_complete` is an executable-witness name under SPEC 4, so its axiom
+  closure is `[propext, Quot.sound]` -- choice free.
 
   SCOPE OF THE DECODER.  `decode` implements the whole module format -- real
   opcode bytes, custom sections at all fourteen positions, the function/code
   split, the data count section, bounded PERMISSIVE LEB128 (non-minimal
   encodings inside the width bound are accepted, as the pinned `BuN` accepts
   them), UTF-8 names, `END`-terminated expressions and compressed locals --
-  with the instruction set of `Wasm/Core/DecodeInstructions.lean`, which covers
-  everything outside the `0xFB` (GC) and `0xFD` (SIMD) opcode spaces.  Since
-  soundness is a statement about what the decoder ACCEPTS, that restriction
-  does not weaken `decode_sound`: an instruction the decoder does not implement
-  is one it rejects.
+  with the instruction set of `Wasm/Core/DecodeInstructions.lean`, which now
+  covers the `0xFB` (garbage collection) and `0xFD` (SIMD) opcode spaces as well
+  as the unprefixed and `0xFC` spaces.  `decode_complete` is what makes that
+  claim of coverage checkable: a production the decoder failed to implement
+  would be a `Bmodule` derivation it rejected, and the theorem says there is
+  none.
 -/
-import WasmGemmGnaf.Wasm.Core.DecodeModules
+import WasmGemmGnaf.Wasm.Core.DecodeModulesComplete
 
 set_option autoImplicit false
 set_option maxRecDepth 1000000
@@ -65,6 +71,20 @@ module it returns is the one the derivation produces. -/
 theorem decode_sound {bytes : ByteArray} {m : Module}
     (h : decode bytes = .ok m) : Bmodule (ByteArray.toBytes bytes) m :=
   Decode.decModule_sound _ m h
+
+/-- COMPLETENESS, against the declarative grammar and not against an encoder:
+everything the pinned binary format derives, the decoder accepts, and returns
+the module the derivation produces.  This is the direction a rejecting decoder
+would fail. -/
+theorem decode_complete {bytes : ByteArray} {m : Module}
+    (h : Bmodule (ByteArray.toBytes bytes) m) : decode bytes = .ok m :=
+  Decode.decModule_complete _ m h
+
+/-- The two directions together: `decode` and the pinned `Bmodule` accept
+exactly the same byte sequences and agree on the value. -/
+theorem decode_iff_Bmodule {bytes : ByteArray} {m : Module} :
+    decode bytes = .ok m ↔ Bmodule (ByteArray.toBytes bytes) m :=
+  ⟨decode_sound, decode_complete⟩
 
 /-! ## Kernel-checked derivations
 
@@ -127,5 +147,44 @@ example :
     Decode.decModule (bytesOf [0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00,
                                0x00, 0x02, 0x01, 0xFF]) = .error .utf8 := by
   rfl
+
+/-! ### The two prefixed opcode spaces
+
+The `0xFB` (garbage collection) and `0xFD` (SIMD) spaces were the omission an
+external audit named.  `decode_complete` is the general statement that nothing
+is omitted; these are three concrete points a reader can check against
+`5.3-binary.instructions.spectec` without reading a proof. -/
+
+/-- `| 0xFD 256:Bu32 => VSWIZZLOP (I8 X `16) RELAXED_SWIZZLE`.  The pinned
+selector is 256 DECIMAL, which has no one-byte LEB128 form at all: the encoding
+is `0xFD 0x80 0x02`.  A byte-keyed opcode table could not express this
+production, and the SIMD selectors run to 275. -/
+example : (Decode.decInstr 8 (bytesOf [0xFD, 0x80, 0x02])).isOk = true := by
+  rfl
+
+/-- ... and it is a derivation of the pinned `Binstr`, by soundness. -/
+example : ∃ i : Instr, Binstr (bytesOf [0xFD, 0x80, 0x02]) i := by
+  obtain ⟨i, hi⟩ : ∃ i : Instr,
+      Decode.decInstr 8 (bytesOf [0xFD, 0x80, 0x02]) = .ok (i, []) := ⟨_, rfl⟩
+  obtain ⟨b, hb, hd⟩ := Decode.decInstr_sound 8 _ i [] hi
+  simp only [List.append_nil] at hb
+  exact ⟨i, hb ▸ hd⟩
+
+/-- `| 0xFD 35:Bu32 => VRELOP (I8 X `16) EQ`.  The selector is a `Bu32`, so the
+non-minimal `0xA3 0x00` is the same instruction as the minimal `0x23` -- not a
+different one, and not a rejection. -/
+example :
+    Decode.decInstr 8 (bytesOf [0xFD, 0x23]) =
+      Decode.decInstr 8 (bytesOf [0xFD, 0xA3, 0x00]) := by
+  rfl
+
+/-- `| 0xFB 30:Bu32 => I31.GET U`, the last production of the garbage collection
+space. -/
+example : ∃ i : Instr, Binstr (bytesOf [0xFB, 0x1E]) i := by
+  obtain ⟨i, hi⟩ : ∃ i : Instr,
+      Decode.decInstr 8 (bytesOf [0xFB, 0x1E]) = .ok (i, []) := ⟨_, rfl⟩
+  obtain ⟨b, hb, hd⟩ := Decode.decInstr_sound 8 _ i [] hi
+  simp only [List.append_nil] at hb
+  exact ⟨i, hb ▸ hd⟩
 
 end WasmGemmGnaf.Wasm.Core
