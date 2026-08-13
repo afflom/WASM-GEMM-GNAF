@@ -50,7 +50,7 @@ const CLAUSE: &str = "7.1";
 const SPECTEC_DIR: &str = "vendor/wasm-spec/specification/wasm-3.0";
 const LEAN_DIR: &str = "WasmGemmGnaf";
 
-/// The four kinds of obligation the pinned Core semantics imposes.
+/// The five kinds of obligation the pinned Core semantics imposes.
 ///
 /// `Exec` was absent from the first version of this checker, and an external
 /// audit was right to name the omission: measuring the binary format and the
@@ -62,6 +62,20 @@ pub enum Kind {
     Opcode,
     Rule,
     Exec,
+    /// Auxiliary functions the pinned numerics sources define BY EQUATION.
+    ///
+    /// Added after the execution transcription disclosed that the vector
+    /// operator semantics of `3.2` were left as fields of a parameter record
+    /// while the ~30 vector step rules that call them were transcribed and
+    /// counted. Counting rules alone made that invisible: a step relation whose
+    /// SIMD operators are uninterpreted is quantified over every interpretation,
+    /// which is not the pinned semantics however many rules it has.
+    ///
+    /// `hint(builtin)` declarations are deliberately NOT obligations. The pinned
+    /// source declares 74 of them and gives no equations, so a transcription of
+    /// these files cannot define what these files do not define; those are
+    /// legitimately parameters.
+    Aux,
 }
 
 impl Kind {
@@ -71,6 +85,7 @@ impl Kind {
             Kind::Opcode => "core-opcode:",
             Kind::Rule => "core-rule:",
             Kind::Exec => "core-exec:",
+            Kind::Aux => "core-def:",
         }
     }
 
@@ -80,6 +95,7 @@ impl Kind {
             Kind::Opcode => "binary opcode productions",
             Kind::Rule => "validation rules",
             Kind::Exec => "execution rules",
+            Kind::Aux => "numerics definitions",
         }
     }
 
@@ -117,6 +133,9 @@ impl Kind {
                 "4.3-execution.instructions.spectec",
                 "4.4-execution.modules.spectec",
             ],
+            Kind::Aux => {
+                &["3.1-numerics.scalar.spectec", "3.2-numerics.vector.spectec"]
+            }
         }
     }
 }
@@ -246,6 +265,35 @@ fn syntax_names(text: &str) -> Vec<String> {
         }
     }
     out
+}
+
+/// Every auxiliary function the pinned numerics sources define BY EQUATION.
+///
+/// A `def $f(...) : T` line declares one; a following `def $f hint(builtin)`
+/// says the pinned source gives no equations for it. Only the ones it does
+/// define are obligations -- a transcription cannot define what the source
+/// leaves abstract, and pretending otherwise would invent content.
+fn aux_names(text: &str) -> Vec<String> {
+    let mut declared: Vec<String> = Vec::new();
+    let mut builtin: Vec<String> = Vec::new();
+    for line in text.lines() {
+        let line = strip_comment(line);
+        let Some(rest) = line.strip_prefix("def $") else { continue };
+        let name: String = rest
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect();
+        if name.is_empty() {
+            continue;
+        }
+        if rest[name.len()..].trim_start().starts_with("hint(builtin)") {
+            builtin.push(name);
+        } else if !declared.contains(&name) {
+            declared.push(name);
+        }
+    }
+    declared.retain(|n| !builtin.contains(n));
+    declared
 }
 
 /// Every `rule <Relation>/<case>:` the vendored validation sources declare.
@@ -483,6 +531,7 @@ fn coverage(spectec_dir: &Path, lean_root: &Path, kind: Kind) -> Result<Coverage
         let mut names = match kind {
             Kind::Syntax => syntax_names(&text),
             Kind::Rule | Kind::Exec => rule_names(&text),
+            Kind::Aux => aux_names(&text),
             Kind::Opcode => opcode_productions(&text),
         };
         required.append(&mut names);
@@ -582,6 +631,7 @@ pub fn report(spectec_dir: &Path, lean_root: &Path) -> Result<Report> {
             coverage(spectec_dir, lean_root, Kind::Opcode)?,
             coverage(spectec_dir, lean_root, Kind::Rule)?,
             coverage(spectec_dir, lean_root, Kind::Exec)?,
+            coverage(spectec_dir, lean_root, Kind::Aux)?,
         ],
         elaborated: false,
     })

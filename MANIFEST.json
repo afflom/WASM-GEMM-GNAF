@@ -783,8 +783,8 @@
       },
       {
         "path": "xtask/src/core.rs",
-        "sha256": "f097a9283238576f241a4adf26fd88ded0a567c444aae89a18a86dd68cfea754",
-        "bytes": 31146
+        "sha256": "b1eb0bde49e37cf90d0d2d99b437f0b6da2365b6cadac2cc2ee909e1cad0282b",
+        "bytes": 33410
       },
       {
         "path": "xtask/src/docs.rs",
@@ -883,11 +883,11 @@
       }
     ]
   },
-  "sourceManifestCoreIdentity": "409ef2d8f2cabf612d84b0b0ad5b420917f061b9efcd3907471351f83c8c1538",
+  "sourceManifestCoreIdentity": "c74e468741a836209062564c14a1c86caf18854a91292fcdb09ed46c10211fbc",
   "generatedProofInputBody": {
     "schemaVersion": 1,
     "stage": "GeneratedProofInputBody",
-    "sourceManifestCoreIdentity": "409ef2d8f2cabf612d84b0b0ad5b420917f061b9efcd3907471351f83c8c1538",
+    "sourceManifestCoreIdentity": "c74e468741a836209062564c14a1c86caf18854a91292fcdb09ed46c10211fbc",
     "excludes": [
       "its own JSON encoding",
       "every later output"
@@ -901,24 +901,24 @@
     ],
     "note": "Artifact/Bytes.lean is NOT present: no artifact has been emitted, because emission requires WS-001 and BI-002. SPEC 13 Phase F step 4 is therefore not reached."
   },
-  "generatedProofInputIdentity": "798df15d0cd054cb1dbbb7be1ab5d23f87d41ac9452dcaf38de6e4ae7a288f5d",
+  "generatedProofInputIdentity": "42d37cef6634300cdf535f0c131b5c320bbf9c58dd77c1361041b0f6a82fbec5",
   "preFinalEnvironmentBody": {
     "schemaVersion": 1,
     "stage": "PreFinalEnvironmentBody",
-    "generatedProofInputIdentity": "798df15d0cd054cb1dbbb7be1ab5d23f87d41ac9452dcaf38de6e4ae7a288f5d",
+    "generatedProofInputIdentity": "42d37cef6634300cdf535f0c131b5c320bbf9c58dd77c1361041b0f6a82fbec5",
     "leanToolchain": "leanprover/lean4:v4.30.0",
     "leanCommit": "d024af099ca4bf2c86f649261ebf59565dc8c622",
     "dependencies": [],
     "compiledEnvironmentDigest": null,
     "note": "compiledEnvironmentDigest is null: SPEC 13 Phase F step 5 records the checked final declaration-environment digest, which is only meaningful once the final theorem is on the path. GO-001 is outstanding."
   },
-  "preFinalEnvironmentIdentity": "92d2f6f0cecd6fc57c1d85947f63d6342f8097f0b28e0775561149247672d3de",
+  "preFinalEnvironmentIdentity": "88eec5586fb0c3000bfc6dceca36e6ad87bc762bf15124b3b72012429e243b3d",
   "outputManifestBody": {
     "schemaVersion": 1,
     "stage": "OutputManifestBody",
-    "sourceManifestCoreIdentity": "409ef2d8f2cabf612d84b0b0ad5b420917f061b9efcd3907471351f83c8c1538",
-    "generatedProofInputIdentity": "798df15d0cd054cb1dbbb7be1ab5d23f87d41ac9452dcaf38de6e4ae7a288f5d",
-    "preFinalEnvironmentIdentity": "92d2f6f0cecd6fc57c1d85947f63d6342f8097f0b28e0775561149247672d3de",
+    "sourceManifestCoreIdentity": "c74e468741a836209062564c14a1c86caf18854a91292fcdb09ed46c10211fbc",
+    "generatedProofInputIdentity": "42d37cef6634300cdf535f0c131b5c320bbf9c58dd77c1361041b0f6a82fbec5",
+    "preFinalEnvironmentIdentity": "88eec5586fb0c3000bfc6dceca36e6ad87bc762bf15124b3b72012429e243b3d",
     "excludes": [
       "MANIFEST.json itself"
     ],
@@ -931,7 +931,7 @@
     "generatedDocumentation": [
       {
         "path": "CONFORMANCE.md",
-        "sha256": "5c76416135f6a975aea13b28e824b0f245aa0b738c70e1093b26914ec7296964"
+        "sha256": "74ae030c6e633cfdef65d3b2c537bdc8af149e6dfdbed01847f21b248e137d8a"
       }
     ],
     "reproducibilityPlan": {
