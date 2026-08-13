@@ -151,7 +151,7 @@ fn dispatch(args: &[String]) -> Result<Outcome> {
         "axioms" => axioms::run(&root),
         "schema" => schema::run(&root),
         "vendor" => vendor::run(has(rest, "--list")),
-        "core" => core::run(has(rest, "--list")),
+        "core" => core::run(&root, has(rest, "--list"), has(rest, "--check")),
         "manifest" => manifest::run(has(rest, "--check")),
         "docs" => docs::run(),
         "gate" => gate::run(&root, has(rest, "--no-mutation")),

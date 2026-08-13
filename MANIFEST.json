@@ -482,6 +482,31 @@
         "bytes": 13282
       },
       {
+        "path": "WasmGemmGnaf/Wasm/Core/Instructions.lean",
+        "sha256": "5e624b43cc5319d9a45df2a5a8abbf4418f266f1a94b15fac47cdb1ddc25bc0f",
+        "bytes": 19145
+      },
+      {
+        "path": "WasmGemmGnaf/Wasm/Core/Modules.lean",
+        "sha256": "ea288fe32e9ea84a63adf09eb300c0829c1fcda339267496468be6bbf31e59e5",
+        "bytes": 3959
+      },
+      {
+        "path": "WasmGemmGnaf/Wasm/Core/Operators.lean",
+        "sha256": "e245a0eef54547d80a446f1ef96a3706d58978270126878c4cb4d81ffeb6034f",
+        "bytes": 29117
+      },
+      {
+        "path": "WasmGemmGnaf/Wasm/Core/Types.lean",
+        "sha256": "631b760d0762aa85e0cddded71151e874f716386577cc5dfa0bd79c23105f60d",
+        "bytes": 24482
+      },
+      {
+        "path": "WasmGemmGnaf/Wasm/Core/Values.lean",
+        "sha256": "aad9b819654916f1d425460341ef171e45db72d87a973af0277d5d819f352f57",
+        "bytes": 14302
+      },
+      {
         "path": "WasmGemmGnaf/Wasm/Costed.lean",
         "sha256": "a36427c0abf8d6b4b2d42f101435aed6413ac99d8fa13c8ba188eef65b4f7f96",
         "bytes": 92882
@@ -668,8 +693,8 @@
       },
       {
         "path": "xtask/src/core.rs",
-        "sha256": "5c0233b4321123aefe9728040880324726b60338e1857578df33e56310fd5998",
-        "bytes": 15017
+        "sha256": "eafa0f5e66d2fa2af9748ec5757e5c507e2ee01f1e2d799c2aafe7ad251e9386",
+        "bytes": 27235
       },
       {
         "path": "xtask/src/docs.rs",
@@ -698,8 +723,8 @@
       },
       {
         "path": "xtask/src/main.rs",
-        "sha256": "dde74c28d6ee24922f1eab968c56b5b9798270841b0c4eea2418059c634c6deb",
-        "bytes": 7338
+        "sha256": "65f0035f6818c28d2d264392074a95b3699cd7f2a5e64ee7c7ca60845f4644a9",
+        "bytes": 7367
       },
       {
         "path": "xtask/src/manifest.rs",
@@ -708,8 +733,8 @@
       },
       {
         "path": "xtask/src/mutation.rs",
-        "sha256": "f0521a46f09d4ea6c94a5041fcad99c38753343fd042934ba4360fbbf363a864",
-        "bytes": 38083
+        "sha256": "31b63749fd855c37bfdad2c094a7109f193c9e230257386f07ce813c68e8127a",
+        "bytes": 39380
       },
       {
         "path": "xtask/src/releasepath.rs",
@@ -758,16 +783,16 @@
       },
       {
         "path": "xtask/src/vendor.rs",
-        "sha256": "a0d44cee6d9b16037cd2069850f626269577abfdea09c8b163b1d63e00b0c44d",
-        "bytes": 32007
+        "sha256": "b441925045d70f011ecdb48c3a0d659f907865cdf97be6e676252ff3ff9abd6c",
+        "bytes": 33193
       }
     ]
   },
-  "sourceManifestCoreIdentity": "40c59ed11b3f0a873f5b19402661281eb5e9c84f030f77e6f429a0fb7e09a032",
+  "sourceManifestCoreIdentity": "90384dc9b9ef80ee5803f92714647ef19c427590d93cc4c69d20f2dc6a528a78",
   "generatedProofInputBody": {
     "schemaVersion": 1,
     "stage": "GeneratedProofInputBody",
-    "sourceManifestCoreIdentity": "40c59ed11b3f0a873f5b19402661281eb5e9c84f030f77e6f429a0fb7e09a032",
+    "sourceManifestCoreIdentity": "90384dc9b9ef80ee5803f92714647ef19c427590d93cc4c69d20f2dc6a528a78",
     "excludes": [
       "its own JSON encoding",
       "every later output"
@@ -775,30 +800,30 @@
     "generatedLeanSources": [
       {
         "path": "WasmGemmGnaf.lean",
-        "sha256": "7432d74078435eb38aa60fccd75333ca6d2e6f106c17e403babff010b6d158ba",
-        "bytes": 3769
+        "sha256": "6d4bfb9b5a37e74deef470e33b6a0f7fd9cf2b803ff748299d2343de850d7e6d",
+        "bytes": 3963
       }
     ],
     "note": "Artifact/Bytes.lean is NOT present: no artifact has been emitted, because emission requires WS-001 and BI-002. SPEC 13 Phase F step 4 is therefore not reached."
   },
-  "generatedProofInputIdentity": "d6926d544f60de26572932e01ee8d2abc531ff9ad63796239e56fe45932a0fb2",
+  "generatedProofInputIdentity": "6d9ebce7174109330889b8bd4cdcfb2da7b6c097b2c9ec0a984f138b35fa230a",
   "preFinalEnvironmentBody": {
     "schemaVersion": 1,
     "stage": "PreFinalEnvironmentBody",
-    "generatedProofInputIdentity": "d6926d544f60de26572932e01ee8d2abc531ff9ad63796239e56fe45932a0fb2",
+    "generatedProofInputIdentity": "6d9ebce7174109330889b8bd4cdcfb2da7b6c097b2c9ec0a984f138b35fa230a",
     "leanToolchain": "leanprover/lean4:v4.30.0",
     "leanCommit": "d024af099ca4bf2c86f649261ebf59565dc8c622",
     "dependencies": [],
     "compiledEnvironmentDigest": null,
     "note": "compiledEnvironmentDigest is null: SPEC 13 Phase F step 5 records the checked final declaration-environment digest, which is only meaningful once the final theorem is on the path. GO-001 is outstanding."
   },
-  "preFinalEnvironmentIdentity": "64de3c38c4d58ae6b00c0c55eeb2c58ca0a7d15563aaf8643bcda5f06dd80f3c",
+  "preFinalEnvironmentIdentity": "b4481c873a3fe06c7113ec4b0e22962b5df266000c5d0990b383dd0eb814f635",
   "outputManifestBody": {
     "schemaVersion": 1,
     "stage": "OutputManifestBody",
-    "sourceManifestCoreIdentity": "40c59ed11b3f0a873f5b19402661281eb5e9c84f030f77e6f429a0fb7e09a032",
-    "generatedProofInputIdentity": "d6926d544f60de26572932e01ee8d2abc531ff9ad63796239e56fe45932a0fb2",
-    "preFinalEnvironmentIdentity": "64de3c38c4d58ae6b00c0c55eeb2c58ca0a7d15563aaf8643bcda5f06dd80f3c",
+    "sourceManifestCoreIdentity": "90384dc9b9ef80ee5803f92714647ef19c427590d93cc4c69d20f2dc6a528a78",
+    "generatedProofInputIdentity": "6d9ebce7174109330889b8bd4cdcfb2da7b6c097b2c9ec0a984f138b35fa230a",
+    "preFinalEnvironmentIdentity": "b4481c873a3fe06c7113ec4b0e22962b5df266000c5d0990b383dd0eb814f635",
     "excludes": [
       "MANIFEST.json itself"
     ],
@@ -811,7 +836,7 @@
     "generatedDocumentation": [
       {
         "path": "CONFORMANCE.md",
-        "sha256": "5d649f9cc6e596a03358da5cf29f142c4f3cedc3ffc1217f4badb3a12c665ed7"
+        "sha256": "18b7a8a6cced535f7d39543282d5be5180e271cb33663ee89c2a84e935a1167c"
       }
     ],
     "reproducibilityPlan": {

@@ -733,7 +733,7 @@ fn m14(_root: &Path) -> Result<bool> {
     }
     let control_total: usize = control.parts.iter().map(super::core::Coverage::covered).sum();
 
-    // (a) an invented opcode. `0xZZ` is not a byte and no such production exists.
+    // (a) an invented opcode. No such production exists in the pinned grammar.
     let plant = planted_lean.join("PlantedCoverage.lean");
     write(
         &plant,
@@ -764,9 +764,38 @@ fn m14(_root: &Path) -> Result<bool> {
         invented_syntax.parts.iter().map(super::core::Coverage::covered).sum();
     let count_unmoved = planted_total == control_total;
 
+    // (e) a REAL item claimed by a marker attached to nothing. An external audit
+    //     objected that coverage "consists of comments anywhere in Lean files,
+    //     with no connection to an elaborated declaration", and it was right of
+    //     the first version. A floating comment must not count.
+    write(
+        &plant,
+        "-- core-rule: Instr_ok/nop\n\n/- an ordinary block comment, not a declaration -/\n",
+    )?;
+    let floating = crate::core::report(spectec, &planted_lean)?;
+    let rejects_floating = !floating.is_ok()
+        && floating.parts.iter().any(|p| !p.unattached.is_empty());
+
+    // (f) a REAL item claimed by a marker above a declaration the COMPILED
+    //     environment does not have. The planted copy supplies the name; the
+    //     real environment supplies the truth, so a marker over a renamed,
+    //     deleted or commented-out case is caught.
+    write(
+        &plant,
+        "-- core-rule: Instr_ok/nop\ndef thisNameIsNotInTheCompiledEnvironment : Nat := 0\n",
+    )?;
+    let ghost = crate::core::report_elaborated(Path::new("."), spectec, &planted_lean)?;
+    let rejects_ghost =
+        !ghost.is_ok() && ghost.parts.iter().any(|p| !p.unelaborated.is_empty());
+
     fs::remove_file(&plant).ok();
 
-    Ok(rejects_opcode && rejects_rule && rejects_syntax && count_unmoved)
+    Ok(rejects_opcode
+        && rejects_rule
+        && rejects_syntax
+        && count_unmoved
+        && rejects_floating
+        && rejects_ghost)
 }
 
 /// Copy a directory tree. Every mutation is applied to a COPY; the vendored

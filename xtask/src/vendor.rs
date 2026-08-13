@@ -689,10 +689,32 @@ mod tests {
             .expect("rst");
         std::fs::write(vendor_dir.join("PINNED-COMMIT"), "deadbeef\n").expect("commit");
         std::fs::write(vendor_dir.join("LICENSE"), "licence\n").expect("licence");
-        let listed = sha256::hex(b"licence\n");
-        std::fs::write(vendor_dir.join("SHA256SUMS"), format!("{listed}  ./LICENSE\n"))
-            .expect("sums");
-        let sums_digest = sha256::hex(&std::fs::read(vendor_dir.join("SHA256SUMS")).expect("read"));
+
+        // `SHA256SUMS` must cover the WHOLE tree, exactly as the real one does:
+        // the checker enumerates the directory and an unlisted file is a
+        // finding. This fixture listed only `./LICENSE` and so stopped being a
+        // valid tree the moment that check was added.
+        let rst = format!(".. _{defined}:\n\ntext\n");
+        let sums = format!(
+            "{}  ./LICENSE\n{}  ./PINNED-COMMIT\n{}  ./document/core/instructions.rst\n",
+            sha256::hex(b"licence\n"),
+            sha256::hex(b"deadbeef\n"),
+            sha256::hex(rst.as_bytes()),
+        );
+        std::fs::write(vendor_dir.join("SHA256SUMS"), &sums).expect("sums");
+        let sums_digest = sha256::hex(sums.as_bytes());
+
+        // `BLOBS` carries the git blob object id of every file the pinned
+        // upstream tree contains. `PINNED-COMMIT` is written by this repository,
+        // not by upstream, so it is listed in `SHA256SUMS` and NOT in `BLOBS` --
+        // the same shape as the real vendored tree.
+        let blobs = format!(
+            "{}  ./LICENSE\n{}  ./document/core/instructions.rst\n",
+            crate::sha1::blob_hex(b"licence\n"),
+            crate::sha1::blob_hex(rst.as_bytes()),
+        );
+        std::fs::write(vendor_dir.join("BLOBS"), &blobs).expect("blobs");
+        let blobs_digest = sha256::hex(blobs.as_bytes());
 
         let lean_root = scratch.0.join("lean");
         let wasm = lean_root.join("WasmGemmGnaf").join("Wasm");
@@ -702,8 +724,9 @@ mod tests {
             format!(
                 "def core3RevisionCommit : String :=\n  \"deadbeef\"\n\n\
                  def core3VendorManifestSha256 : String :=\n  \"{sums_digest}\"\n\n\
+                 def core3VendorBlobManifestSha256 : String :=\n  \"{blobs_digest}\"\n\n\
                  def core3VendoredTree : VendoredTreeBody :=\n\
-                 \x20 {{ fileCount := 1 }}\n"
+                 \x20 {{ fileCount := 3 }}\n"
             ),
         )
         .expect("revision");

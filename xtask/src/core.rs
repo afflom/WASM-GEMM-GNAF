@@ -50,12 +50,18 @@ const CLAUSE: &str = "7.1";
 const SPECTEC_DIR: &str = "vendor/wasm-spec/specification/wasm-3.0";
 const LEAN_DIR: &str = "WasmGemmGnaf";
 
-/// The three kinds of obligation the pinned front end imposes.
+/// The four kinds of obligation the pinned Core semantics imposes.
+///
+/// `Exec` was absent from the first version of this checker, and an external
+/// audit was right to name the omission: measuring the binary format and the
+/// typing rules while leaving execution, instantiation and allocation unmeasured
+/// understates the job by a quarter.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum Kind {
     Syntax,
     Opcode,
     Rule,
+    Exec,
 }
 
 impl Kind {
@@ -64,6 +70,7 @@ impl Kind {
             Kind::Syntax => "core-syntax:",
             Kind::Opcode => "core-opcode:",
             Kind::Rule => "core-rule:",
+            Kind::Exec => "core-exec:",
         }
     }
 
@@ -72,6 +79,7 @@ impl Kind {
             Kind::Syntax => "syntax productions",
             Kind::Opcode => "binary opcode productions",
             Kind::Rule => "validation rules",
+            Kind::Exec => "execution rules",
         }
     }
 
@@ -96,6 +104,19 @@ impl Kind {
                 "2.3-validation.instructions.spectec",
                 "2.4-validation.modules.spectec",
             ],
+            // Execution, instantiation, allocation and the runtime type rules.
+            // `4.4-execution.modules.spectec` is where instantiation and
+            // allocation live; `3.*-numerics` are the scalar and vector
+            // operator semantics the step rules call out to.
+            Kind::Exec => &[
+                "3.1-numerics.scalar.spectec",
+                "3.2-numerics.vector.spectec",
+                "4.0-execution.configurations.spectec",
+                "4.1-execution.values.spectec",
+                "4.2-execution.types.spectec",
+                "4.3-execution.instructions.spectec",
+                "4.4-execution.modules.spectec",
+            ],
         }
     }
 }
@@ -105,19 +126,26 @@ pub struct Coverage {
     pub kind: Kind,
     /// Every obligation the vendored sources define, in source order.
     pub required: Vec<String>,
-    /// Obligations Lean carries a marker for. Kept on the report so a caller can
-    /// audit the claims themselves, not only the arithmetic over them.
-    #[allow(dead_code)]
-    pub claimed: Vec<String>,
+    /// Obligations Lean carries a marker for, each bound to its declaration.
+    pub claimed: Vec<Marker>,
     /// Required but unclaimed.
     pub missing: Vec<String>,
     /// Claimed but not defined by the vendored sources -- a fabricated claim.
     pub unknown: Vec<String>,
+    /// Markers that are attached to no declaration at all.
+    pub unattached: Vec<String>,
+    /// Markers whose declaration does not exist in the COMPILED environment.
+    pub unelaborated: Vec<String>,
 }
 
 impl Coverage {
     pub fn covered(&self) -> usize {
         self.required.len() - self.missing.len()
+    }
+
+    /// Every reason this kind's coverage claim is not sound.
+    fn faults(&self) -> usize {
+        self.unknown.len() + self.unattached.len() + self.unelaborated.len()
     }
 
     fn render(&self, list: bool) -> Vec<String> {
@@ -132,6 +160,12 @@ impl Coverage {
                 "    FABRICATED `{} {name}` claims an item the vendored sources do not define",
                 self.kind.marker()
             ));
+        }
+        for note in &self.unattached {
+            out.push(format!("    UNATTACHED {note}"));
+        }
+        for note in &self.unelaborated {
+            out.push(format!("    UNELABORATED {note}"));
         }
         if list {
             for name in &self.missing {
@@ -237,32 +271,141 @@ fn opcode_productions(text: &str) -> Vec<String> {
     out
 }
 
-/// Every marker of the given kind carried by the Lean tree.
-fn lean_markers(root: &Path, kind: Kind) -> Result<Vec<String>> {
+/// One marker, together with the Lean declaration it is attached to.
+#[derive(Clone, Debug)]
+pub struct Marker {
+    /// The pinned-source item claimed, e.g. `0x0C BR`.
+    pub item: String,
+    /// The fully qualified Lean name the marker sits above.
+    pub declaration: String,
+    /// Where it was found, for a legible failure.
+    pub location: String,
+}
+
+/// Whether a line opens a Lean declaration, and under what name.
+///
+/// A marker must be attached to one of these or to a constructor line. A comment
+/// floating anywhere in a file is NOT coverage -- an external audit made exactly
+/// that objection, and it was right: the first version of this checker counted
+/// comments.
+fn declaration_name(line: &str) -> Option<&str> {
+    let trimmed = line.trim_start();
+    for keyword in [
+        "inductive ",
+        "structure ",
+        "def ",
+        "abbrev ",
+        "theorem ",
+        "instance ",
+        "class ",
+    ] {
+        if let Some(rest) = trimmed.strip_prefix(keyword) {
+            let name = rest.split(|c: char| c.is_whitespace() || c == ':' || c == '(').next()?;
+            if !name.is_empty() {
+                return Some(name);
+            }
+        }
+    }
+    None
+}
+
+/// Whether a line is an inductive constructor, and under what name.
+fn constructor_name(line: &str) -> Option<&str> {
+    let trimmed = line.trim_start();
+    if !line.starts_with(' ') && !line.starts_with('\t') {
+        // A top-level `|` belongs to a `match`, not to a constructor list.
+        return None;
+    }
+    let rest = trimmed.strip_prefix("| ")?;
+    let name = rest
+        .split(|c: char| c.is_whitespace() || c == ':' || c == '(' || c == '{')
+        .next()?;
+    (!name.is_empty() && name.chars().next().is_some_and(|c| c.is_alphabetic() || c == '_'))
+        .then_some(name)
+}
+
+/// Every marker of the given kind carried by the Lean tree, each bound to the
+/// declaration it is attached to.
+///
+/// The binding rule: the marker must be a comment, and the next non-blank,
+/// non-comment line must open a declaration or be a constructor. Anything else
+/// is reported as an unattached marker and does not count.
+fn lean_markers(root: &Path, kind: Kind) -> Result<(Vec<Marker>, Vec<String>)> {
     let mut files = Vec::new();
     collect_lean(root, &mut files)?;
     files.sort();
-    let mut out = Vec::new();
+
+    let mut out: Vec<Marker> = Vec::new();
+    let mut unattached: Vec<String> = Vec::new();
+
     for path in files {
         let text = crate::repo::read_lossy(CLAUSE, &path)?;
-        for line in text.lines() {
+        let lines: Vec<&str> = text.lines().collect();
+        let mut namespaces: Vec<String> = Vec::new();
+        let mut current_inductive: Option<String> = None;
+
+        for (index, line) in lines.iter().enumerate() {
+            let trimmed = line.trim();
+            if let Some(rest) = trimmed.strip_prefix("namespace ") {
+                namespaces.push(rest.trim().to_string());
+            } else if let Some(rest) = trimmed.strip_prefix("end ") {
+                let name = rest.trim();
+                if namespaces.last().map(String::as_str) == Some(name) {
+                    namespaces.pop();
+                }
+            }
+            if let Some(name) = declaration_name(line) {
+                if trimmed.starts_with("inductive ") || trimmed.starts_with("structure ") {
+                    current_inductive = Some(name.to_string());
+                }
+            }
+
             let Some(i) = line.find(kind.marker()) else { continue };
-            // Only a comment may carry a marker; a marker inside code would be a
-            // syntax error in Lean anyway, but be explicit about it.
             let before = &line[..i];
             if !before.contains("--") && !before.contains("/-") {
                 continue;
             }
-            let name = line[i + kind.marker().len()..].trim();
-            let name = name.trim_end_matches("-/").trim();
-            if !name.is_empty() {
-                out.push(name.to_string());
+            let item = line[i + kind.marker().len()..].trim().trim_end_matches("-/").trim();
+            if item.is_empty() {
+                continue;
+            }
+            let location = format!("{}:{}", path.display(), index + 1);
+
+            // Find the declaration or constructor this marker is attached to.
+            let mut declaration: Option<String> = None;
+            for next in lines.iter().skip(index + 1) {
+                let t = next.trim();
+                if t.is_empty() || t.starts_with("--") || t.starts_with("/-") || t.starts_with("-/")
+                {
+                    continue;
+                }
+                if let Some(name) = declaration_name(next) {
+                    let mut full = namespaces.clone();
+                    full.push(name.to_string());
+                    declaration = Some(full.join("."));
+                } else if let Some(name) = constructor_name(next) {
+                    if let Some(ind) = &current_inductive {
+                        let mut full = namespaces.clone();
+                        full.push(ind.clone());
+                        full.push(name.to_string());
+                        declaration = Some(full.join("."));
+                    }
+                }
+                break;
+            }
+
+            match declaration {
+                Some(declaration) => out.push(Marker { item: item.to_string(), declaration, location }),
+                None => unattached.push(format!(
+                    "{location}: `{} {item}` is attached to no declaration or constructor",
+                    kind.marker()
+                )),
             }
         }
     }
-    out.sort();
-    out.dedup();
-    Ok(out)
+    out.sort_by(|a, b| a.item.cmp(&b.item));
+    unattached.sort();
+    Ok((out, unattached))
 }
 
 fn collect_lean(dir: &Path, found: &mut Vec<PathBuf>) -> Result<()> {
@@ -288,7 +431,7 @@ fn coverage(spectec_dir: &Path, lean_root: &Path, kind: Kind) -> Result<Coverage
         let text = crate::repo::read_lossy(CLAUSE, &path)?;
         let mut names = match kind {
             Kind::Syntax => syntax_names(&text),
-            Kind::Rule => rule_names(&text),
+            Kind::Rule | Kind::Exec => rule_names(&text),
             Kind::Opcode => opcode_productions(&text),
         };
         required.append(&mut names);
@@ -310,26 +453,42 @@ fn coverage(spectec_dir: &Path, lean_root: &Path, kind: Kind) -> Result<Coverage
         ));
     }
 
-    let claimed = lean_markers(lean_root, kind)?;
-    let missing: Vec<String> =
-        required.iter().filter(|n| !claimed.contains(n)).cloned().collect();
-    let unknown: Vec<String> =
-        claimed.iter().filter(|n| !required.contains(n)).cloned().collect();
+    let (claimed, unattached) = lean_markers(lean_root, kind)?;
+    let missing: Vec<String> = required
+        .iter()
+        .filter(|n| !claimed.iter().any(|m| &&m.item == n))
+        .cloned()
+        .collect();
+    let unknown: Vec<String> = claimed
+        .iter()
+        .filter(|m| !required.contains(&m.item))
+        .map(|m| m.item.clone())
+        .collect();
 
-    Ok(Coverage { kind, required, claimed, missing, unknown })
+    Ok(Coverage { kind, required, claimed, missing, unknown, unattached, unelaborated: Vec::new() })
 }
 
 pub struct Report {
     pub parts: Vec<Coverage>,
+    /// Whether the compiled environment was consulted. A source-only run is
+    /// weaker evidence and says so.
+    pub elaborated: bool,
 }
 
 impl Report {
     pub fn is_ok(&self) -> bool {
-        // A fabricated marker always fails. Incomplete coverage is REPORTED but
-        // does not fail the gate on its own: SPEC 15's inventory is what decides
-        // whether the three front-end theorems may be counted, and this number
-        // is the evidence a reader needs to judge them.
-        self.parts.iter().all(|p| p.unknown.is_empty())
+        // A marker that is fabricated, unattached, or attached to a name the
+        // compiled environment does not have always fails: each is a way for the
+        // number to say more than the tree does.
+        //
+        // Incomplete coverage is REPORTED here and FAILED by `--check`. The gate
+        // runs `--check`; this bare form exists so a work-in-progress run can
+        // still print the arithmetic.
+        self.parts.iter().all(|p| p.faults() == 0)
+    }
+
+    pub fn complete(&self) -> bool {
+        self.parts.iter().all(|p| p.missing.is_empty())
     }
 
     pub fn render(&self, list: bool) -> String {
@@ -344,6 +503,13 @@ impl Report {
             done += part.covered();
         }
         out.push(format!("  TOTAL                      {done} of {total} covered"));
+        out.push(if self.elaborated {
+            "  every marker is bound to a declaration the COMPILED environment has".to_string()
+        } else {
+            "  WARNING: source-only run; marker declarations were not checked against the \
+             compiled environment"
+                .to_string()
+        });
         if done < total {
             out.push(
                 "  SCOPE: coverage is NECESSARY, never sufficient -- a marker says a case \
@@ -356,20 +522,119 @@ impl Report {
     }
 }
 
+/// Coverage from source alone. Used by the mutation suite, which plants markers
+/// in a COPY of the Lean tree that no compiled environment corresponds to.
 pub fn report(spectec_dir: &Path, lean_root: &Path) -> Result<Report> {
     Ok(Report {
         parts: vec![
             coverage(spectec_dir, lean_root, Kind::Syntax)?,
             coverage(spectec_dir, lean_root, Kind::Opcode)?,
             coverage(spectec_dir, lean_root, Kind::Rule)?,
+            coverage(spectec_dir, lean_root, Kind::Exec)?,
         ],
+        elaborated: false,
     })
 }
 
-pub fn run(list: bool) -> Result<Outcome> {
-    let report = report(Path::new(SPECTEC_DIR), Path::new(LEAN_DIR))?;
+/// Coverage, with every marker's declaration checked against the COMPILED
+/// environment.
+///
+/// This is the answer to the objection that coverage "consists of comments
+/// anywhere in Lean files, with no connection to an elaborated declaration".
+/// A marker must sit above a declaration or constructor, and that name must
+/// elaborate: `#check @Name` is put to Lean itself, so a marker above a
+/// commented-out case, a renamed constructor or a deleted definition is
+/// reported UNELABORATED and does not count.
+pub fn report_elaborated(root: &Path, spectec_dir: &Path, lean_root: &Path) -> Result<Report> {
+    let mut report = report(spectec_dir, lean_root)?;
+
+    let mut names: Vec<String> = Vec::new();
+    for part in &report.parts {
+        for marker in &part.claimed {
+            if !names.contains(&marker.declaration) {
+                names.push(marker.declaration.clone());
+            }
+        }
+    }
+    if names.is_empty() {
+        report.elaborated = true;
+        return Ok(report);
+    }
+
+    let mut src = String::from("import WasmGemmGnaf\n");
+    for name in &names {
+        src.push_str("#check @");
+        src.push_str(name);
+        src.push('\n');
+    }
+    let probe = crate::lean::probe_source(
+        CLAUSE,
+        root,
+        &PathBuf::from(".core_probe.lean"),
+        &src,
+    )?;
+    let output = format!("{}\n{}", probe.stdout, probe.stderr);
+
+    // Lean reports an unresolvable name as an `unknownIdentifier` /
+    // `unknownConstant` error naming it. Matched case-insensitively because the
+    // wording is a toolchain detail: Lean 4.30 prints
+    // `error(lean.unknownIdentifier): Unknown identifier `foo``, and an earlier
+    // version of this matcher looked for the lowercase spelling and therefore
+    // never fired -- the falsifier caught that, which is what it is for.
+    let mut bad: Vec<String> = Vec::new();
+    for line in output.lines() {
+        let lowered = line.to_ascii_lowercase();
+        if !lowered.contains("unknownidentifier")
+            && !lowered.contains("unknown identifier")
+            && !lowered.contains("unknownconstant")
+            && !lowered.contains("unknown constant")
+        {
+            continue;
+        }
+        for name in &names {
+            if line.contains(name.as_str()) && !bad.contains(name) {
+                bad.push(name.clone());
+            }
+        }
+    }
+    // An error we could not attribute to a name is still an error: the probe was
+    // supposed to elaborate cleanly. Refusing to guess is safer than passing.
+    if bad.is_empty() && !probe.success {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the Core-coverage probe did not elaborate, and no marker declaration could be \
+                 blamed:\n{}",
+                output.trim()
+            ),
+        ));
+    }
+
+    for part in &mut report.parts {
+        for marker in &part.claimed {
+            if bad.contains(&marker.declaration) {
+                part.unelaborated.push(format!(
+                    "{}: `{}` names `{}`, which the compiled environment does not have",
+                    marker.location,
+                    marker.item,
+                    marker.declaration
+                ));
+            }
+        }
+        part.unelaborated.sort();
+        part.unelaborated.dedup();
+    }
+    report.elaborated = true;
+    Ok(report)
+}
+
+pub fn run(root: &Path, list: bool, check: bool) -> Result<Outcome> {
+    let report = report_elaborated(root, Path::new(SPECTEC_DIR), Path::new(LEAN_DIR))?;
     println!("{}", report.render(list));
-    Ok(if report.is_ok() { Outcome::Pass } else { Outcome::Fail })
+    if !report.is_ok() {
+        return Ok(Outcome::Fail);
+    }
+    Ok(if check && !report.complete() { Outcome::Fail } else { Outcome::Pass })
 }
 
 #[cfg(test)]
@@ -423,8 +688,46 @@ syntax absheaptype/sem =
             "-- core-rule: Instr_ok/nop\ndef notAMarker := \"core-rule: Instr_ok/drop\"\n",
         )
         .unwrap();
-        let got = lean_markers(&scratch, Kind::Rule).unwrap();
+        let (markers, unattached) = lean_markers(&scratch, Kind::Rule).unwrap();
         let _ = std::fs::remove_dir_all(&scratch);
-        assert_eq!(got, vec!["Instr_ok/nop"]);
+        assert!(unattached.is_empty(), "unattached: {unattached:?}");
+        assert_eq!(markers.len(), 1);
+        assert_eq!(markers[0].item, "Instr_ok/nop");
+        assert_eq!(markers[0].declaration, "notAMarker");
+    }
+
+    #[test]
+    fn a_marker_must_be_attached_to_a_declaration() {
+        let scratch = std::env::temp_dir().join("wgg-core-attach-test");
+        let _ = std::fs::remove_dir_all(&scratch);
+        std::fs::create_dir_all(&scratch).unwrap();
+        // A marker with nothing after it but a block comment claims nothing.
+        std::fs::write(
+            scratch.join("A.lean"),
+            "-- core-rule: Instr_ok/nop\n\n/- an ordinary block comment -/\n",
+        )
+        .unwrap();
+        let (markers, unattached) = lean_markers(&scratch, Kind::Rule).unwrap();
+        let _ = std::fs::remove_dir_all(&scratch);
+        assert!(markers.is_empty(), "markers: {markers:?}");
+        assert_eq!(unattached.len(), 1, "unattached: {unattached:?}");
+    }
+
+    #[test]
+    fn a_constructor_marker_takes_the_enclosing_inductive_name() {
+        let scratch = std::env::temp_dir().join("wgg-core-ctor-test");
+        let _ = std::fs::remove_dir_all(&scratch);
+        std::fs::create_dir_all(&scratch).unwrap();
+        std::fs::write(
+            scratch.join("A.lean"),
+            "namespace Foo.Bar\n\ninductive Instr where\n  \
+             -- core-opcode: 0x0C BR\n  | br (label : Nat)\n\nend Foo.Bar\n",
+        )
+        .unwrap();
+        let (markers, unattached) = lean_markers(&scratch, Kind::Opcode).unwrap();
+        let _ = std::fs::remove_dir_all(&scratch);
+        assert!(unattached.is_empty(), "unattached: {unattached:?}");
+        assert_eq!(markers.len(), 1);
+        assert_eq!(markers[0].declaration, "Foo.Bar.Instr.br");
     }
 }

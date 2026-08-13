@@ -17,6 +17,11 @@ import WasmGemmGnaf.Foundation.Termination
 import WasmGemmGnaf.Wasm.Adequacy
 import WasmGemmGnaf.Wasm.Binary
 import WasmGemmGnaf.Wasm.Config
+import WasmGemmGnaf.Wasm.Core.Instructions
+import WasmGemmGnaf.Wasm.Core.Modules
+import WasmGemmGnaf.Wasm.Core.Operators
+import WasmGemmGnaf.Wasm.Core.Types
+import WasmGemmGnaf.Wasm.Core.Values
 import WasmGemmGnaf.Wasm.Costed
 import WasmGemmGnaf.Wasm.CostedExplore
 import WasmGemmGnaf.Wasm.Declarative
