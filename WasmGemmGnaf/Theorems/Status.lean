@@ -9,9 +9,61 @@ proposition exists in this repository.  Where the repository proves something
 *near* a required name but strictly weaker, the required name is recorded as
 OUTSTANDING and the nearer result is named as such — never promoted.
 
-Score: **34 of 58 discharged, 24 outstanding**, as `xtask claims required`
+Score: **37 of 58 discharged, 21 outstanding**, as `xtask claims required`
 reports it against the compiled environment.  This header is prose and can
 drift; that command is the ledger, and where the two disagree the command wins.
+
+## Three counts, and why the repository report is the loosest of them
+
+External review distinguishes three numbers, and the repository should quote all
+three rather than the one that flatters it:
+
+| Count | Value | What it measures |
+|---|---|---|
+| Repository report | **37 of 58** | the name exists AND carries SPEC's proposition |
+| Exact-proposition audit | **26 of 58** | the above, independently re-derived |
+| Release-connected, full-Core | **at most 21 of 58** | the above, AND stated over the pinned Core model rather than the i32 subset |
+
+The second and third rows are the external reviewer's figures, taken when the
+first row read **34**; they have not been re-derived since, so the three
+declarations added after that review (`Atlas.lifecycle_full_rebuild_comparator_exact`
+and `Atlas.lifecycle_native_bound`, both over `Atlas/Lifecycle.lean`, and
+`Atlas.seal_verifier_reconstructs_every_preimage` over `Atlas/Reconstruct.lean`;
+none of them touches the Wasm model) are counted in the first row only.  Quoting a stale
+lower bound is the safe direction; inventing a new one would not be.
+
+The gap between the first and third rows is not a dispute about any Lean term.  It is that five
+credited declarations are proved about the **obsolete subset machine and the
+repository's own codec**, and must be *reproved* once `Wasm/Core/` replaces
+them.  They are listed here so the debt is not forgotten:
+
+* `Wasm.mem_successors_iff_step` — over `Wasm/Step.lean`'s subset relation
+* `Wasm.bounded_tree_covers_every_branch` — over that same relation
+* `Wasm.runFuel_sound` and `Wasm.runFuel_complete_with_bound` — likewise
+* `Artifact.decode_emit` — over `Wasm/Binary.lean`'s custom codec
+
+Each is a correct theorem about the object it names.  None of them is yet a
+theorem about pinned Core 3.0, and the release theorem needs the latter.
+
+`just core` measures the model gap directly, against a checklist extracted from
+the vendored SpecTec sources:
+
+    syntax 166/166   opcodes 543/543   validation 256/256   execution 239/239
+    numerics definitions 84/84         TOTAL 1288/1288
+
+and properties of that layer are known-incomplete rather than assumed sound: the
+typing judgment does not yet carry every indexed operator/shape side condition
+(so it is *wider* than Core's, which is a soundness defect and not a gap), and
+nothing in `Binary`, `Declarative`, `Validate`, `Step`, `Profile`, `Cost`,
+`GNAF` or `Release` has been migrated onto the Core types.
+
+Execution is no longer parameterized by an arbitrary `Numerics` record.  Every
+auxiliary function `3.1-numerics.scalar.spectec` and `3.2-numerics.vector.spectec`
+define by equation -- all 84, the seventeen vector operator dispatchers included
+-- is a `def` in `Wasm/Core/Numerics.lean`, so the step relation is quantified
+only over the 74 primitives those two files declare `hint(builtin)` and give no
+equations for, of which it calls 61.  That residue is irreducible from these
+sources: a transcription cannot define what the source leaves abstract.
 
 **The score fell from 36 to 34 when the checker started reading PROPOSITIONS
 instead of names.**  An external audit objected that "its checker verifies names
@@ -152,7 +204,7 @@ enumerator and the byte enumerator); `Universal/Argmin.lean` proves the third.
 | `Universal.selected_le_every_sublevel_member` | **OUTSTANDING — `O-4`, `O-5`.** |
 | `Universal.all_competitors_lower_bound` | **OUTSTANDING — `O-5`.**  No known technique.  Nearest proved: `WasmGemmGnaf.Universal.attained_lower_bound_is_optimal` — which says an *attained* bound would suffice, and `lower_bound_below_released_is_not_optimality`, which says an unattained one would not. |
 
-## Atlas — 3 of 10 discharged
+## Atlas — 6 of 10 discharged
 
 | SPEC §15 name | discharged by / blocked by |
 |---|---|
@@ -160,12 +212,12 @@ enumerator and the byte enumerator); `Universal/Argmin.lean` proves the third.
 | `Atlas.attention_no_optimum_relevant_false_negative` | **OUTSTANDING — `O-3`, `O-5`.**  The statement needs a notion of optimum, which does not exist here.  Nearest proved: `WasmGemmGnaf.Atlas.attend_determined_by_index`, `attend_monotone`, `attend_blind_to_optimizer_state`. |
 | `Atlas.invalidation_complete` | `WasmGemmGnaf.Atlas.invalidation_complete` (`Atlas/Dependency.lean`). |
 | `Atlas.incremental_eq_full_rebuild` | **OUTSTANDING.**  `WasmGemmGnaf.Atlas.incremental_eq_full_rebuild` exists and is re-indexed as `Theorems.incremental_eq_full_rebuild`, but carries two hypotheses SPEC §12.5's statement does not: `Atlas.Coherent state.body` and `state.body.scope = Scope.unscoped`.  `Atlas/Rebuild.lean` argues the second is required for truth — `semanticRebuildBody` takes only the declaration base and so cannot reproduce a scope the declarations do not name — and proves the general form as `Theorems.incremental_eq_full_rebuild_scoped`, strengthened past canonicalisation by `Theorems.incremental_eq_full_rebuild_exact`.  That argument is very likely right, but **no deviation is filed in `model/spec-deviations.json`**, so unlike `DEV-001` there is no reviewed record of it and the required name stays outstanding.  `Conformance/RequiredSignatures.lean` pins the weaker form under `-- spec-signature-weaker:`.  Filing the deviation, or proving SPEC's literal form, closes this row. |
-| `Atlas.seal_verifier_reconstructs_every_preimage` | **OUTSTANDING — `O-3`.**  Nearest proved: `WasmGemmGnaf.Atlas.resolvesEveryReferencedPreimage_iff` — *referenced* preimages only, which is strictly weaker. |
+| `Atlas.seal_verifier_reconstructs_every_preimage` | `WasmGemmGnaf.Atlas.seal_verifier_reconstructs_every_preimage` (`Atlas/Reconstruct.lean`).  SPEC states no fenced theorem, so the binding quotes SPEC §12.1 ("storing the complete checker input, result, and retained preimages in canonical form") and SPEC §20.2 item 10.  The verifier's ONLY input is the seal identity — one `ObjectId (SealCore × SealCertificateBody)`; it is handed no state, no object graph, no preimage and no proof, which is what stops the statement collapsing into a consistency check on the caller.  It opens that identity into the proof-free `SealCertificateBody`, reads the *recorded* `retentionCheckResultId`, opens that into the checker record, and returns its preimages; both openings are total executable readers proved left inverse to the canonical encoders (`Atlas.sealCertificateBodyR_inverts`, `Atlas.sealCheckResultBodyR_inverts`), so the content is effectiveness rather than the schemas' injectivity.  Conclusion: the reconstructed list **is** `state.retainedObjects.graph.preimages`, and every id in the seal's own `retentionRoot` is answered with bytes proved to be that id's retained entry; `seal_verifier_reconstructs_referenced_preimage` specialises it to SPEC §12.1's referenced objects and `seal_verifier_reconstructs_state_body_bytes` recovers the state body's canonical preimage.  **Scope**: everything reconstructed comes from a finite list the seal itself records — this is not coverage of anything, a seal retaining three objects satisfies it, and `Atlas.universalCoverCompleteCheck_scope_blind` is untouched.  `Atlas.sealVerifierPreimages_rejects_malformed` proves the reader can fail, so the statement is not about a constant function. |
 | `Atlas.seal_implies_universal_coverage` | **OUTSTANDING — `O-5`, and deliberately so.**  `Theorems.universalCoverCompleteCheck_scope_blind` proves the seal's cover check is a function of three recorded components and therefore cannot witness any proposition quantified over `ByteArray`.  Deriving this name from the seal would be unsound. |
 | `Atlas.lifecycle_prefix_conservation` | `WasmGemmGnaf.Atlas.lifecycle_prefix_conservation` (`Atlas/Lifecycle.lean`), matching SPEC §16's statement.  Scope: it holds of every `Atlas.LifecycleEvaluation` because that structure's `totalExact` field *demands* the exact mixed fold — the content is that the carrier stores no unchecked total, not that some particular lifecycle was measured. |
-| `Atlas.lifecycle_native_bound` | **OUTSTANDING — `O-6`.**  `Atlas/Lifecycle.lean` exists but omits this deliberately: the inequality is false for an arbitrary primitive-cost table and an arbitrary trace, and the coefficients that would make it true are a property of a release table this repository has not pinned.  Nearest proved: `WasmGemmGnaf.Atlas.nativeLifecycleBound_scope_size_only`, which records machine-checked what the definition alone gives. |
-| `Atlas.lifecycle_incremental_semantics_eq_full_rebuild` | **OUTSTANDING — `O-6`.**  Omitted with reasons at the end of `Atlas/Lifecycle.lean`; `canonicalFullRebuildEvaluation` does not exist. |
-| `Atlas.lifecycle_full_rebuild_comparator_exact` | **OUTSTANDING — `O-6`.**  Same omission. |
+| `Atlas.lifecycle_native_bound` | `WasmGemmGnaf.Atlas.lifecycle_native_bound` (`Atlas/Lifecycle.lean`), at SPEC §16's statement.  The row previously read OUTSTANDING because "the coefficients that would make it true are a property of a release table this repository has not pinned" — true, and the fix rather than the obstacle: `Release.primitiveCostTable` is now pinned in `Cost/Lifecycle.lean` with every coefficient `1`, the componentwise-minimal positive table SPEC §16 admits, and `Atlas.lifecycle_native_bound_of_positive` proves the inequality for *every* positive table so nothing rests on the choice.  Scope: `≤` is componentwise over all seventeen coordinates; `Atlas.lifecycle_native_bound_attained` proves fourteen of them hold with equality, and `Atlas.lifecycle_native_bound_slack` gives the exact slack on the other three (the logarithmic canonicalization factor, the threefold index bracket, the request bytes the query bracket adds) — all of it in the shape of SPEC §16's polynomial, none of it bought by a coefficient.  **How much of it has content, counted honestly** (adversarial review's sharpest criticism, and it is right): `lifecycleSize` *defines* nine of its coordinates as the sum or maximum of the very prefix-cost coordinate the polynomial bounds — `canonicalNovelObjects`, `canonicalNovelEdges`, `closureDerivations`, `attentionBucketsTouched`, `dependencyImpactObjects`, `partitionCellsChanged`, `certificateBytesChecked`, `retainedStateBytes`, `peakWorkingBytes` — so on those, at coefficient `1`, the inequality is literally `x ≤ x` and would hold for *any* cost model, including one charging zero.  Three more are `0 ≤ 0` because the replay charges nothing there.  Only **four of seventeen** coordinates relate the charged total to an independent trace-derived measure: `authorityCheckSteps`, `canonicalizationSteps`, `sealSteps`, `querySelectionSteps`.  "Fourteen hold with equality" is true and is the wrong thing to be impressed by.  This is a property of SPEC §16's size carrier, not of the proof.  Not claimed: that the coefficients are calibrated machine costs; nothing here measures one. |
+| `Atlas.lifecycle_incremental_semantics_eq_full_rebuild` | **OUTSTANDING — `O-6`, and provably so.**  `WasmGemmGnaf.Atlas.not_lifecycle_incremental_semantics_eq_full_rebuild` refutes SPEC §16's literal statement: `ResolvedLifecycleTrace` constrains no coherence of its initial state, and an incoherent start is observed differently by the two strategies at prefix `0`.  Proved under exactly the missing hypothesis as `Atlas.lifecycle_incremental_semantics_eq_full_rebuild_of_coherent`, whose hypothesis `Atlas.lifecycle_incremental_semantics_eq_full_rebuild_of_rebuilt_start` discharges for any lifecycle beginning from a rebuild.  No declaration wears SPEC's name and nothing binds it. |
+| `Atlas.lifecycle_full_rebuild_comparator_exact` | `WasmGemmGnaf.Atlas.lifecycle_full_rebuild_comparator_exact` (`Atlas/Lifecycle.lean`), at SPEC §16's statement, alongside the total `Atlas.canonicalFullRebuildEvaluation` it compares against.  Scope, stated in the theorem's own docstring: it holds by `rfl`, and its content is that the comparator tag is wired to the canonical full rebuild *of the same trace* with the componentwise truncated difference as carrier — nothing about the regret being zero or bounded. |
 
 ## Artifact — 0 of 7 discharged
 

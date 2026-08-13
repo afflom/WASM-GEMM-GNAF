@@ -21,18 +21,36 @@
      the charged cost and the size vector.  No structure field asserts that a
      bound holds, that two strategies agree, or that a lifecycle is optimal.
 
-  2. **`lifecycle_native_bound` is OMITTED.**  It is a genuine inequality
-     between the summed prefix costs and the polynomial, and it is false for an
-     arbitrary primitive-cost table and an arbitrary trace: the coefficients
-     must dominate the per-prefix charges, which is a property of a *release*
-     table this repository has not pinned.  Rather than weaken the statement or
-     assume it, it is absent; `nativeLifecycleBound_scope` below records
-     machine-checked what the definition alone does and does not give.
+  2. **`lifecycle_native_bound` is PROVED, over a pinned release table.**  An
+     earlier version of this note recorded it as omitted because the inequality
+     "is false for an arbitrary primitive-cost table … which is a property of a
+     *release* table this repository has not pinned."  The first clause was
+     right; the second was the fix, not the obstacle.  SPEC 16 states the
+     theorem over `Release.primitiveCostTable`, so that table is now pinned in
+     `Cost/Lifecycle.lean` — every coefficient `1`, the componentwise-minimal
+     positive table SPEC allows — and the inequality is proved over it, with
+     `lifecycle_native_bound_of_positive` establishing it for *every* positive
+     table so that nothing rests on the choice.  `lifecycle_native_bound_attained`
+     and `lifecycle_native_bound_slack` then say exactly which fourteen
+     coordinates are attained with equality and exactly how loose the other
+     three are.
 
-  Also omitted, with reasons, at the end of the file:
-  `canonicalFullRebuildEvaluation`,
-  `lifecycle_incremental_semantics_eq_full_rebuild`,
-  `lifecycle_full_rebuild_comparator_exact`.
+  3. **`lifecycle_incremental_semantics_eq_full_rebuild` is OMITTED because it
+     is FALSE**, and that is proved here rather than argued:
+     `not_lifecycle_incremental_semantics_eq_full_rebuild` refutes SPEC 16's
+     literal statement.  `ResolvedLifecycleTrace` carries no coherence
+     obligation on its initial state, and an incoherent start is observed
+     differently by the two strategies at prefix `0`.  The theorem is proved
+     under exactly the missing hypothesis, as
+     `lifecycle_incremental_semantics_eq_full_rebuild_of_coherent`, which does
+     *not* wear SPEC's name; no binding in
+     `Conformance/RequiredSignatures.lean` claims that name.
+
+  The comparator half of SPEC 16 is closed:
+  `Atlas.canonicalFullRebuildEvaluation` is a total constructor with no
+  hypothesis, `Atlas.regretAgainst` is defined by cases on the comparator tag,
+  and `Atlas.lifecycle_full_rebuild_comparator_exact` is proved.  See the
+  "## Omissions" section at the end of the file for what remains open and why.
 
   Every declaration in this file is either a definition or a kernel-checked
   theorem.  Nothing is assumed: no placeholder proof, no project axiom, and no
@@ -722,8 +740,9 @@ theorem nativeLifecycleBound_peakWorkingBytes (table : Cost.PrimitiveCostTable)
   primitive-cost table and the size vector *only*: two lifecycles with the same
   size vector get the same bound, whatever their traces, strategies or prefix
   costs were.  Consequently no statement about an actual lifecycle total follows
-  from this definition alone — that is exactly the content of the omitted
-  `lifecycle_native_bound`, and it must be proved, never read off from here.
+  from this definition alone — that is exactly the content of
+  `lifecycle_native_bound`, which is proved below from the exact accounting
+  identities of the replay, never read off from here.
 -/
 theorem nativeLifecycleBound_scope_size_only
     (table : Cost.PrimitiveCostTable) (a b : LifecycleSizeVector) (h : a = b) :
@@ -929,37 +948,1220 @@ theorem amortized_eq {body : LifecycleTraceBody}
         / body.horizon := by
   rw [amortized, evaluation.totalExact]
 
+/-! ## The native lifecycle bound (SPEC 16)
+
+`Atlas.lifecycle_native_bound` was omitted from earlier versions of this file on
+the ground that the inequality "is false for an arbitrary primitive-cost table
+and an arbitrary trace: the coefficients must dominate the per-prefix charges,
+which is a property of a *release* table this repository has not pinned."  The
+first half of that was right and the second half was the fix rather than an
+obstacle: SPEC 16 states the theorem over `Release.primitiveCostTable`, not over
+an arbitrary table, so the table is now pinned — in `Cost/Lifecycle.lean`, at the
+bottom of the import graph, for the reason its docstring gives — and the
+inequality is proved over it.
+
+The pinned table has **every coefficient equal to `1`**, which is the
+componentwise-minimal positive table SPEC 16 allows.  The bound is therefore not
+true by inflation: `lifecycle_native_bound_of_positive` proves it for *every*
+positive table, and `Release.primitiveCostTable_minimal` records that the pinned
+one is dominated by all of them.
+
+The real content is the block of exact accounting identities below.  Each one
+computes a coordinate of the lifecycle total as a coordinate (or a sum of two
+coordinates) of the size vector, using only `CoversExactlyEveryPrefix` — the fact
+that the family's ordinals are exactly `0, …, horizon`, once each, in order.  The
+inequality then follows coordinate by coordinate from positivity alone.  Because
+the identities are equalities, `lifecycle_native_bound_attained` can state
+exactly where the bound is tight (fourteen of the seventeen coordinates) and
+`lifecycle_native_bound_slack` exactly how loose the other three are. -/
+
+/-- The charges recorded by a prefix family are the replay's charges at that
+family's ordinals.  This is `LifecyclePrefixResult.exactCost`, lifted from one
+prefix to the family, and it is what lets the whole fold be computed from the
+trace alone. -/
+theorem prefixCosts_eq {body : LifecycleTraceBody}
+    (trace : ResolvedLifecycleTrace body) (algorithm : LifecycleAlgorithmTag)
+    (prefixes : PrefixOrderedList (LifecyclePrefixResult trace algorithm)) :
+    prefixes.elements.map (fun r => r.cost)
+      = (prefixes.elements.map (fun r => r.prefixOrdinal.val)).map
+          (trace.prefixCost algorithm) := by
+  rw [List.map_map]
+  exact List.map_congr_left (fun r _ => r.cost_eq)
+
+/-- With the prefix cover, the charges are the replay's charges at
+`0, 1, …, horizon`, in that order and once each. -/
+theorem prefixCosts_eq_range {body : LifecycleTraceBody}
+    (trace : ResolvedLifecycleTrace body) (algorithm : LifecycleAlgorithmTag)
+    (prefixes : PrefixOrderedList (LifecyclePrefixResult trace algorithm))
+    (hcover : CoversExactlyEveryPrefix prefixes) :
+    prefixes.elements.map (fun r => r.cost)
+      = (List.range (body.horizon + 1)).map (trace.prefixCost algorithm) := by
+  rw [prefixCosts_eq, hcover]
+
+namespace LifecycleEvaluation
+
+variable {body : LifecycleTraceBody} {trace : ResolvedLifecycleTrace body}
+  {algorithm : LifecycleAlgorithmTag}
+
+/-! ### Reading a coordinate of the total, and of the size vector, off the replay -/
+
+/-- An additively folded coordinate of the total is the prefix-ordered sum of
+that coordinate of the replay's charges. -/
+theorem total_add_coord_eq (evaluation : LifecycleEvaluation trace algorithm)
+    (f : Cost.LifecycleVector → Nat)
+    (hzero : f Cost.LifecycleVector.zero = 0)
+    (hcomb : ∀ a b, f (Cost.LifecycleVector.combine a b) = f a + f b) :
+    f evaluation.total
+      = ((List.range (body.horizon + 1)).map
+          (fun n => f (trace.prefixCost algorithm n))).sum := by
+  rw [evaluation.totalExact, Cost.sumLifecycle_add_coord f hzero hcomb,
+    prefixCosts_eq_range trace algorithm evaluation.prefixes evaluation.exactPrefixCover,
+    List.map_map]
+  rfl
+
+/-- A maximum-folded coordinate of the total is the maximum of that coordinate
+of the replay's charges. -/
+theorem total_max_coord_eq (evaluation : LifecycleEvaluation trace algorithm)
+    (f : Cost.LifecycleVector → Nat)
+    (hzero : f Cost.LifecycleVector.zero = 0)
+    (hcomb : ∀ a b, f (Cost.LifecycleVector.combine a b) = max (f a) (f b)) :
+    f evaluation.total
+      = Cost.maxOf ((List.range (body.horizon + 1)).map
+          (fun n => f (trace.prefixCost algorithm n))) := by
+  rw [evaluation.totalExact, Cost.sumLifecycle_max_coord f hzero hcomb,
+    prefixCosts_eq_range trace algorithm evaluation.prefixes evaluation.exactPrefixCover,
+    List.map_map]
+  rfl
+
+/-- A size coordinate that `lifecycleSize` defines as a sum over the family's
+charges is the same prefix-ordered sum. -/
+theorem size_cost_coord_eq (evaluation : LifecycleEvaluation trace algorithm)
+    (f : Cost.LifecycleVector → Nat) (g : LifecycleSizeVector → Nat)
+    (hg : ∀ p : PrefixOrderedList (LifecyclePrefixResult trace algorithm),
+      g (trace.lifecycleSize algorithm p)
+        = ((p.elements.map (fun r => r.cost)).map f).sum) :
+    g evaluation.size
+      = ((List.range (body.horizon + 1)).map
+          (fun n => f (trace.prefixCost algorithm n))).sum := by
+  rw [evaluation.size_eq, hg,
+    prefixCosts_eq_range trace algorithm evaluation.prefixes evaluation.exactPrefixCover,
+    List.map_map]
+  rfl
+
+/-- The same for a size coordinate defined as a maximum over the charges. -/
+theorem size_cost_max_coord_eq (evaluation : LifecycleEvaluation trace algorithm)
+    (f : Cost.LifecycleVector → Nat) (g : LifecycleSizeVector → Nat)
+    (hg : ∀ p : PrefixOrderedList (LifecyclePrefixResult trace algorithm),
+      g (trace.lifecycleSize algorithm p)
+        = Cost.maxOf ((p.elements.map (fun r => r.cost)).map f)) :
+    g evaluation.size
+      = Cost.maxOf ((List.range (body.horizon + 1)).map
+          (fun n => f (trace.prefixCost algorithm n))) := by
+  rw [evaluation.size_eq, hg,
+    prefixCosts_eq_range trace algorithm evaluation.prefixes evaluation.exactPrefixCover,
+    List.map_map]
+  rfl
+
+/-- A size coordinate that `lifecycleSize` defines as a sum over the family's
+*ordinals* is the sum over `0, …, horizon`. -/
+theorem size_ordinal_coord_eq (evaluation : LifecycleEvaluation trace algorithm)
+    (φ : Nat → Nat) (g : LifecycleSizeVector → Nat)
+    (hg : ∀ p : PrefixOrderedList (LifecyclePrefixResult trace algorithm),
+      g (trace.lifecycleSize algorithm p)
+        = ((p.elements.map (fun r => r.prefixOrdinal.val)).map φ).sum) :
+    g evaluation.size = ((List.range (body.horizon + 1)).map φ).sum := by
+  rw [evaluation.size_eq, hg, evaluation.exactPrefixCover]
+
+/-- The seal count is the number of sealing prefixes among `0, …, horizon`. -/
+theorem size_sealCount_eq (evaluation : LifecycleEvaluation trace algorithm) :
+    evaluation.size.sealCount
+      = ((List.range (body.horizon + 1)).filter
+          (fun n => trace.isSealPoint n)).length := by
+  have h : evaluation.size.sealCount
+      = ((evaluation.prefixes.elements.map (fun r => r.prefixOrdinal.val)).filter
+          (fun n => trace.isSealPoint n)).length := by
+    rw [evaluation.size_eq]; rfl
+  rw [h, evaluation.exactPrefixCover]
+
+/-! ### The exact accounting identities of a native lifecycle
+
+Each of these is an equality, not a bound.  Together they say precisely what a
+native lifecycle total is in terms of its own size vector; `lifecycle_native_bound`
+is then arithmetic on positive coefficients. -/
+
+/-- Authority checking is charged once, at prefix `0`, on the initial
+declaration base — and `authorityBytesChecked` is exactly that byte count.  This
+is the one identity that needs the prefix cover to be *duplicate free*: a family
+that repeated prefix `0` would charge the base twice. -/
+theorem native_authorityCheckSteps_eq
+    (evaluation : LifecycleEvaluation trace .nativeIncremental) :
+    evaluation.total.authorityCheckSteps = evaluation.size.authorityBytesChecked := by
+  have ht : evaluation.total.authorityCheckSteps
+      = ((List.range (body.horizon + 1)).map
+          (fun n => if n = 0 then
+            ResolvedLifecycleTrace.declarationBytes
+              trace.initialState.body.declarationBase.declarations else 0)).sum :=
+    evaluation.total_add_coord_eq (fun v => v.authorityCheckSteps) rfl (fun _ _ => rfl)
+  have hs : evaluation.size.authorityBytesChecked
+      = ResolvedLifecycleTrace.declarationBytes
+          trace.initialState.body.declarationBase.declarations := by
+    rw [evaluation.size_eq]; rfl
+  rw [ht, hs, Cost.sum_range_guarded_zero,
+    if_neg (by omega : ¬ (body.horizon + 1 = 0))]
+
+/-- The native operator canonicalizes exactly the novel declarations of each
+selected delta, and `deltaBytes` is their total size. -/
+theorem native_canonicalizationSteps_eq
+    (evaluation : LifecycleEvaluation trace .nativeIncremental) :
+    evaluation.total.canonicalizationSteps = evaluation.size.deltaBytes := by
+  have ht : evaluation.total.canonicalizationSteps
+      = ((List.range (body.horizon + 1)).map
+          (fun n => ResolvedLifecycleTrace.declarationBytes
+            (trace.novelDeclarationsAt n))).sum :=
+    evaluation.total_add_coord_eq (fun v => v.canonicalizationSteps) rfl (fun _ _ => rfl)
+  have hs : evaluation.size.deltaBytes
+      = ((List.range (body.horizon + 1)).map
+          (fun n => ResolvedLifecycleTrace.declarationBytes
+            (trace.novelDeclarationsAt n))).sum :=
+    evaluation.size_ordinal_coord_eq _ (fun s => s.deltaBytes) (fun _ => rfl)
+  rw [ht, hs]
+
+theorem native_canonicalNovelObjects_eq
+    (evaluation : LifecycleEvaluation trace .nativeIncremental) :
+    evaluation.total.canonicalNovelObjects = evaluation.size.canonicalNovelObjects :=
+  (evaluation.total_add_coord_eq (fun v => v.canonicalNovelObjects) rfl
+      (fun _ _ => rfl)).trans
+    (evaluation.size_cost_coord_eq (fun v => v.canonicalNovelObjects)
+      (fun s => s.canonicalNovelObjects) (fun _ => rfl)).symm
+
+theorem native_canonicalNovelEdges_eq
+    (evaluation : LifecycleEvaluation trace .nativeIncremental) :
+    evaluation.total.canonicalNovelEdges = evaluation.size.canonicalNovelEdges :=
+  (evaluation.total_add_coord_eq (fun v => v.canonicalNovelEdges) rfl
+      (fun _ _ => rfl)).trans
+    (evaluation.size_cost_coord_eq (fun v => v.canonicalNovelEdges)
+      (fun s => s.canonicalNovelEdges) (fun _ => rfl)).symm
+
+theorem native_closureSteps_eq
+    (evaluation : LifecycleEvaluation trace .nativeIncremental) :
+    evaluation.total.closureSteps = evaluation.size.closureDerivations :=
+  (evaluation.total_add_coord_eq (fun v => v.closureSteps) rfl (fun _ _ => rfl)).trans
+    (evaluation.size_cost_coord_eq (fun v => v.closureSteps)
+      (fun s => s.closureDerivations) (fun _ => rfl)).symm
+
+/-- Indexing is charged once per novel declaration, which is also what
+`canonicalNovelObjects` counts. -/
+theorem native_indexSteps_eq
+    (evaluation : LifecycleEvaluation trace .nativeIncremental) :
+    evaluation.total.indexSteps = evaluation.size.canonicalNovelObjects := by
+  have ht : evaluation.total.indexSteps
+      = ((List.range (body.horizon + 1)).map
+          (fun n => (trace.prefixCost .nativeIncremental n).canonicalNovelObjects)).sum :=
+    evaluation.total_add_coord_eq (fun v => v.indexSteps) rfl (fun _ _ => rfl)
+  have hs : evaluation.size.canonicalNovelObjects
+      = ((List.range (body.horizon + 1)).map
+          (fun n => (trace.prefixCost .nativeIncremental n).canonicalNovelObjects)).sum :=
+    evaluation.size_cost_coord_eq (fun v => v.canonicalNovelObjects)
+      (fun s => s.canonicalNovelObjects) (fun _ => rfl)
+  rw [ht, hs]
+
+theorem native_attentionBucketsTouched_eq
+    (evaluation : LifecycleEvaluation trace .nativeIncremental) :
+    evaluation.total.attentionBucketsTouched = evaluation.size.attentionBucketsTouched :=
+  (evaluation.total_add_coord_eq (fun v => v.attentionBucketsTouched) rfl
+      (fun _ _ => rfl)).trans
+    (evaluation.size_cost_coord_eq (fun v => v.attentionBucketsTouched)
+      (fun s => s.attentionBucketsTouched) (fun _ => rfl)).symm
+
+theorem native_dependencyObjectsVisited_eq
+    (evaluation : LifecycleEvaluation trace .nativeIncremental) :
+    evaluation.total.dependencyObjectsVisited = evaluation.size.dependencyImpactObjects :=
+  (evaluation.total_add_coord_eq (fun v => v.dependencyObjectsVisited) rfl
+      (fun _ _ => rfl)).trans
+    (evaluation.size_cost_coord_eq (fun v => v.dependencyObjectsVisited)
+      (fun s => s.dependencyImpactObjects) (fun _ => rfl)).symm
+
+/-- **The lifecycle replay performs no partition work.**  Recorded as an
+equality rather than hidden inside the bound: the `cPartition` coordinate of
+`nativeLifecycleBound` is currently bounding zero. -/
+theorem native_partitionSteps_eq_zero
+    (evaluation : LifecycleEvaluation trace .nativeIncremental) :
+    evaluation.total.partitionSteps = 0 := by
+  have ht : evaluation.total.partitionSteps
+      = ((List.range (body.horizon + 1)).map (fun _ => (0 : Nat))).sum :=
+    evaluation.total_add_coord_eq (fun v => v.partitionSteps) rfl (fun _ _ => rfl)
+  rw [ht, Cost.sum_map_zero]
+
+theorem native_size_partitionCellsChanged_eq_zero
+    (evaluation : LifecycleEvaluation trace .nativeIncremental) :
+    evaluation.size.partitionCellsChanged = 0 := by
+  have hs : evaluation.size.partitionCellsChanged
+      = ((List.range (body.horizon + 1)).map (fun _ => (0 : Nat))).sum :=
+    evaluation.size_cost_coord_eq (fun v => v.partitionCellsChanged)
+      (fun s => s.partitionCellsChanged) (fun _ => rfl)
+  rw [hs, Cost.sum_map_zero]
+
+theorem native_partitionCellsChanged_eq
+    (evaluation : LifecycleEvaluation trace .nativeIncremental) :
+    evaluation.total.partitionCellsChanged = evaluation.size.partitionCellsChanged :=
+  (evaluation.total_add_coord_eq (fun v => v.partitionCellsChanged) rfl
+      (fun _ _ => rfl)).trans
+    (evaluation.size_cost_coord_eq (fun v => v.partitionCellsChanged)
+      (fun s => s.partitionCellsChanged) (fun _ => rfl)).symm
+
+theorem native_verifierSteps_eq
+    (evaluation : LifecycleEvaluation trace .nativeIncremental) :
+    evaluation.total.verifierSteps = evaluation.size.certificateBytesChecked :=
+  (evaluation.total_add_coord_eq (fun v => v.verifierSteps) rfl (fun _ _ => rfl)).trans
+    (evaluation.size_cost_coord_eq (fun v => v.verifierSteps)
+      (fun s => s.certificateBytesChecked) (fun _ => rfl)).symm
+
+/-- A sealing prefix charges one seal plus a scan of the retained base, and the
+two size coordinates are exactly the seal count and the cumulative scan. -/
+theorem native_sealSteps_eq
+    (evaluation : LifecycleEvaluation trace .nativeIncremental) :
+    evaluation.total.sealSteps
+      = evaluation.size.sealCount + evaluation.size.sealInputBytesScanned := by
+  have ht : evaluation.total.sealSteps
+      = ((List.range (body.horizon + 1)).map
+          (fun n => if trace.isSealPoint n then
+            1 + ResolvedLifecycleTrace.declarationBytes
+                  (trace.accumulatedDeclarations n).declarations
+            else 0)).sum :=
+    evaluation.total_add_coord_eq (fun v => v.sealSteps) rfl (fun _ _ => rfl)
+  have hscan : evaluation.size.sealInputBytesScanned
+      = ((List.range (body.horizon + 1)).map
+          (fun n => if trace.isSealPoint n then
+            ResolvedLifecycleTrace.declarationBytes
+                  (trace.accumulatedDeclarations n).declarations
+            else 0)).sum :=
+    evaluation.size_ordinal_coord_eq _ (fun s => s.sealInputBytesScanned) (fun _ => rfl)
+  rw [ht, Cost.sum_map_guarded_succ (fun n => trace.isSealPoint n)
+      (fun n => ResolvedLifecycleTrace.declarationBytes
+        (trace.accumulatedDeclarations n).declarations),
+    ← hscan, ← evaluation.size_sealCount_eq]
+
+/-- Query work is one step per scheduled request plus one per routed target.
+`requestBytesChecked` is charged by the polynomial and by nothing in the
+replay — that is the query bracket's slack, and it is visible here. -/
+theorem native_querySelectionSteps_eq
+    (evaluation : LifecycleEvaluation trace .nativeIncremental) :
+    evaluation.total.querySelectionSteps
+      = evaluation.size.queryCount + evaluation.size.attentionCandidatesVisited := by
+  have ht : evaluation.total.querySelectionSteps
+      = ((List.range (body.horizon + 1)).map
+          (fun n => (trace.scheduledRequests n).length
+            + ((trace.scheduledRequests n).map
+                (fun r =>
+                  (attendTargets (trace.bodyAt .nativeIncremental n) r).length)).sum)).sum :=
+    evaluation.total_add_coord_eq (fun v => v.querySelectionSteps) rfl (fun _ _ => rfl)
+  have hq : evaluation.size.queryCount
+      = ((List.range (body.horizon + 1)).map
+          (fun n => (trace.scheduledRequests n).length)).sum :=
+    evaluation.size_ordinal_coord_eq _ (fun s => s.queryCount) (fun _ => rfl)
+  have ha : evaluation.size.attentionCandidatesVisited
+      = ((List.range (body.horizon + 1)).map
+          (fun n => ((trace.scheduledRequests n).map
+            (fun r =>
+              (attendTargets (trace.bodyAt .nativeIncremental n) r).length)).sum)).sum :=
+    evaluation.size_ordinal_coord_eq _ (fun s => s.attentionCandidatesVisited)
+      (fun _ => rfl)
+  rw [ht, Cost.sum_map_add (fun n => (trace.scheduledRequests n).length)
+      (fun n => ((trace.scheduledRequests n).map
+        (fun r => (attendTargets (trace.bodyAt .nativeIncremental n) r).length)).sum),
+    ← hq, ← ha]
+
+/-- **The lifecycle replay performs no migration.**  Recorded, not hidden. -/
+theorem native_migrationSteps_eq_zero
+    (evaluation : LifecycleEvaluation trace .nativeIncremental) :
+    evaluation.total.migrationSteps = 0 := by
+  have ht : evaluation.total.migrationSteps
+      = ((List.range (body.horizon + 1)).map (fun _ => (0 : Nat))).sum :=
+    evaluation.total_add_coord_eq (fun v => v.migrationSteps) rfl (fun _ _ => rfl)
+  rw [ht, Cost.sum_map_zero]
+
+theorem native_size_migrationObjects_eq_zero
+    (evaluation : LifecycleEvaluation trace .nativeIncremental) :
+    evaluation.size.migrationObjects = 0 := by
+  rw [evaluation.size_eq]; rfl
+
+theorem native_retainedStateBytes_eq
+    (evaluation : LifecycleEvaluation trace .nativeIncremental) :
+    evaluation.total.retainedStateBytes = evaluation.size.retainedStateBytes :=
+  (evaluation.total_max_coord_eq (fun v => v.retainedStateBytes) rfl
+      (fun _ _ => rfl)).trans
+    (evaluation.size_cost_max_coord_eq (fun v => v.retainedStateBytes)
+      (fun s => s.retainedStateBytes) (fun _ => rfl)).symm
+
+theorem native_peakWorkingBytes_eq
+    (evaluation : LifecycleEvaluation trace .nativeIncremental) :
+    evaluation.total.peakWorkingBytes = evaluation.size.peakWorkingBytes :=
+  (evaluation.total_max_coord_eq (fun v => v.peakWorkingBytes) rfl
+      (fun _ _ => rfl)).trans
+    (evaluation.size_cost_max_coord_eq (fun v => v.peakWorkingBytes)
+      (fun s => s.peakWorkingBytes) (fun _ => rfl)).symm
+
+/-- **A lifecycle charges no artifact cost.**  SPEC 9.2 keeps the two cost
+models apart, and the lifecycle replay respects that: every prefix charges
+`Cost.ArtifactVector.zero`, so the folded artifact vector is zero on all
+thirty-six coordinates, sums and peaks alike. -/
+theorem native_artifact_eq_zero
+    (evaluation : LifecycleEvaluation trace .nativeIncremental) :
+    evaluation.total.artifact = Cost.ArtifactVector.zero := by
+  refine Cost.ArtifactVector.coords_injective (fun co => ?_)
+  rw [Cost.ArtifactCoordinate.value_zero]
+  have hz : ((List.range (body.horizon + 1)).map
+        (fun n => co.value (trace.prefixCost .nativeIncremental n).artifact))
+      = (List.range (body.horizon + 1)).map (fun _ => (0 : Nat)) :=
+    List.map_congr_left (fun _ _ => Cost.ArtifactCoordinate.value_zero co)
+  cases hmax : co.IsDynamicMax with
+  | false =>
+      have ht : co.value evaluation.total.artifact
+          = ((List.range (body.horizon + 1)).map
+              (fun n => co.value (trace.prefixCost .nativeIncremental n).artifact)).sum :=
+        evaluation.total_add_coord_eq (fun v => co.value v.artifact)
+          (Cost.ArtifactCoordinate.value_zero co)
+          (fun _ _ => by cases co <;> first | rfl | exact absurd hmax (by decide))
+      rw [ht, hz]
+      exact Cost.sum_map_zero _
+  | true =>
+      have ht : co.value evaluation.total.artifact
+          = Cost.maxOf ((List.range (body.horizon + 1)).map
+              (fun n => co.value (trace.prefixCost .nativeIncremental n).artifact)) :=
+        evaluation.total_max_coord_eq (fun v => co.value v.artifact)
+          (Cost.ArtifactCoordinate.value_zero co)
+          (fun _ _ => by cases co <;> first | rfl | exact absurd hmax (by decide))
+      rw [ht, hz]
+      exact Cost.maxOf_map_zero _
+
+theorem native_size_artifactWork_eq_zero
+    (evaluation : LifecycleEvaluation trace .nativeIncremental) :
+    evaluation.size.artifactWork = Cost.ArtifactVector.zero := by
+  rw [evaluation.size_eq]; rfl
+
+/-- The three novelty coordinates of the size vector coincide: each counts the
+novel declarations of the trace.  This is why the polynomial's index bracket
+over-counts threefold. -/
+theorem native_size_canonicalNovelEdges_eq
+    (evaluation : LifecycleEvaluation trace .nativeIncremental) :
+    evaluation.size.canonicalNovelEdges = evaluation.size.canonicalNovelObjects := by
+  have h1 : evaluation.size.canonicalNovelEdges
+      = ((List.range (body.horizon + 1)).map
+          (fun n => (trace.prefixCost .nativeIncremental n).canonicalNovelObjects)).sum :=
+    evaluation.size_cost_coord_eq (fun v => v.canonicalNovelEdges)
+      (fun s => s.canonicalNovelEdges) (fun _ => rfl)
+  have h2 : evaluation.size.canonicalNovelObjects
+      = ((List.range (body.horizon + 1)).map
+          (fun n => (trace.prefixCost .nativeIncremental n).canonicalNovelObjects)).sum :=
+    evaluation.size_cost_coord_eq (fun v => v.canonicalNovelObjects)
+      (fun s => s.canonicalNovelObjects) (fun _ => rfl)
+  rw [h1, h2]
+
+theorem native_size_attentionBucketsTouched_eq
+    (evaluation : LifecycleEvaluation trace .nativeIncremental) :
+    evaluation.size.attentionBucketsTouched = evaluation.size.canonicalNovelObjects := by
+  have h1 : evaluation.size.attentionBucketsTouched
+      = ((List.range (body.horizon + 1)).map
+          (fun n => (trace.prefixCost .nativeIncremental n).canonicalNovelObjects)).sum :=
+    evaluation.size_cost_coord_eq (fun v => v.attentionBucketsTouched)
+      (fun s => s.attentionBucketsTouched) (fun _ => rfl)
+  have h2 : evaluation.size.canonicalNovelObjects
+      = ((List.range (body.horizon + 1)).map
+          (fun n => (trace.prefixCost .nativeIncremental n).canonicalNovelObjects)).sum :=
+    evaluation.size_cost_coord_eq (fun v => v.canonicalNovelObjects)
+      (fun s => s.canonicalNovelObjects) (fun _ => rfl)
+  rw [h1, h2]
+
+end LifecycleEvaluation
+
+/--
+  **The native lifecycle bound over an arbitrary positive primitive-cost
+  table.**
+
+  This is the whole mathematical content of `lifecycle_native_bound`: given only
+  that every coefficient of the table is at least one, the frozen fold of a
+  native lifecycle's prefix charges is componentwise under the polynomial of its
+  own size vector.  No property of any particular table is used, so the release
+  table cannot have been chosen to make the statement true.
+
+  The proof is the block of exact accounting identities above, followed by
+  `Nat.le_mul_of_pos_left` on each coordinate.  Two coordinates
+  (`partitionSteps`, `migrationSteps`) are bounded because the replay charges
+  nothing there; that is recorded explicitly rather than absorbed.
+-/
+theorem lifecycle_native_bound_of_positive {body : LifecycleTraceBody}
+    {trace : ResolvedLifecycleTrace body} (table : Cost.PrimitiveCostTable)
+    (hpos : table.AllCoefficientsPositive)
+    (evaluation : LifecycleEvaluation trace .nativeIncremental) :
+    evaluation.total ≤ nativeLifecycleBound table evaluation.size := by
+  obtain ⟨hAuth, hCanon, hClos, hIdx, hDep, _hPart, hVer, hSeal, hScan, hQuery,
+    _hMig⟩ := hpos
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · show evaluation.total.authorityCheckSteps
+        ≤ table.cAuthority * evaluation.size.authorityBytesChecked
+    rw [evaluation.native_authorityCheckSteps_eq]
+    exact Nat.le_mul_of_pos_left _ hAuth
+  · show evaluation.total.canonicalizationSteps
+        ≤ table.cCanonicalize * evaluation.size.deltaBytes
+            * (Nat.log2 (evaluation.size.retainedStateBytes + 2) + 1)
+    rw [evaluation.native_canonicalizationSteps_eq]
+    exact Nat.le_trans (Nat.le_mul_of_pos_left _ hCanon)
+      (Nat.le_mul_of_pos_right _ (Nat.succ_pos _))
+  · exact Nat.le_of_eq evaluation.native_canonicalNovelObjects_eq
+  · exact Nat.le_of_eq evaluation.native_canonicalNovelEdges_eq
+  · show evaluation.total.closureSteps
+        ≤ table.cClosure * evaluation.size.closureDerivations
+    rw [evaluation.native_closureSteps_eq]
+    exact Nat.le_mul_of_pos_left _ hClos
+  · show evaluation.total.indexSteps
+        ≤ table.cIndex * (evaluation.size.canonicalNovelObjects
+            + evaluation.size.canonicalNovelEdges + evaluation.size.attentionBucketsTouched)
+    rw [evaluation.native_indexSteps_eq]
+    refine Nat.le_trans ?_ (Nat.le_mul_of_pos_left _ hIdx)
+    omega
+  · exact Nat.le_of_eq evaluation.native_attentionBucketsTouched_eq
+  · show evaluation.total.dependencyObjectsVisited
+        ≤ table.cDependency * evaluation.size.dependencyImpactObjects
+    rw [evaluation.native_dependencyObjectsVisited_eq]
+    exact Nat.le_mul_of_pos_left _ hDep
+  · rw [evaluation.native_partitionSteps_eq_zero]
+    exact Nat.zero_le _
+  · exact Nat.le_of_eq evaluation.native_partitionCellsChanged_eq
+  · show evaluation.total.verifierSteps
+        ≤ table.cVerify * evaluation.size.certificateBytesChecked
+    rw [evaluation.native_verifierSteps_eq]
+    exact Nat.le_mul_of_pos_left _ hVer
+  · show evaluation.total.sealSteps
+        ≤ table.cSeal * evaluation.size.sealCount
+          + table.cSealScan * evaluation.size.sealInputBytesScanned
+    rw [evaluation.native_sealSteps_eq]
+    exact Nat.add_le_add (Nat.le_mul_of_pos_left _ hSeal)
+      (Nat.le_mul_of_pos_left _ hScan)
+  · show evaluation.total.querySelectionSteps
+        ≤ table.cQuery * (evaluation.size.queryCount + evaluation.size.requestBytesChecked
+            + evaluation.size.attentionCandidatesVisited)
+    rw [evaluation.native_querySelectionSteps_eq]
+    refine Nat.le_trans ?_ (Nat.le_mul_of_pos_left _ hQuery)
+    omega
+  · rw [evaluation.native_migrationSteps_eq_zero]
+    exact Nat.zero_le _
+  · exact Nat.le_of_eq evaluation.native_retainedStateBytes_eq
+  · exact Nat.le_of_eq evaluation.native_peakWorkingBytes_eq
+  · show Cost.ComponentwiseLE evaluation.total.artifact evaluation.size.artifactWork
+    rw [evaluation.native_artifact_eq_zero, evaluation.native_size_artifactWork_eq_zero]
+    exact Cost.componentwiseLE_refl _
+
+/--
+  **SPEC 16**, `Atlas.lifecycle_native_bound`, quoted verbatim:
+
+  ```lean
+  theorem lifecycle_native_bound
+      {body : Atlas.LifecycleTraceBody}
+      {trace : Atlas.ResolvedLifecycleTrace body}
+      (evaluation : Atlas.LifecycleEvaluation trace .nativeIncremental) :
+    evaluation.total ≤
+      Atlas.nativeLifecycleBound Release.primitiveCostTable evaluation.size
+  ```
+
+  ### What this bound actually constrains
+
+  `≤` is `Cost.LifecycleVector.ComponentwiseLE`: all seventeen coordinates at
+  once, with no trade between them.  `Release.primitiveCostTable` has every
+  coefficient equal to `1`, the componentwise-minimal positive table SPEC 16
+  admits, and `lifecycle_native_bound_of_positive` proves the same inequality for
+  every positive table — so no coefficient was inflated to make this true.
+
+  Neither side of the inequality is free.  `evaluation.total` is pinned by
+  `totalExact` to the frozen fold of the prefix charges, and `evaluation.size` is
+  pinned by `VerifiesLifecycleSize` to `lifecycleSize` of that same family — a
+  recomputation over the trace, not a number an implementor may choose.  The
+  bound therefore cannot be satisfied by reporting a large size vector, and the
+  proof does not use the structure fields as assumptions: it recomputes both
+  sides from `trace.prefixCost` and compares them.
+
+  **Fourteen of the seventeen coordinates are attained with equality**
+  (`lifecycle_native_bound_attained`): authority checking, both novelty counts,
+  closure, attention buckets, dependency invalidation, both partition
+  coordinates, verification, sealing, migration, retained-state bytes,
+  peak-working bytes and artifact work.  On those the bound is not a bound at
+  all; it is the exact accounting identity.
+
+  **Three coordinates are loose, and `lifecycle_native_bound_slack` says by
+  exactly how much:**
+
+  * `canonicalizationSteps` — the polynomial multiplies the charged delta bytes
+    by `log2 (retainedStateBytes + 2) + 1`, a factor of at least `2`, which the
+    incremental replay never spends.  The factor is SPEC 16's, not this
+    repository's: it is in the fixed shape of `Cost.nativeLifecycleBound`, and it
+    cannot be removed without amending SPEC.
+  * `indexSteps` — the polynomial's bracket is `canonicalNovelObjects +
+    canonicalNovelEdges + attentionBucketsTouched`, and on a lifecycle all three
+    count the same novel declarations, so the bracket is exactly three times the
+    charge.
+  * `querySelectionSteps` — the polynomial's bracket adds `requestBytesChecked`,
+    which the replay's query charge does not contain at all.
+
+  Each of those three is slack in SPEC's *polynomial shape*, not slack bought by
+  a coefficient.  With coefficients pinned at `1` there is no smaller positive
+  table, so this is the tightest form of SPEC 16's statement that exists.
+
+  **How much of this inequality has content, counted honestly.**  Adversarial
+  review made the sharpest available criticism of this theorem, and it is right,
+  so it is recorded here rather than left for a reader to find.
+
+  `ResolvedLifecycleTrace.lifecycleSize` *defines* nine of its coordinates as the
+  sum — or, for the two peak coordinates, the maximum — of the very prefix-cost
+  coordinate the polynomial then bounds:
+
+      canonicalNovelObjects   canonicalNovelEdges
+      closureDerivations := Σ closureSteps
+      attentionBucketsTouched
+      dependencyImpactObjects := Σ dependencyObjectsVisited
+      partitionCellsChanged
+      certificateBytesChecked := Σ verifierSteps
+      retainedStateBytes      peakWorkingBytes
+
+  On those nine, with the coefficient pinned at `1`, the inequality is literally
+  `x ≤ x`.  It would hold for **any** cost model whatsoever — one charging zero,
+  or one charging absurdly — so on those coordinates the theorem measures the
+  size vector against itself and says nothing about the algorithm.  Three more
+  (`partitionSteps`, `migrationSteps`, `artifact`) are `0 ≤ 0` because the replay
+  charges nothing there.
+
+  Only **four of seventeen** coordinates relate the charged total to an
+  independent, trace-derived measure: `authorityCheckSteps` against the initial
+  base's `declarationBytes`, `canonicalizationSteps` against `deltaBytes`,
+  `sealSteps` against `sealCount + sealInputBytesScanned`, and
+  `querySelectionSteps` against `queryCount + attentionCandidatesVisited`.
+
+  So "fourteen of seventeen coordinates hold with equality" is true and is the
+  wrong thing to be impressed by: nine of those fourteen are equalities of the
+  size vector's own definition.  This is a property of SPEC 16's carrier, not of
+  the proof — `lifecycleSize` is the size notion SPEC fixes — but a reader
+  entitled to know what the bound constrains is entitled to know this.
+
+  What is *not* claimed: that these coefficients are calibrated machine costs.
+  Nothing in this repository measures the wall-clock price of a closure
+  derivation, and `Release.primitiveCostTable`'s docstring says so.
+-/
+theorem lifecycle_native_bound {body : LifecycleTraceBody}
+    {trace : ResolvedLifecycleTrace body}
+    (evaluation : LifecycleEvaluation trace .nativeIncremental) :
+    evaluation.total ≤ nativeLifecycleBound Release.primitiveCostTable evaluation.size :=
+  lifecycle_native_bound_of_positive Release.primitiveCostTable
+    Release.primitiveCostTable_positive evaluation
+
+/-- **Where the native bound is tight.**  Fourteen of the seventeen coordinates
+of `lifecycle_native_bound` hold with equality at the release table, so the
+theorem is not made true by slack on them.  Stated as equalities against the
+bound itself, not against the size vector, so that a later change to a
+coefficient would break this. -/
+theorem lifecycle_native_bound_attained {body : LifecycleTraceBody}
+    {trace : ResolvedLifecycleTrace body}
+    (evaluation : LifecycleEvaluation trace .nativeIncremental) :
+    evaluation.total.authorityCheckSteps
+        = (nativeLifecycleBound Release.primitiveCostTable
+            evaluation.size).authorityCheckSteps ∧
+    evaluation.total.canonicalNovelObjects
+        = (nativeLifecycleBound Release.primitiveCostTable
+            evaluation.size).canonicalNovelObjects ∧
+    evaluation.total.canonicalNovelEdges
+        = (nativeLifecycleBound Release.primitiveCostTable
+            evaluation.size).canonicalNovelEdges ∧
+    evaluation.total.closureSteps
+        = (nativeLifecycleBound Release.primitiveCostTable evaluation.size).closureSteps ∧
+    evaluation.total.attentionBucketsTouched
+        = (nativeLifecycleBound Release.primitiveCostTable
+            evaluation.size).attentionBucketsTouched ∧
+    evaluation.total.dependencyObjectsVisited
+        = (nativeLifecycleBound Release.primitiveCostTable
+            evaluation.size).dependencyObjectsVisited ∧
+    evaluation.total.partitionSteps
+        = (nativeLifecycleBound Release.primitiveCostTable evaluation.size).partitionSteps ∧
+    evaluation.total.partitionCellsChanged
+        = (nativeLifecycleBound Release.primitiveCostTable
+            evaluation.size).partitionCellsChanged ∧
+    evaluation.total.verifierSteps
+        = (nativeLifecycleBound Release.primitiveCostTable evaluation.size).verifierSteps ∧
+    evaluation.total.sealSteps
+        = (nativeLifecycleBound Release.primitiveCostTable evaluation.size).sealSteps ∧
+    evaluation.total.migrationSteps
+        = (nativeLifecycleBound Release.primitiveCostTable evaluation.size).migrationSteps ∧
+    evaluation.total.retainedStateBytes
+        = (nativeLifecycleBound Release.primitiveCostTable
+            evaluation.size).retainedStateBytes ∧
+    evaluation.total.peakWorkingBytes
+        = (nativeLifecycleBound Release.primitiveCostTable
+            evaluation.size).peakWorkingBytes ∧
+    evaluation.total.artifact
+        = (nativeLifecycleBound Release.primitiveCostTable evaluation.size).artifact := by
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · show evaluation.total.authorityCheckSteps = 1 * evaluation.size.authorityBytesChecked
+    rw [Nat.one_mul]; exact evaluation.native_authorityCheckSteps_eq
+  · exact evaluation.native_canonicalNovelObjects_eq
+  · exact evaluation.native_canonicalNovelEdges_eq
+  · show evaluation.total.closureSteps = 1 * evaluation.size.closureDerivations
+    rw [Nat.one_mul]; exact evaluation.native_closureSteps_eq
+  · exact evaluation.native_attentionBucketsTouched_eq
+  · show evaluation.total.dependencyObjectsVisited
+        = 1 * evaluation.size.dependencyImpactObjects
+    rw [Nat.one_mul]; exact evaluation.native_dependencyObjectsVisited_eq
+  · show evaluation.total.partitionSteps = 1 * evaluation.size.partitionCellsChanged
+    rw [Nat.one_mul, evaluation.native_size_partitionCellsChanged_eq_zero]
+    exact evaluation.native_partitionSteps_eq_zero
+  · exact evaluation.native_partitionCellsChanged_eq
+  · show evaluation.total.verifierSteps = 1 * evaluation.size.certificateBytesChecked
+    rw [Nat.one_mul]; exact evaluation.native_verifierSteps_eq
+  · show evaluation.total.sealSteps
+        = 1 * evaluation.size.sealCount + 1 * evaluation.size.sealInputBytesScanned
+    rw [Nat.one_mul, Nat.one_mul]; exact evaluation.native_sealSteps_eq
+  · show evaluation.total.migrationSteps = 1 * evaluation.size.migrationObjects
+    rw [Nat.one_mul, evaluation.native_size_migrationObjects_eq_zero]
+    exact evaluation.native_migrationSteps_eq_zero
+  · exact evaluation.native_retainedStateBytes_eq
+  · exact evaluation.native_peakWorkingBytes_eq
+  · show evaluation.total.artifact = evaluation.size.artifactWork
+    rw [evaluation.native_artifact_eq_zero, evaluation.native_size_artifactWork_eq_zero]
+
+/-- **Exactly how loose the other three coordinates are.**  Each is slack in the
+*shape* of SPEC 16's polynomial, not slack bought by a coefficient: the
+logarithmic canonicalization factor, the threefold index bracket, and the
+request bytes the query bracket adds and the replay never charges. -/
+theorem lifecycle_native_bound_slack {body : LifecycleTraceBody}
+    {trace : ResolvedLifecycleTrace body}
+    (evaluation : LifecycleEvaluation trace .nativeIncremental) :
+    (nativeLifecycleBound Release.primitiveCostTable
+        evaluation.size).canonicalizationSteps
+      = evaluation.total.canonicalizationSteps
+          * (Nat.log2 (evaluation.size.retainedStateBytes + 2) + 1) ∧
+    (nativeLifecycleBound Release.primitiveCostTable evaluation.size).indexSteps
+      = 3 * evaluation.total.indexSteps ∧
+    (nativeLifecycleBound Release.primitiveCostTable
+        evaluation.size).querySelectionSteps
+      = evaluation.total.querySelectionSteps + evaluation.size.requestBytesChecked := by
+  refine ⟨?_, ?_, ?_⟩
+  · show 1 * evaluation.size.deltaBytes
+          * (Nat.log2 (evaluation.size.retainedStateBytes + 2) + 1)
+        = evaluation.total.canonicalizationSteps
+          * (Nat.log2 (evaluation.size.retainedStateBytes + 2) + 1)
+    rw [Nat.one_mul, evaluation.native_canonicalizationSteps_eq]
+  · show 1 * (evaluation.size.canonicalNovelObjects + evaluation.size.canonicalNovelEdges
+          + evaluation.size.attentionBucketsTouched)
+        = 3 * evaluation.total.indexSteps
+    rw [evaluation.native_size_canonicalNovelEdges_eq,
+      evaluation.native_size_attentionBucketsTouched_eq,
+      evaluation.native_indexSteps_eq]
+    omega
+  · show 1 * (evaluation.size.queryCount + evaluation.size.requestBytesChecked
+          + evaluation.size.attentionCandidatesVisited)
+        = evaluation.total.querySelectionSteps + evaluation.size.requestBytesChecked
+    rw [evaluation.native_querySelectionSteps_eq]
+    omega
+
+/-! ## The comparator strategy, replayed (SPEC 16)
+
+`Atlas.canonicalFullRebuildEvaluation` is a *total* constructor: it produces a
+full-rebuild evaluation of every resolved trace, with no hypothesis and no
+stored conclusion.  Every field of every prefix result is the replay's own
+value, so each `Verifies…` obligation is discharged by `rfl` — a recomputation
+that happens to be syntactically trivial, not an assumption.
+
+An earlier note in this file recorded this construction as blocked, on the
+grounds that the evaluation's `size` field "would then have to be verified
+against `lifecycleSize`, which is a computation over the whole trace".  That
+note was over-cautious and is withdrawn.  `VerifiesLifecycleSize trace prefixes
+size` is *defined* as `size = trace.lifecycleSize algorithm prefixes`, so taking
+the size to be that computation discharges the obligation definitionally; the
+computation is performed, not asserted.  The same is true of `totalExact`.  The
+only real work is the prefix family, and that is `restOrdinals` below. -/
+
+/-- `1, …, k` as elements of `Fin (m + 1)`, in ascending order. -/
+def restOrdinals (m : Nat) : (k : Nat) → k ≤ m → List (Fin (m + 1))
+  | 0, _ => []
+  | k + 1, h =>
+      restOrdinals m k (Nat.le_of_succ_le h) ++ [⟨k + 1, Nat.lt_succ_of_le h⟩]
+
+/-- Prefixed by `0`, `restOrdinals m k` is exactly `List.range (k + 1)` — which
+is what `CoversExactlyEveryPrefix` demands. -/
+theorem restOrdinals_map_val (m : Nat) :
+    ∀ (k : Nat) (h : k ≤ m),
+      (0 :: (restOrdinals m k h).map Fin.val) = List.range (k + 1) := by
+  intro k
+  induction k with
+  | zero => intro _; rfl
+  | succ j ih =>
+      intro h
+      show (0 :: ((restOrdinals m j (Nat.le_of_succ_le h) ++
+        [(⟨j + 1, Nat.lt_succ_of_le h⟩ : Fin (m + 1))]).map Fin.val)) = _
+      rw [List.map_append, ← List.cons_append, ih (Nat.le_of_succ_le h)]
+      show List.range (j + 1) ++ [j + 1] = List.range (j + 1 + 1)
+      exact (@List.range_succ (j + 1)).symm
+
+namespace ResolvedLifecycleTrace
+
+variable {body : LifecycleTraceBody}
+
+/-- The prefix result the replay itself determines at one ordinal.  Nothing is
+chosen: the before/after state identities, the selected delta, the seal, the
+query-result identities and the charge are all read off the replay, and both
+verifier obligations are therefore definitional. -/
+def canonicalPrefixResult (trace : ResolvedLifecycleTrace body)
+    (algorithm : LifecycleAlgorithmTag) (ordinal : Fin (body.horizon + 1)) :
+    LifecyclePrefixResult trace algorithm where
+  prefixOrdinal := ordinal
+  beforeStateId := StateId (trace.bodyAt algorithm (ordinal.val - 1))
+  deltaId := (trace.selectedDelta? ordinal.val).map DeltaId
+  afterStateId := StateId (trace.bodyAt algorithm ordinal.val)
+  sealId := trace.sealIdAt algorithm ordinal.val
+  queryResultIds := trace.queryResultIdsAt algorithm ordinal.val
+  cost := trace.prefixCost algorithm ordinal.val
+  exactTransition := ⟨rfl, rfl, rfl, rfl, rfl⟩
+  exactCost := rfl
+
+@[simp] theorem canonicalPrefixResult_prefixOrdinal
+    (trace : ResolvedLifecycleTrace body) (algorithm : LifecycleAlgorithmTag)
+    (ordinal : Fin (body.horizon + 1)) :
+    (trace.canonicalPrefixResult algorithm ordinal).prefixOrdinal = ordinal := rfl
+
+/-- The replayed family, in prefix order: prefix `0`, then `1, …, horizon`. -/
+def canonicalPrefixes (trace : ResolvedLifecycleTrace body)
+    (algorithm : LifecycleAlgorithmTag) :
+    PrefixOrderedList (LifecyclePrefixResult trace algorithm) where
+  head := trace.canonicalPrefixResult algorithm ⟨0, Nat.succ_pos _⟩
+  rest := (restOrdinals body.horizon body.horizon (Nat.le_refl _)).map
+    (trace.canonicalPrefixResult algorithm)
+
+/-- The replayed family covers exactly every prefix, in order, once each. -/
+theorem canonicalPrefixes_covers (trace : ResolvedLifecycleTrace body)
+    (algorithm : LifecycleAlgorithmTag) :
+    CoversExactlyEveryPrefix (trace.canonicalPrefixes algorithm) := by
+  show (0 :: ((restOrdinals body.horizon body.horizon (Nat.le_refl _)).map
+      (trace.canonicalPrefixResult algorithm)).map
+        (fun r => r.prefixOrdinal.val)) = List.range (body.horizon + 1)
+  rw [List.map_map]
+  exact restOrdinals_map_val body.horizon body.horizon (Nat.le_refl _)
+
+/-- The evaluation a trace and a strategy determine.  Total, and every field is
+the replay's own: the size vector is `lifecycleSize` of this very family and the
+total is `Cost.sumLifecycle` of its costs, so `sizeExact` and `totalExact` are
+discharged by computing, never by assuming. -/
+def canonicalEvaluation (trace : ResolvedLifecycleTrace body)
+    (algorithm : LifecycleAlgorithmTag) : LifecycleEvaluation trace algorithm where
+  prefixes := trace.canonicalPrefixes algorithm
+  exactPrefixCover := trace.canonicalPrefixes_covers algorithm
+  size := trace.lifecycleSize algorithm (trace.canonicalPrefixes algorithm)
+  sizeExact := rfl
+  total :=
+    Cost.sumLifecycle
+      ((trace.canonicalPrefixes algorithm).elements.map (fun r => r.cost))
+  totalExact := rfl
+
+end ResolvedLifecycleTrace
+
+/--
+  **SPEC 16**, `Atlas.canonicalFullRebuildEvaluation`: the comparator evaluation
+  of a resolved trace — a canonical full rebuild at every seal point.
+
+  It is the replayed evaluation at the `canonicalFullRebuildAtEverySeal` tag, so
+  its prefix results, size vector and total are computations over the trace, and
+  its charge model is the one `prefixCost` fixes for that tag (the whole
+  accumulated base is recanonicalized at every seal, the novel declarations
+  elsewhere).
+-/
+def canonicalFullRebuildEvaluation {body : LifecycleTraceBody}
+    (trace : ResolvedLifecycleTrace body) :
+    LifecycleEvaluation trace .canonicalFullRebuildAtEverySeal :=
+  trace.canonicalEvaluation .canonicalFullRebuildAtEverySeal
+
+/-! ## Regret against the canonical full rebuild (SPEC 16) -/
+
+/-- **SPEC 16**, `Atlas.LifecycleComparatorTag`.  SPEC 16: "A competitive or
+regret claim against any comparator other than the canonical full rebuild
+requires a new first-order comparator body, a complete causal-information
+contract, and a separately proved theorem."  The tag therefore has exactly one
+constructor. -/
+inductive LifecycleComparatorTag
+  /-- The canonical full rebuild at every seal point. -/
+  | canonicalFullRebuildAtEverySeal
+  deriving DecidableEq, Repr, Inhabited
+
+/--
+  **SPEC 16**, `Atlas.regretAgainst`: the regret of an evaluation against a
+  named comparator, in the frozen carrier `Cost.truncatedDifference`.
+
+  The definition is by cases on the comparator tag, and the one tag SPEC admits
+  is wired to `canonicalFullRebuildEvaluation` — the evaluation of *this* trace
+  under the full-rebuild strategy, not a number stored beside it.
+-/
+def regretAgainst {body : LifecycleTraceBody} {trace : ResolvedLifecycleTrace body}
+    {algorithm : LifecycleAlgorithmTag} (comparator : LifecycleComparatorTag)
+    (evaluation : LifecycleEvaluation trace algorithm) : Cost.LifecycleVector :=
+  match comparator with
+  | .canonicalFullRebuildAtEverySeal =>
+      Cost.truncatedDifference evaluation.total
+        (canonicalFullRebuildEvaluation trace).total
+
+/--
+  **SPEC 16**, `Atlas.lifecycle_full_rebuild_comparator_exact`.
+
+  **This holds by `rfl`, and the docstring says so rather than letting the
+  reader assume otherwise.**  Its content is not an arithmetic fact: it is that
+  the comparator tag is wired to the canonical full rebuild *of the same trace*
+  and to nothing else, and that the regret carrier is the componentwise
+  truncated difference of the two exact totals — no slack term, no comparator
+  chosen after the fact, no second table.  The theorem is what pins that wiring
+  so a later edit to `regretAgainst` cannot silently redirect the comparator:
+  the binding in `Conformance/RequiredSignatures.lean` restates SPEC's
+  proposition and closes it by `:= @Atlas.lifecycle_full_rebuild_comparator_exact`,
+  so a redirected definition stops elaborating.
+
+  What is *not* claimed here: nothing says the regret is zero, small, or bounded.
+  `Cost.truncatedDifference_self` gives zero only against an identical total.
+-/
+theorem lifecycle_full_rebuild_comparator_exact {body : LifecycleTraceBody}
+    {trace : ResolvedLifecycleTrace body}
+    (evaluation : LifecycleEvaluation trace .nativeIncremental) :
+    regretAgainst .canonicalFullRebuildAtEverySeal evaluation =
+      Cost.truncatedDifference evaluation.total
+        (canonicalFullRebuildEvaluation trace).total := rfl
+
+/-! ## Incremental and full-rebuild observations (SPEC 16)
+
+SPEC 16 names `SameSealedQueryAndExecutionObservations` in the statement of
+`lifecycle_incremental_semantics_eq_full_rebuild` but nowhere defines it.  The
+reading used here is the strong one: at every prefix the two strategies agree on
+the state identity they reach, on the seal they produce, and on the exact
+query-result identities they answer with.  `sameObservations_bodyAt` proves that
+this really does force the two replayed state bodies to be equal at every
+prefix, so the predicate cannot be read as a weak one.
+
+`sealIdAt_congr` records the opposite fact about the seal component: a seal is
+determined by the trace's scope and its accumulated declaration base, both of
+which are strategy-independent, so the seal identities agree unconditionally and
+the content of the predicate is carried by its state and query components. -/
+
+namespace ResolvedLifecycleTrace
+
+variable {body : LifecycleTraceBody}
+
+/-- The recursion `nativeBodyAt` is defined by, as an equation. -/
+theorem nativeBodyAt_succ (trace : ResolvedLifecycleTrace body) (k : Nat) :
+    trace.nativeBodyAt (k + 1) =
+      match trace.deltas[k]? with
+      | some delta => semanticApplyBody (trace.nativeBodyAt k) delta
+      | none => trace.nativeBodyAt k := rfl
+
+/-- The incremental replay never leaves the trace's scope. -/
+theorem nativeBodyAt_scope (trace : ResolvedLifecycleTrace body) (n : Nat) :
+    (trace.nativeBodyAt n).scope = trace.scope := by
+  induction n with
+  | zero => rfl
+  | succ k ih =>
+      rw [nativeBodyAt_succ]
+      cases trace.deltas[k]? with
+      | none => exact ih
+      | some d => rw [semanticApplyBody_scope]; exact ih
+
+/-- **Coherence is preserved along the whole trace.**  This is the step the
+earlier omission note believed to be a property of the resolved deltas: it is
+not.  `Atlas.semanticApplyBody_coherent` preserves coherence for *every* delta,
+so the induction needs nothing beyond coherence of the initial state — which
+`ResolvedLifecycleTrace` does not carry, and which is where the real obstacle
+lives. -/
+theorem nativeBodyAt_coherent (trace : ResolvedLifecycleTrace body)
+    (hcoherent : Coherent trace.initialState.body) (n : Nat) :
+    Coherent (trace.nativeBodyAt n) := by
+  induction n with
+  | zero => exact hcoherent
+  | succ k ih =>
+      rw [nativeBodyAt_succ]
+      cases trace.deltas[k]? with
+      | none => exact ih
+      | some d => exact semanticApplyBody_coherent ih d
+
+/-- The incremental replay and the full rebuild reach the same body at every
+prefix, given a coherent start. -/
+theorem nativeBodyAt_eq_rebuildBodyAt (trace : ResolvedLifecycleTrace body)
+    (hcoherent : Coherent trace.initialState.body) (n : Nat) :
+    trace.nativeBodyAt n = trace.rebuildBodyAt n := by
+  have hco := trace.nativeBodyAt_coherent hcoherent n
+  have hs := trace.nativeBodyAt_scope n
+  calc trace.nativeBodyAt n
+      = derivedBody (trace.nativeBodyAt n).scope
+          (trace.nativeBodyAt n).declarationBase := hco
+    _ = derivedBody trace.scope (trace.accumulatedDeclarations n) := by
+          rw [hs]; rfl
+    _ = trace.rebuildBodyAt n := rfl
+
+/-- The two strategies agree at every prefix, given a coherent start.  This is
+`bodyAt_zero_agree` for the whole trace rather than for prefix `0`. -/
+theorem bodyAt_agree (trace : ResolvedLifecycleTrace body)
+    (hcoherent : Coherent trace.initialState.body) (n : Nat) :
+    trace.bodyAt .nativeIncremental n
+      = trace.bodyAt .canonicalFullRebuildAtEverySeal n :=
+  trace.nativeBodyAt_eq_rebuildBodyAt hcoherent n
+
+/-- Equal state bodies answer every scheduled request with the same exact
+query-result identities. -/
+theorem queryResultIdsAt_congr (trace : ResolvedLifecycleTrace body)
+    {a b : LifecycleAlgorithmTag} (n : Nat)
+    (h : trace.bodyAt a n = trace.bodyAt b n) :
+    trace.queryResultIdsAt a n = trace.queryResultIdsAt b n := by
+  simp only [queryResultIdsAt, queryOutcomeAt, h]
+
+/-- **The seal component is strategy-independent by construction.**  A seal is
+the seal of the derived state of the trace's scope and accumulated declaration
+base; neither depends on the strategy, so this holds unconditionally — and it is
+recorded so that no reader mistakes seal agreement for evidence that the two
+strategies computed the same thing. -/
+theorem sealIdAt_congr (trace : ResolvedLifecycleTrace body)
+    (a b : LifecycleAlgorithmTag) (n : Nat) :
+    trace.sealIdAt a n = trace.sealIdAt b n := rfl
+
+end ResolvedLifecycleTrace
+
+/--
+  **SPEC 16**, `SameSealedQueryAndExecutionObservations`, which SPEC names but
+  does not define.
+
+  Two evaluations of the same trace — possibly under different strategies —
+  make the same observations when, at every prefix they both cover, they agree
+  on the state identity reached, on the seal produced, and on the exact
+  query-result identities answered.  Both families cover exactly every prefix
+  (`CoversExactlyEveryPrefix`), so this quantifies over `0, …, horizon` with
+  nothing skipped, and `sameObservations_bodyAt` shows it forces the two
+  replayed state bodies to be equal at every prefix.
+-/
+def SameSealedQueryAndExecutionObservations {body : LifecycleTraceBody}
+    {trace : ResolvedLifecycleTrace body} {a b : LifecycleAlgorithmTag}
+    (x : LifecycleEvaluation trace a) (y : LifecycleEvaluation trace b) : Prop :=
+  ∀ (rx : LifecyclePrefixResult trace a) (ry : LifecyclePrefixResult trace b),
+    rx ∈ x.prefixes.elements → ry ∈ y.prefixes.elements →
+      rx.prefixOrdinal.val = ry.prefixOrdinal.val →
+        rx.afterStateId = ry.afterStateId ∧
+        rx.sealId = ry.sealId ∧
+        rx.queryResultIds = ry.queryResultIds
+
+/-- **The observation predicate is not a weak one.**  It forces the two
+strategies' replayed state bodies — not merely their identities — to be equal at
+every prefix, and their query answers with them. -/
+theorem sameObservations_bodyAt {body : LifecycleTraceBody}
+    {trace : ResolvedLifecycleTrace body} {a b : LifecycleAlgorithmTag}
+    {x : LifecycleEvaluation trace a} {y : LifecycleEvaluation trace b}
+    (h : SameSealedQueryAndExecutionObservations x y) {n : Nat}
+    (hn : n ≤ body.horizon) :
+    trace.bodyAt a n = trace.bodyAt b n ∧
+    trace.queryResultIdsAt a n = trace.queryResultIdsAt b n := by
+  obtain ⟨rx, hrx, hox⟩ := coversExactlyEveryPrefix_complete x.exactPrefixCover n hn
+  obtain ⟨ry, hry, hoy⟩ := coversExactlyEveryPrefix_complete y.exactPrefixCover n hn
+  have hh := h rx ry hrx hry (by rw [hox, hoy])
+  refine ⟨?_, ?_⟩
+  · have hst := hh.1
+    rw [rx.afterStateId_eq, ry.afterStateId_eq, hox, hoy] at hst
+    exact StateId_eq_iff.mp hst
+  · have hq := hh.2.2
+    rw [rx.queryResultIds_eq, ry.queryResultIds_eq, hox, hoy] at hq
+    exact hq
+
+/--
+  **The conditional form of SPEC 16's observational-equality theorem.**
+
+  It is *not* `Atlas.lifecycle_incremental_semantics_eq_full_rebuild`, and it
+  does not carry that name, because it has a hypothesis SPEC's statement does
+  not: `Coherent trace.initialState.body`.  That hypothesis cannot be dropped —
+  `not_lifecycle_incremental_semantics_eq_full_rebuild` below refutes the
+  unconditional statement — and `ResolvedLifecycleTrace` does not supply it:
+  none of its ten fields constrains the initial state's semantic half, and
+  `semanticApplyBody` leaves an incoherent body untouched when the delta
+  declares nothing, so no amount of replaying repairs it.
+
+  Given the hypothesis the theorem is unconditional in everything else: every
+  delta, every schedule, every seal set, the whole horizon.
+-/
+theorem lifecycle_incremental_semantics_eq_full_rebuild_of_coherent
+    {body : LifecycleTraceBody} {trace : ResolvedLifecycleTrace body}
+    (hcoherent : Coherent trace.initialState.body)
+    (evaluation : LifecycleEvaluation trace .nativeIncremental) :
+    SameSealedQueryAndExecutionObservations evaluation
+      (canonicalFullRebuildEvaluation trace) := by
+  intro rx ry _ _ hord
+  have hbody := trace.bodyAt_agree hcoherent rx.prefixOrdinal.val
+  refine ⟨?_, ?_, ?_⟩
+  · rw [rx.afterStateId_eq, ry.afterStateId_eq, ← hord, hbody]
+  · rw [rx.exactTransition.2.2.2.1, ry.exactTransition.2.2.2.1, ← hord]
+    exact trace.sealIdAt_congr _ _ _
+  · rw [rx.queryResultIds_eq, ry.queryResultIds_eq, ← hord]
+    exact trace.queryResultIdsAt_congr _ hbody
+
+/-- **The hypothesis is discharged, not assumed, for every lifecycle that starts
+from a rebuild.**  SPEC 12.5's `Atlas.rebuild` produces exactly such a state, so
+the conditional theorem above is not vacuous on the traces the pipeline
+actually produces. -/
+theorem lifecycle_incremental_semantics_eq_full_rebuild_of_rebuilt_start
+    {body : LifecycleTraceBody} {trace : ResolvedLifecycleTrace body}
+    {scope : Scope} {declarations : CanonicalDeclarationSet}
+    (hstart : trace.initialState.body = semanticRebuildBodyWith scope declarations)
+    (evaluation : LifecycleEvaluation trace .nativeIncremental) :
+    SameSealedQueryAndExecutionObservations evaluation
+      (canonicalFullRebuildEvaluation trace) :=
+  lifecycle_incremental_semantics_eq_full_rebuild_of_coherent
+    (by rw [hstart]; exact semanticRebuildBodyWith_coherent scope declarations)
+    evaluation
+
+/-! ### SPEC 16's literal observational-equality statement is false
+
+The refutation is built here rather than cited from `Atlas/Rebuild.lean` so that
+it stands on this file's own definitions.  It is the lifecycle analogue of
+`Atlas.not_incremental_eq_full_rebuild` (deviation `DEV-004`): the same missing
+coherence obligation, one layer up. -/
+
+namespace LifecycleCounterexample
+
+/-- A semantic object no declaration derives. -/
+def strayObject : ObjectEntry := ⟨nullId, ByteArray.empty⟩
+
+/-- An unscoped body whose recorded semantic half is not the one its declaration
+base derives: the base is empty and it records an object anyway. -/
+def incoherentBody : StateBody :=
+  { derivedBody Scope.unscoped ⟨[]⟩ with semanticObjects := ⟨[strayObject]⟩ }
+
+theorem incoherentBody_not_coherent : ¬ Coherent incoherentBody := by
+  intro h
+  exact absurd (congrArg StateBody.semanticObjects h) (by decide)
+
+/-- It is a perfectly legal `Atlas.UnsealedState`: that type carries no
+coherence obligation. -/
+def incoherentState : UnsealedState := unsealedFromBody incoherentBody
+
+/-- A trace over it: horizon `0`, no deltas, no requests, no seal points.  Every
+field of `ResolvedLifecycleTrace` is discharged, so this really is a resolved
+trace and not a near miss. -/
+def traceBody : LifecycleTraceBody where
+  version := 1
+  profileId := nullId
+  problemId := nullId
+  objectiveId := nullId
+  initialStateId := StateId incoherentBody
+  deltaIds := []
+  requestIds := []
+  requestAfterPrefixes := []
+  sealAfterPrefixes := CanonicalNatFinset.empty
+  horizon := 0
+
+/-- The resolved trace. -/
+def trace : ResolvedLifecycleTrace traceBody where
+  initialState := incoherentState
+  deltas := []
+  requests := []
+  resolvesInitial := rfl
+  resolvesDeltas := rfl
+  resolvesRequests := rfl
+  horizonEq := rfl
+  requestScheduleLength := rfl
+  requestOrdinalsValid := fun _ h => nomatch h
+  sealOrdinalsValid := fun _ h => nomatch h
+  completePreimages := canonicalLifecycleObjectGraph traceBody
+
+/-- **The two strategies observe different states at prefix `0`.**  The native
+replay is the recorded body; the full rebuild is the body its declaration base
+derives; they differ exactly because the start is incoherent. -/
+theorem observations_differ :
+    ¬ SameSealedQueryAndExecutionObservations
+        (trace.canonicalEvaluation .nativeIncremental)
+        (canonicalFullRebuildEvaluation trace) := by
+  intro h
+  have hx : trace.canonicalPrefixResult .nativeIncremental ⟨0, Nat.succ_pos _⟩ ∈
+      (trace.canonicalEvaluation .nativeIncremental).prefixes.elements :=
+    List.mem_cons_self
+  have hy : trace.canonicalPrefixResult .canonicalFullRebuildAtEverySeal
+      ⟨0, Nat.succ_pos _⟩ ∈
+      (canonicalFullRebuildEvaluation trace).prefixes.elements :=
+    List.mem_cons_self
+  exact incoherentBody_not_coherent (StateId_eq_iff.mp (h _ _ hx hy rfl).1)
+
+end LifecycleCounterexample
+
+/--
+  **SPEC 16's `lifecycle_incremental_semantics_eq_full_rebuild` is false as
+  stated**, under the strong reading of
+  `SameSealedQueryAndExecutionObservations` used here.
+
+  The statement quantifies over every `Atlas.ResolvedLifecycleTrace`, and that
+  structure constrains only identities, schedules and retention — never the
+  initial state's semantic half.  A trace starting from a state that records one
+  semantic object its empty declaration base does not derive therefore falsifies
+  it at prefix `0`, before any delta is applied.
+
+  This is why no theorem in this file carries SPEC's name: the missing
+  hypothesis is `Coherent trace.initialState.body`, it is supplied by neither
+  `ResolvedLifecycleTrace` nor the resolved deltas, and
+  `lifecycle_incremental_semantics_eq_full_rebuild_of_coherent` states the
+  theorem under exactly that hypothesis instead of hiding it.
+-/
+theorem not_lifecycle_incremental_semantics_eq_full_rebuild :
+    ¬ ∀ (body : LifecycleTraceBody) (trace : ResolvedLifecycleTrace body)
+        (evaluation : LifecycleEvaluation trace .nativeIncremental),
+        SameSealedQueryAndExecutionObservations evaluation
+          (canonicalFullRebuildEvaluation trace) := by
+  intro h
+  exact LifecycleCounterexample.observations_differ
+    (h _ _ (LifecycleCounterexample.trace.canonicalEvaluation .nativeIncremental))
+
+/-- **The native bound is not vacuous.**  `lifecycle_native_bound` quantifies
+over a class that is inhabited for *every* resolved trace: the replayed native
+evaluation is a total construction, so the theorem applies to it with no
+hypothesis.  Recorded because an inequality over an empty class would be
+worthless and nothing else in this file says the class is nonempty. -/
+theorem lifecycle_native_bound_of_canonicalEvaluation {body : LifecycleTraceBody}
+    (trace : ResolvedLifecycleTrace body) :
+    (trace.canonicalEvaluation .nativeIncremental).total
+      ≤ nativeLifecycleBound Release.primitiveCostTable
+          (trace.canonicalEvaluation .nativeIncremental).size :=
+  lifecycle_native_bound _
+
 /-! ## Omissions
 
 Recorded here so that a reader of SPEC 16 can see what is *not* closed rather
 than having to notice its absence.
 
-* `Atlas.canonicalFullRebuildEvaluation` — a total constructor producing a
-  full-rebuild evaluation for every resolved trace.  It requires exhibiting a
-  `LifecyclePrefixResult` for each of the `horizon + 1` prefixes, hence a
-  `PrefixOrderedList` whose ordinal map is definitionally `List.range
-  (horizon + 1)`.  That construction is available, but the evaluation's `size`
-  field would then have to be verified against `lifecycleSize`, which is a
-  computation over the whole trace; producing it without a proof would store an
-  unverified conclusion.  Omitted rather than stubbed.
+* `Atlas.lifecycle_incremental_semantics_eq_full_rebuild` — **absent because it
+  is false**, not because it is hard.  `not_lifecycle_incremental_semantics_eq_full_rebuild`
+  above refutes it: `ResolvedLifecycleTrace` constrains identities, schedules and
+  retention, never the initial state's semantic half, and an incoherent start is
+  already observed differently by the two strategies at prefix `0`.  The earlier
+  note here said the inductive step "needs coherence to be preserved along the
+  whole trace, which is a property of the resolved deltas"; that was wrong in
+  both halves.  Coherence *is* preserved by every delta
+  (`Atlas.semanticApplyBody_coherent`, lifted here as `nativeBodyAt_coherent`),
+  and what is missing is the base case, which is a property of the initial state
+  and of nothing else.  `lifecycle_incremental_semantics_eq_full_rebuild_of_coherent`
+  states the theorem under exactly the missing hypothesis, and
+  `lifecycle_incremental_semantics_eq_full_rebuild_of_rebuilt_start` discharges
+  that hypothesis for every lifecycle that begins from a rebuild.  No
+  declaration in this file carries SPEC's name, and
+  `Conformance/RequiredSignatures.lean` binds nothing to it: the SPEC 15 name
+  stays OUTSTANDING.
 
-* `Atlas.lifecycle_native_bound` — see the file header.  It is a real
-  inequality, false for an arbitrary primitive-cost table, and the release table
-  it would be stated over is not pinned in this repository.  Omitted rather than
-  assumed.  `nativeLifecycleBound_scope_size_only` records that the polynomial
-  by itself implies nothing about any lifecycle total.
+Closed since this section was first written, and no longer omitted:
+`Atlas.canonicalFullRebuildEvaluation`, `Atlas.LifecycleComparatorTag`,
+`Atlas.regretAgainst` and `Atlas.lifecycle_full_rebuild_comparator_exact`.  The
+recorded obstacle to the first — that its `size` field "would have to be
+verified against `lifecycleSize`, which is a computation over the whole trace" —
+was over-cautious: `VerifiesLifecycleSize` is *defined* as equality with that
+computation, so performing it discharges the obligation rather than storing an
+unverified conclusion.  A correct note that turns out to be over-cautious is
+worth recording as such.
 
-* `Atlas.lifecycle_incremental_semantics_eq_full_rebuild` — requires
-  `SameSealedQueryAndExecutionObservations`, i.e. equality of the *sealed*
-  observations at every seal point.  `bodyAt_zero_agree` proves the base case
-  from `Atlas.semanticApplyBody_eq_rebuild`; the inductive step additionally
-  needs coherence to be preserved along the whole trace, which is a property of
-  the resolved deltas, not of the definitions here.  Omitted rather than
-  asserted.
-
-* `Atlas.lifecycle_full_rebuild_comparator_exact` and `Atlas.regretAgainst` —
-  both quantify over `canonicalFullRebuildEvaluation`, which is omitted above.
-  `Cost.truncatedDifference` (the regret carrier) is already defined and proved
-  in `Cost/Lifecycle.lean`; only the comparator instance is missing. -/
+Also closed since this section was first written:
+`Atlas.lifecycle_native_bound`.  The note here used to say the release table it
+would be stated over "is not pinned in this repository", which was true and was
+the whole of the obstacle.  `Release.primitiveCostTable` is now pinned in
+`Cost/Lifecycle.lean` with every coefficient `1`, and the inequality is proved
+over it — and, by `lifecycle_native_bound_of_positive`, over every positive
+table, so the pinning cannot be what makes it true.  What the bound does and does
+not constrain is stated in the theorem's own docstring and machine-checked by
+`lifecycle_native_bound_attained` (fourteen coordinates hold with equality) and
+`lifecycle_native_bound_slack` (the exact slack on the other three, all of it in
+the shape of SPEC 16's polynomial rather than in a coefficient). -/
 
 end WasmGemmGnaf.Atlas

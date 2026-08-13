@@ -156,6 +156,23 @@ theorem componentwiseLE_trans {a b c : LifecycleVector}
    Cost.componentwiseLE_trans hab.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2
      hbc.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2⟩
 
+/--
+  SPEC 16 states the native lifecycle bound as `evaluation.total ≤ …`.  The
+  order it means is the componentwise one: a lifecycle total is under the
+  polynomial when *every* coordinate is, with no coordinate traded against
+  another.  This instance is what lets SPEC's `≤` be written literally; it adds
+  no content beyond `ComponentwiseLE`.
+-/
+instance instLE : LE LifecycleVector := ⟨ComponentwiseLE⟩
+
+theorem le_iff_componentwiseLE {a b : LifecycleVector} :
+    a ≤ b ↔ ComponentwiseLE a b := Iff.rfl
+
+theorem le_refl' (a : LifecycleVector) : a ≤ a := componentwiseLE_refl a
+
+theorem le_trans' {a b c : LifecycleVector} (hab : a ≤ b) (hbc : b ≤ c) : a ≤ c :=
+  componentwiseLE_trans hab hbc
+
 end LifecycleVector
 
 /-! ## The frozen lifecycle fold -/
@@ -558,4 +575,204 @@ theorem certificateBytes_le_nativeLifecycleBound {table : PrimitiveCostTable}
       ≤ (nativeLifecycleBound table size).verifierSteps :=
   Nat.le_mul_of_pos_left _ hpos.2.2.2.2.2.2.1
 
+/-! ## Auxiliary sum laws used by the native lifecycle bound
+
+Four facts about `List.sum` that the prefix fold needs.  They are stated for an
+arbitrary list because the lifecycle proof applies them to the ordinal list of a
+prefix family, which `CoversExactlyEveryPrefix` only later pins to
+`List.range`. -/
+
+/-- A list of zeros sums to zero. -/
+theorem sum_map_zero {α : Type} : ∀ l : List α, (l.map (fun _ => (0 : Nat))).sum = 0
+  | [] => rfl
+  | _ :: t => by rw [List.map_cons, List.sum_cons, sum_map_zero t]
+
+/-- A list of zeros has maximum zero. -/
+theorem maxOf_map_zero {α : Type} : ∀ l : List α, maxOf (l.map (fun _ => (0 : Nat))) = 0
+  | [] => rfl
+  | _ :: t => by rw [List.map_cons, maxOf_cons, maxOf_map_zero t]; exact Nat.max_self 0
+
+/-- Summation distributes over a pointwise sum. -/
+theorem sum_map_add {α : Type} (f g : α → Nat) :
+    ∀ l : List α, (l.map (fun a => f a + g a)).sum = (l.map f).sum + (l.map g).sum
+  | [] => rfl
+  | x :: t => by
+      rw [List.map_cons, List.sum_cons, sum_map_add f g t, List.map_cons,
+        List.sum_cons, List.map_cons, List.sum_cons]
+      omega
+
+/--
+  A guarded charge of `1 + f a` splits into a count of the guarded positions and
+  the guarded sum of `f`.
+
+  This is exactly the shape of the lifecycle seal charge: `prefixCost` charges
+  `1 + retained` at a seal point and `0` elsewhere, while `nativeLifecycleBound`
+  charges `cSeal · sealCount + cSealScan · sealInputBytesScanned`.  The lemma is
+  what makes those two the same number when both coefficients are `1`.
+-/
+theorem sum_map_guarded_succ {α : Type} (p : α → Bool) (f : α → Nat) :
+    ∀ l : List α,
+      (l.map (fun a => if p a then 1 + f a else 0)).sum
+        = (l.filter p).length + (l.map (fun a => if p a then f a else 0)).sum
+  | [] => rfl
+  | x :: t => by
+      rw [List.map_cons, List.sum_cons, sum_map_guarded_succ p f t, List.filter_cons,
+        List.map_cons, List.sum_cons]
+      by_cases hx : p x = true
+      · simp only [hx, if_pos, List.length_cons]
+        omega
+      · simp only [Bool.not_eq_true] at hx
+        simp only [hx, Bool.false_eq_true, if_false]
+        omega
+
+/--
+  A charge levied only at prefix `0`, summed over `List.range m`, is levied
+  exactly once (or not at all, when the range is empty).
+
+  `CoversExactlyEveryPrefix` forces the ordinal list of a lifecycle family to be
+  `List.range (horizon + 1)`, so this is what turns the per-prefix authority
+  charge into the single `authorityBytesChecked` the polynomial is stated over.
+  Without the cover the same charge could be levied at several prefixes and the
+  bound would be false.
+-/
+theorem sum_range_guarded_zero (A : Nat) :
+    ∀ m : Nat,
+      ((List.range m).map (fun n => if n = 0 then A else 0)).sum = if m = 0 then 0 else A
+  | 0 => rfl
+  | k + 1 => by
+      rw [List.range_succ, List.map_append, List.sum_append, sum_range_guarded_zero A k]
+      cases k with
+      | zero => simp
+      | succ j => simp
+
 end WasmGemmGnaf.Cost
+
+/-!
+## The pinned release primitive-cost table (SPEC 16)
+
+SPEC 16 states `Atlas.lifecycle_native_bound` over `Release.primitiveCostTable`,
+not over an arbitrary table, because the inequality is genuinely false for a
+table whose coefficients do not dominate the per-prefix charges.
+
+**Placement.**  The table lives here, in `Cost/Lifecycle.lean`, beside
+`Cost.PrimitiveCostTable` and `Cost.nativeLifecycleBound`, rather than in
+`Artifact/Release.lean` where the other `Release.*` constants sit.  The reason
+is the dependency order: `Atlas/Lifecycle.lean` must state the bound over this
+table, `Artifact/` is far above `Atlas/` in the import graph, and SPEC 10.1's
+firewall forbids `Cost/` from importing `Atlas/`, `Artifact/` or `Universal/`.
+The table is a first-order record of eleven naturals with no release-artifact
+dependency at all, so putting it at the bottom of the graph costs nothing and
+keeps every module that needs it able to see it.  It is exported under exactly
+the name SPEC uses.
+-/
+
+namespace WasmGemmGnaf.Release
+
+open WasmGemmGnaf
+
+/--
+  **SPEC 16**, `Release.primitiveCostTable`: the pinned release primitive-cost
+  table.  **Every coefficient is `1`.**
+
+  ### Why every coefficient is one, coordinate by coordinate
+
+  The coefficients are not guessed.  Every one is `1`, the least positive
+  natural SPEC 16 admits, and the bullets below record — reading
+  `Cost.nativeLifecycleBound` against `Atlas.ResolvedLifecycleTrace.prefixCost`
+  coordinate by coordinate — *which* per-prefix charge each coefficient has to
+  dominate, and whether `1` is forced by that charge or is merely the smallest
+  value SPEC's positivity requirement permits.  The domination itself is proved,
+  for this table and for every positive table, in `Atlas.lifecycle_native_bound`
+  and `Atlas.lifecycle_native_bound_of_positive`:
+
+  * `cAuthority` — the native replay charges the initial declaration base once,
+    at prefix `0`, and `LifecycleSizeVector.authorityBytesChecked` *is* that
+    byte count.  Summed charge and coefficient target are equal, so `1` suffices
+    and nothing smaller is positive.
+  * `cCanonicalize` — the native replay charges `declarationBytes` of the novel
+    declarations at each prefix, and `deltaBytes` is by definition that sum.  The
+    polynomial multiplies it by `log2 (retainedStateBytes + 2) + 1 ≥ 1`, so `1`
+    suffices with the entire logarithmic factor left as slack.
+  * `cClosure`, `cDependency`, `cVerify` — in each case the size coordinate is
+    *defined* as the sum of exactly the prefix coordinate the polynomial bounds
+    (`closureDerivations` of `closureSteps`, `dependencyImpactObjects` of
+    `dependencyObjectsVisited`, `certificateBytesChecked` of `verifierSteps`).
+    Coefficient `1` gives equality.
+  * `cPartition` — the polynomial bounds `partitionSteps` by `cPartition ·
+    partitionCellsChanged`, and the lifecycle replay charges zero to *both*
+    (`Atlas.LifecycleEvaluation.native_partitionSteps_eq_zero` and
+    `native_size_partitionCellsChanged_eq_zero`).  Like `cMigration` below, this
+    coefficient is unconstrained by the inequality; it is `1` because SPEC 16
+    requires positivity, and the fact that it is bounding zero is recorded
+    rather than hidden.
+  * `cIndex` — `indexSteps` is charged once per novel declaration, and the
+    polynomial's bracket is `canonicalNovelObjects + canonicalNovelEdges +
+    attentionBucketsTouched`, each of which already equals that same count.  `1`
+    suffices with a factor of three of slack.
+  * `cSeal`, `cSealScan` — a sealing prefix charges `1 + retainedBytes`; the
+    polynomial charges `cSeal · sealCount + cSealScan · sealInputBytesScanned`,
+    and those two size coordinates are exactly the number of sealing prefixes and
+    the sum of their retained byte counts.  Both `1`s give equality
+    (`Cost.sum_map_guarded_succ`).
+  * `cQuery` — a prefix charges `queryCount + routedTargets`; the polynomial's
+    bracket is `queryCount + requestBytesChecked + attentionCandidatesVisited`,
+    which is that plus the request bytes.  `1` suffices, with `requestBytesChecked`
+    as slack.
+  * `cMigration` — the lifecycle replay performs no migration, so both the charge
+    and `migrationObjects` are `0`.  The coefficient is unconstrained by the
+    inequality; it is `1` because SPEC 16 requires every coefficient of the
+    canonical table to be a positive natural.
+
+  ### What this does and does not claim
+
+  It does **not** claim these are physically calibrated machine costs; no
+  measurement in this repository fixes a wall-clock price for a closure
+  derivation.  It claims something narrower and checkable: this is the
+  componentwise-*minimal* positive table, so `Atlas.lifecycle_native_bound` is
+  the tightest statement the polynomial's own shape admits, and the bound cannot
+  have been made true by inflating a coefficient.  The residual slack is
+  therefore entirely structural and is listed above: the logarithmic
+  canonicalization factor, the threefold index bracket and the request-byte term
+  of the query bracket.  Every other coordinate holds with equality.
+
+  Because the bound is proved for an arbitrary positive table
+  (`Atlas.lifecycle_native_bound_of_positive`), replacing this table by any
+  larger one keeps the theorem true; nothing downstream depends on the value `1`.
+-/
+def primitiveCostTable : Cost.PrimitiveCostTable where
+  cAuthority    := 1
+  cCanonicalize := 1
+  cClosure      := 1
+  cIndex        := 1
+  cDependency   := 1
+  cPartition    := 1
+  cVerify       := 1
+  cSeal         := 1
+  cSealScan     := 1
+  cQuery        := 1
+  cMigration    := 1
+
+/-- **SPEC 16**: "Every coefficient is a positive natural in the canonical
+primitive-cost table." -/
+theorem primitiveCostTable_positive :
+    primitiveCostTable.AllCoefficientsPositive := by
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩ <;> exact Nat.le_refl 1
+
+/-- The release table is the componentwise-minimal positive table: any positive
+table dominates it in every coefficient.  This is the machine-checked form of
+"the coefficients were not inflated to make the bound true". -/
+theorem primitiveCostTable_minimal {table : Cost.PrimitiveCostTable}
+    (hpos : table.AllCoefficientsPositive) :
+    primitiveCostTable.cAuthority ≤ table.cAuthority ∧
+    primitiveCostTable.cCanonicalize ≤ table.cCanonicalize ∧
+    primitiveCostTable.cClosure ≤ table.cClosure ∧
+    primitiveCostTable.cIndex ≤ table.cIndex ∧
+    primitiveCostTable.cDependency ≤ table.cDependency ∧
+    primitiveCostTable.cPartition ≤ table.cPartition ∧
+    primitiveCostTable.cVerify ≤ table.cVerify ∧
+    primitiveCostTable.cSeal ≤ table.cSeal ∧
+    primitiveCostTable.cSealScan ≤ table.cSealScan ∧
+    primitiveCostTable.cQuery ≤ table.cQuery ∧
+    primitiveCostTable.cMigration ≤ table.cMigration := hpos
+
+end WasmGemmGnaf.Release

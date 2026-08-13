@@ -34,6 +34,29 @@ Both require `Atlas.Coherent state.body`: a state whose recorded semantic half
 is not the one its declarations derive cannot equal any rebuild, and
 `Atlas.rebuild_coherent` / `Atlas.semanticApplyBody_coherent` show the
 hypothesis is preserved by exactly the operations that produce states.
+
+## Neither hypothesis is a convenience
+
+SPEC §12.5's literal statement quantifies over every `Atlas.UnsealedState`, and
+that type carries neither a scope nor a coherence obligation.  Both extra
+hypotheses are therefore refuted-if-dropped rather than merely convenient, and
+both refutations are proved below rather than asserted:
+
+* `Atlas.incremental_ne_full_rebuild_of_objectiveId` — for *every* budget and
+  delta, a state whose objective identity is not `nullId` makes SPEC's equation
+  false, because `semanticApplyBody` preserves the scope and
+  `semanticRebuildBody` can only produce `Scope.unscoped`;
+* `Atlas.not_incremental_eq_full_rebuild_unscoped` — supplying
+  `state.body.scope = Scope.unscoped` as a hypothesis does not rescue the
+  statement: a concrete unscoped state that records one semantic object its
+  empty declaration base does not derive falsifies it for the empty delta.
+  (This shows that dropping `hcoherent` is not free.  It does not show
+  `hcoherent` is the weakest sufficient hypothesis: `canonicalize` is a normal
+  form, so a body differing from its derivation only by order or repetition
+  would still satisfy the equation.)
+
+`Atlas.not_incremental_eq_full_rebuild` is the resulting refutation of the
+literal statement.  This is deviation `DEV-004` of `model/spec-deviations.json`.
 -/
 
 namespace WasmGemmGnaf.Atlas
@@ -131,6 +154,140 @@ theorem incremental_eq_full_rebuild_exact {budget : BuildBudget}
         (state.body.declarationBase ∪ delta.declarations) := by
   rw [accumulate_complete_refines_semantic hupdate,
     semanticApplyBody_eq_rebuild hcoherent]
+
+/-! ## SPEC §12.5's literal statement is false
+
+The two hypotheses `incremental_eq_full_rebuild` carries beyond SPEC's text are
+refuted-if-dropped here.  Nothing below weakens or replaces the theorem: it
+establishes that no proof of the literal statement exists. -/
+
+/-- **The scope hypothesis is necessary, and dropping it fails systematically.**
+
+`semanticApplyBody` preserves the scope of the state it updates
+(`semanticApplyBody_scope`) and `semanticRebuildBody` derives its scope from
+the declaration base alone, which names none, so it always answers
+`Scope.unscoped`.  A state whose objective identity is not `nullId` therefore
+falsifies SPEC's equation for *every* budget, delta and successor --- the two
+sides disagree on a field `canonicalize` copies verbatim. -/
+theorem incremental_ne_full_rebuild_of_objectiveId {budget : BuildBudget}
+    {state : UnsealedState} {delta : Delta} {successor : UnsealedState}
+    (hupdate : (accumulate budget state delta).result = .complete successor)
+    (hobjective : state.body.objectiveId ≠ nullId) :
+    canonicalize successor.body ≠
+      canonicalize (semanticRebuildBody
+        (state.body.declarationBase ∪ delta.declarations)) := by
+  intro h
+  have hobj := congrArg StateBody.objectiveId h
+  rw [canonicalize_objectiveId, canonicalize_objectiveId,
+    accumulate_complete_refines_semantic hupdate] at hobj
+  have hkeep : (semanticApplyBody state.body delta).objectiveId =
+      state.body.objectiveId :=
+    congrArg Scope.objectiveId (semanticApplyBody_scope _ _)
+  rw [hkeep] at hobj
+  exact hobjective hobj
+
+namespace Counterexample
+
+/-- A canonical identity that is not `nullId`: it differs in its schema
+version. -/
+def nonNullId : CanonicalObjectId := { nullId with schemaVersion := 1 }
+
+theorem nonNullId_ne_nullId : nonNullId ≠ nullId := by
+  intro h
+  exact absurd (congrArg CanonicalObjectId.schemaVersion h) (by decide)
+
+/-- A scope that is not `Scope.unscoped`. -/
+def someScope : Scope := ⟨nonNullId, nullId, nullId⟩
+
+/-- A perfectly coherent state, in a scope of its own, with an empty
+declaration base. -/
+def scopedState : UnsealedState := unsealedFromBody (derivedBody someScope ⟨[]⟩)
+
+theorem scopedState_coherent : Coherent scopedState.body :=
+  derivedBody_coherent _ _
+
+/-- The empty delta always completes, whatever the budget: this is SPEC §12.5's
+own `update_empty_fixed_point`, so the instance below is one SPEC requires to
+exist. -/
+theorem scopedState_accumulate :
+    (accumulate ⟨0, 0⟩ scopedState Delta.empty).result = .complete scopedState := rfl
+
+/-- **A coherent state in its own scope refutes SPEC §12.5's literal
+equation.** -/
+theorem scoped_ne_full_rebuild :
+    canonicalize scopedState.body ≠
+      canonicalize (semanticRebuildBody
+        (scopedState.body.declarationBase ∪ Delta.empty.declarations)) :=
+  incremental_ne_full_rebuild_of_objectiveId scopedState_accumulate
+    nonNullId_ne_nullId
+
+/-- A semantic object no declaration derives. -/
+def strayObject : ObjectEntry := ⟨nullId, ByteArray.empty⟩
+
+/-- A body in the *unscoped* scope --- so the scope objection above does not
+apply --- whose recorded semantic half is not the one its declaration base
+derives: the base is empty and it records an object anyway. -/
+def incoherentBody : StateBody :=
+  { derivedBody Scope.unscoped ⟨[]⟩ with semanticObjects := ⟨[strayObject]⟩ }
+
+@[simp] theorem incoherentBody_scope : incoherentBody.scope = Scope.unscoped := rfl
+
+theorem incoherentBody_not_coherent : ¬ Coherent incoherentBody := by
+  intro h
+  exact absurd (congrArg StateBody.semanticObjects h) (by decide)
+
+def incoherentState : UnsealedState := unsealedFromBody incoherentBody
+
+theorem incoherentState_accumulate :
+    (accumulate ⟨0, 0⟩ incoherentState Delta.empty).result =
+      .complete incoherentState := rfl
+
+/-- **The coherence hypothesis is necessary too.**  The stray object survives
+canonicalisation on the left and is absent on the right. -/
+theorem incoherent_ne_full_rebuild :
+    canonicalize incoherentState.body ≠
+      canonicalize (semanticRebuildBody
+        (incoherentState.body.declarationBase ∪ Delta.empty.declarations)) := by
+  intro h
+  have hmem : strayObject ∈ (canonicalize incoherentState.body).semanticObjects.entries :=
+    (mem_canonicalize_objects _ _).mpr (by decide)
+  rw [h] at hmem
+  exact absurd ((mem_canonicalize_objects _ _).mp hmem) (by decide)
+
+end Counterexample
+
+/-- **SPEC §12.5's literal statement is false.**  `Atlas.UnsealedState` carries
+no scope restriction and no coherence obligation, so the two hypotheses
+`incremental_eq_full_rebuild` states are not decoration: without them there is
+no theorem to prove.  This is what `DEV-004` records. -/
+theorem not_incremental_eq_full_rebuild :
+    ¬ ∀ (budget : BuildBudget) (state : UnsealedState) (delta : Delta)
+        (successor : UnsealedState),
+        (accumulate budget state delta).result = .complete successor →
+        canonicalize successor.body =
+          canonicalize (semanticRebuildBody
+            (state.body.declarationBase ∪ delta.declarations)) := by
+  intro h
+  exact Counterexample.scoped_ne_full_rebuild
+    (h ⟨0, 0⟩ Counterexample.scopedState Delta.empty Counterexample.scopedState
+      Counterexample.scopedState_accumulate)
+
+/-- **Restricting SPEC's statement to the unscoped scope does not save it.**
+Even with `state.body.scope = Scope.unscoped` supplied as a hypothesis the
+equation is false, so the coherence hypothesis is doing work of its own and is
+not implied by the scope one. -/
+theorem not_incremental_eq_full_rebuild_unscoped :
+    ¬ ∀ (budget : BuildBudget) (state : UnsealedState) (delta : Delta)
+        (successor : UnsealedState),
+        state.body.scope = Scope.unscoped →
+        (accumulate budget state delta).result = .complete successor →
+        canonicalize successor.body =
+          canonicalize (semanticRebuildBody
+            (state.body.declarationBase ∪ delta.declarations)) := by
+  intro h
+  exact Counterexample.incoherent_ne_full_rebuild
+    (h ⟨0, 0⟩ Counterexample.incoherentState Delta.empty Counterexample.incoherentState
+      Counterexample.incoherentBody_scope Counterexample.incoherentState_accumulate)
 
 /-! ## The budgeted rebuild (SPEC §12.5) -/
 

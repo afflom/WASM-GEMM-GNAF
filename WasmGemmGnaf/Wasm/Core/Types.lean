@@ -619,6 +619,30 @@ def StorageType.isSyn : StorageType → Bool
   | .val t => t.isSyn
   | .pack _ => true
 
+/-- The `/syn` fragment of `fieldtype`. -/
+def FieldType.isSyn : FieldType → Bool
+  | .mk _ zt => zt.isSyn
+
+/-- The `/syn` fragment of `comptype`.
+
+None of these recurses into a `deftype`: `TypeUse.isSyn` is already `false` on
+the `deftype` case, which is precisely the `/sem`-only alternative. -/
+def CompType.isSyn : CompType → Bool
+  | .struct fts => (FieldTypes.toList fts).all FieldType.isSyn
+  | .array ft => ft.isSyn
+  | .func dom cod =>
+      (ValTypes.toList dom).all ValType.isSyn &&
+      (ValTypes.toList cod).all ValType.isSyn
+
+/-- The `/syn` fragment of `subtype`: the declared supertypes are `typeuse`s,
+so in the syntax phase each of them is a `_IDX`. -/
+def SubType.isSyn : SubType → Bool
+  | .sub _ tus ct => (TypeUses.toList tus).all TypeUse.isSyn && ct.isSyn
+
+/-- The `/syn` fragment of `rectype`. -/
+def RecType.isSyn : RecType → Bool
+  | .recr sts => (SubTypes.toList sts).all SubType.isSyn
+
 /-! ### The `list(...)` bounds inside the knot
 
 `list(X)` carries `|X*| < 2^32`.  Inside the knot that bound cannot live in the
@@ -768,6 +792,21 @@ structure ModuleType where
   imports : List ExternType
   exports : List ExternType
   deriving DecidableEq, Repr, Inhabited
+
+/-- The `/syn` fragment of `globaltype`. -/
+def GlobalType.isSyn (gt : GlobalType) : Bool := gt.valtype.isSyn
+
+/-- The `/syn` fragment of `tabletype`; `memtype` carries no type at all. -/
+def TableType.isSyn (tt : TableType) : Bool := tt.elem.isSyn
+
+/-- The `/syn` fragment of `externtype`.  `TAG` and `FUNC` carry a `typeuse`,
+which in the syntax phase is a `_IDX`. -/
+def ExternType.isSyn : ExternType → Bool
+  | .tag jt => jt.isSyn
+  | .global gt => gt.isSyn
+  | .mem _ => true
+  | .table tt => tt.isSyn
+  | .func tu => tu.isSyn
 
 namespace ExternType
 

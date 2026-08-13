@@ -39,6 +39,13 @@
     is the machine-checked statement of why `Atlas.seal_implies_universal_coverage`
     is *absent* from this repository rather than derived from the seal.
 
+  `Atlas.seal_verifier_reconstructs_every_preimage` is proved in
+  `Atlas/Reconstruct.lean` at its §15 name and is not re-indexed here.  It is
+  about RETAINED objects only — the verifier opens the seal identity and returns
+  the finite preimage list the seal itself records — so it neither states nor
+  implies coverage of any byte universe, and `universalCoverCompleteCheck_scope_blind`
+  above stands unaffected.
+
   ## SPEC §15 Atlas declarations that remain OUTSTANDING
 
   * `Atlas.attention_no_optimum_relevant_false_negative` — `Atlas/Attention.lean`
@@ -46,9 +53,6 @@
     optimizer state, but no theorem says attention never misses an
     optimum-relevant object; that statement needs a notion of optimum, which
     does not exist here.  Blocking obligations: `O-3`, `O-5`.
-  * `Atlas.seal_verifier_reconstructs_every_preimage` — `Atlas/Seal.lean` proves
-    `resolvesEveryReferencedPreimage_iff` for *referenced* preimages; the §15
-    name asserts more.  Blocking obligation: `O-3`.
   * `Atlas.seal_implies_universal_coverage` — deliberately absent and provably
     underivable from the recorded cover check; see
     `universalCoverCompleteCheck_scope_blind` below.  Blocking obligation:

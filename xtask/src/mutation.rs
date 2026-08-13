@@ -33,7 +33,7 @@ type Falsifier = fn(&Path) -> Result<bool>;
 pub fn run(root: &Path) -> Result<Outcome> {
     println!("mutation suite (SPEC 18)\n");
 
-    let falsifiers: [(&str, Falsifier); 15] = [
+    let falsifiers: [(&str, Falsifier); 16] = [
         ("M1 mutated authority bytes rejected by digest recomputation", m1),
         ("M2 duplicate claim id rejected", m2),
         ("M3 orphan claim dependency rejected", m3),
@@ -49,6 +49,7 @@ pub fn run(root: &Path) -> Result<Outcome> {
         ("M13 mutated vendored SHA256SUMS breaks the pinned-revision binding", m13),
         ("M14 fabricated Core coverage marker rejected by the extracted checklist", m14),
         ("M15 required name carrying `Nat := 0` rejected by the signature binding", m15),
+        ("M16 circular reflection theorem rejected by the independence check", m16),
     ];
 
     let mut failed: Vec<&str> = Vec::new();
@@ -1129,4 +1130,54 @@ mod tests {
             mutant.matches("∀ competitorBytes : ByteArray,").count()
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// M16: a reflection theorem whose declarative side is its executable side must
+//      not be credited.
+//
+// This is the falsifier for the rule that four external audits asked for and no
+// gate could enforce: `Wasm.decode_sound`, `Wasm.decode_complete` and
+// `Wasm.validate_iff_declarative` have the right NAMES, SPEC's exact
+// STATEMENTS, and clean axiom closures -- so `signature` binds them and
+// `axioms` passes them -- while `DeclarativelyValid` is literally a conjunction
+// of the executable checker's own booleans and `decode_sound` is proved through
+// `decode_is_encode`. Only the proof term shows it.
+//
+// Both halves are run against the REAL checker, `independence::report_over`,
+// with planted tables. A falsifier that reimplemented the search would test its
+// own string matching -- the mistake M2, M13, M14 and M15 were each written to
+// avoid.
+// ---------------------------------------------------------------------------
+fn m16(root: &Path) -> Result<bool> {
+    // The real table must reject exactly the three known-circular names. If the
+    // rule stops firing, this half goes red.
+    let real = crate::independence::report(root)?;
+    let rejects_known = real.rejected()
+        == vec![
+            "Wasm.decode_complete".to_string(),
+            "Wasm.decode_sound".to_string(),
+            "Wasm.validate_iff_declarative".to_string(),
+        ];
+
+    // The control: the SAME declarations, with nothing forbidden, must produce
+    // no finding. Without this the half above would also pass a checker that
+    // rejects everything it is shown.
+    const CONTROL: &[crate::independence::Entry] = &[crate::independence::Entry {
+        required: "WasmGemmGnaf.Wasm.decode_sound",
+        declarative: "WasmGemmGnaf.Wasm.DeclarativeBinaryRelation",
+        forbidden: &[],
+        why: "control: nothing is forbidden, so nothing may be found",
+    }];
+    let control = crate::independence::report_over(root, CONTROL)?;
+
+    // And the demotion must actually happen: the rule `required` applies is
+    // attacked directly, so emptying `apply_independence` turns M16 red.
+    let mut report = crate::required::environment_report(root)?;
+    let before = report.discharged;
+    crate::required::apply_independence(&mut report, &["Wasm.decode_sound".to_string()]);
+    let demoted = report.discharged + 1 == before
+        && report.circular == vec!["Wasm.decode_sound".to_string()];
+
+    Ok(rejects_known && control.is_ok() && demoted)
 }

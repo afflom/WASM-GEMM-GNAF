@@ -27,6 +27,13 @@
   `Instr.wf` collects every `-- if` side condition of the instruction fragments
   together with the family-membership conditions of `Core/Operators.lean`: a
   `Instr` value is a Core 3.0 instruction exactly when `Instr.wf` holds of it.
+  `Instr.isSyn`, below it, is the separate `/syn` PHASE invariant: which of the
+  `typeuse`/`heaptype`/`valtype` cases a syntax-phase instruction may mention.
+
+  Neither is decoration.  `Instr_ok` of `Core/Validation/Instructions.lean`
+  carries the `wf` conditions as premises of the rules that mention them, and
+  `Instr_ok.wf_of` proves that nothing outside `Instr.wf` is typable; a
+  judgment that omitted them would accept `F32.CLZ`.
 -/
 import WasmGemmGnaf.Wasm.Core.Operators
 
@@ -476,15 +483,82 @@ def Instr.wf : Instr → Bool
       decide (2 * sh₁.laneSize ≤ 32)
   | .vcvtop sh₁ sh₂ op => sh₁.wf && sh₂.wf && VCvtop.wf sh₂ sh₁ op
   | .vsplat sh => sh.wf
-  | .vextractLane sh sx _ =>
-      sh.wf &&
-      (sx.isNone == (match sh.lane with | .num _ => true | .pack _ => false))
+  | .vextractLane sh sx _ => sh.wf && (sx.isNone == sh.laneIsNum)
   | .vreplaceLane sh _ => sh.wf
 
 /-- Every side condition of every instruction in the sequence. -/
 def InstrSeq.wf : InstrSeq → Bool
   | .nil => true
   | .cons i rest => Instr.wf i && InstrSeq.wf rest
+
+end
+
+/-- `InstrSeq.wf` is exactly `Instr.wf` at every member of the sequence.  The
+declarative typing judgment reasons about `instr*` as an ordinary list, so it
+needs the list reading. -/
+theorem InstrSeq.wf_iff_forall :
+    ∀ s : InstrSeq, InstrSeq.wf s = true ↔ ∀ i ∈ InstrSeq.toList s, Instr.wf i = true
+  | .nil => by
+      constructor
+      · intro _ i h; nomatch h
+      · intro _; rfl
+  | .cons i rest => by
+      have ih := wf_iff_forall rest
+      constructor
+      · intro h j hj
+        have h' : Instr.wf i = true ∧ InstrSeq.wf rest = true := by
+          simpa [InstrSeq.wf] using h
+        cases hj with
+        | head => exact h'.1
+        | tail _ hj => exact (ih.mp h'.2) j hj
+      · intro h
+        have h₁ : Instr.wf i = true := h i (by exact List.Mem.head _)
+        have h₂ : InstrSeq.wf rest = true :=
+          ih.mpr (fun j hj => h j (by exact List.Mem.tail _ hj))
+        simpa [InstrSeq.wf, h₁] using h₂
+
+/-! ## The `/syn` phase fragment
+
+`Core/Types.lean` explains why `typeuse`, `heaptype` and `valtype` are ONE Lean
+sort each with an `isSyn` predicate naming the fragment the syntax phase may
+produce.  An instruction embeds those sorts in ten places, and each of them
+inherits the restriction: an instruction that a binary module can contain never
+mentions `BOT`, a `deftype` or a `REC n`.  `Instr.isSyn` is that statement.
+
+It is SEPARATE from `Instr.wf`.  `wf` is the `-- if` side conditions of the
+instruction fragments, which hold in every phase; `isSyn` is the phase
+invariant, which holds of a parsed module and fails of the intermediate forms
+that substitution and type closure produce.  `Core/Modules.lean` conjoins
+both. -/
+
+mutual
+
+/-- Every `typeuse`, `heaptype`, `reftype` and `valtype` this instruction and
+the instructions inside it mention lies in the `/syn` fragment. -/
+def Instr.isSyn : Instr → Bool
+  | .select ts =>
+      match ts with
+      | none => true
+      | some l => l.all ValType.isSyn
+  | .block bt body => bt.isSyn && InstrSeq.isSyn body
+  | .loop bt body => bt.isSyn && InstrSeq.isSyn body
+  | .ifElse bt thn els => bt.isSyn && InstrSeq.isSyn thn && InstrSeq.isSyn els
+  | .brOnCast _ rt₁ rt₂ => rt₁.isSyn && rt₂.isSyn
+  | .brOnCastFail _ rt₁ rt₂ => rt₁.isSyn && rt₂.isSyn
+  | .callRef tu => tu.isSyn
+  | .callIndirect _ tu => tu.isSyn
+  | .returnCallRef tu => tu.isSyn
+  | .returnCallIndirect _ tu => tu.isSyn
+  | .tryTable bt _ body => bt.isSyn && InstrSeq.isSyn body
+  | .refNull ht => ht.isSyn
+  | .refTest rt => rt.isSyn
+  | .refCast rt => rt.isSyn
+  | _ => true
+
+/-- Every instruction in the sequence lies in the `/syn` fragment. -/
+def InstrSeq.isSyn : InstrSeq → Bool
+  | .nil => true
+  | .cons i rest => Instr.isSyn i && InstrSeq.isSyn rest
 
 end
 
@@ -544,6 +618,29 @@ example : TypeUse.isSyn (.recu 0) = false := by decide
 
 /-- ... while a type index is. -/
 example : TypeUse.isSyn (.idx default) = true := by decide
+
+/-- `REF.NULL BOT` is a term of the Lean sort but not a `/syn` instruction: no
+binary module can contain it. -/
+example : Instr.isSyn (.refNull (.abs .bot)) = false := by decide
+
+/-- ... while `REF.NULL ANY` is. -/
+example : Instr.isSyn (.refNull (.abs .any)) = true := by decide
+
+/-- `CALL_REF` on a `/sem` `REC n` is not `/syn` either; the syntax phase has
+only `_IDX`. -/
+example : Instr.isSyn (.callRef (.recu 0)) = false := by decide
+
+/-- The phase invariant reaches inside a block body, which is where a decoder
+bug would otherwise hide. -/
+example :
+    Instr.isSyn (.block (.result none) (.cons (.refNull (.abs .bot)) .nil))
+      = false := by decide
+
+/-- `Instr.wf` and `Instr.isSyn` are independent: this `BLOCK` satisfies every
+`-- if` side condition and still fails the phase invariant. -/
+example :
+    Instr.wf (.block (.result none) (.cons (.refNull (.abs .bot)) .nil))
+      = true := by decide
 
 /-- `def $const(consttype, lit_(consttype)) : instr`, the numeric case. -/
 def constNum (nt : NumType) (c : Num_ nt) : Instr := .const nt c

@@ -13,6 +13,7 @@ mod core;
 mod docs;
 mod firewall;
 mod gate;
+mod independence;
 mod json;
 mod lean;
 mod manifest;
@@ -161,6 +162,7 @@ fn dispatch(args: &[String]) -> Result<Outcome> {
         "signature" => signature::run(&root),
         "vendor" => vendor::run(has(rest, "--list")),
         "core" => core::run(&root, has(rest, "--list"), has(rest, "--check")),
+        "independence" => independence::run(&root),
         "manifest" => manifest::run(has(rest, "--check")),
         "docs" => docs::run(has(rest, "--check")),
         "gate" => gate::run(&root, has(rest, "--no-mutation")),

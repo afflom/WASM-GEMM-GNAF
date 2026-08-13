@@ -25,14 +25,24 @@ assumed.
   side condition already checked by `Atlas.attentionCompleteCheck`).
 * `Atlas.attend_monotone` — widening the request can only add routed objects.
 
-## Omitted, deliberately
+## Omitted, deliberately — and now REFUTED
 
 `attention_no_optimum_relevant_false_negative` (SPEC §12.2) is **not** in this
-repository.  Its conclusion quantifies over `Universal.SystemEvaluation`, which
-does not exist in this repository, and its content is the undischarged universal
-coverage obligation of SPEC §10.5 — the same obligation
-`Atlas/CoverageScope.lean` proves the seal's cover check cannot supply.  Stating
-it would require assuming exactly what it is supposed to prove.
+repository, and the reason is no longer that it could not be stated: it is that
+it is **false**.  `Atlas/AttentionCoverage.lean` proves it false — parametrically
+in the two predicates SPEC names but does not define
+(`Atlas.attention_no_optimum_relevant_false_negative_is_false`), with a witness
+that is a fully sealed state (`Atlas.sealCertificateAt`, all seven deterministic
+checkers discharged) whose attention root indexes nothing, against a candidate
+that really is `Universal.ProfileValid`, really carries a
+`Universal.SystemEvaluation`, and really scores at the core's baseline
+(`Atlas.undeclared_witness_is_missed`).  `DEV-005` in
+`model/spec-deviations.json` files it.
+
+Its content is the undischarged universal coverage obligation of SPEC §10.5 —
+the same obligation `Atlas/CoverageScope.lean` proves the seal's cover check
+cannot supply.  The intended content, under the one hypothesis that gap consists
+of, is `Atlas.attention_no_declared_optimum_relevant_false_negative`.
 
 ## Anti-vacuity (UOR-GNAF §18: index presence proves nothing)
 

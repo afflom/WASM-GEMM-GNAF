@@ -449,6 +449,14 @@ def isBShape (s : Shape) : Bool :=
   | .pack .i8 => true
   | _ => false
 
+/-- `$lanetype(shape) <- I32 I64 F32 F64`, i.e. the lane type is a `numtype`
+rather than a `packtype`.  This is the right-hand side of `VEXTRACT_LANE`'s
+`-- if sx? = eps <=> $lanetype(shape) <- I32 I64 F32 F64`. -/
+def laneIsNum (s : Shape) : Bool :=
+  match s.lane with
+  | .num _ => true
+  | .pack _ => false
+
 end Shape
 
 /-- `syntax ishape = shape  -- if $lanetype(shape) = Jnn`. -/
@@ -922,5 +930,13 @@ inductive BlockType where
   | result (t : Option ValType)
   | idx (x : TypeIdx)
   deriving DecidableEq, Repr, Inhabited
+
+/-- The `/syn` fragment of `blocktype`: the `valtype?` of a `_RESULT` must be a
+`valtype/syn`, i.e. never `BOT` and never a `/sem` `typeuse`.  A `_IDX` carries
+no type at all. -/
+def BlockType.isSyn : BlockType → Bool
+  | .result none => true
+  | .result (some t) => t.isSyn
+  | .idx _ => true
 
 end WasmGemmGnaf.Wasm.Core

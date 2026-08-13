@@ -86,6 +86,7 @@ import WasmGemmGnaf.Universal.Sublevel
 import WasmGemmGnaf.Atlas.Dependency
 import WasmGemmGnaf.Atlas.Lifecycle
 import WasmGemmGnaf.Atlas.Rebuild
+import WasmGemmGnaf.Atlas.Reconstruct
 import WasmGemmGnaf.Atlas.SemanticClosure
 
 set_option autoImplicit false
@@ -265,16 +266,25 @@ AMENDED under `DEV-001` (`model/spec-deviations.json`).  The repository's
 right-hand side carries an extra conjunct, `Wasm.CostedLabelling module
 invocation costedTrace`.  That is a genuine difference and it is NOT SPEC's
 proposition: the forward direction becomes strictly stronger, and the backward
-direction strictly weaker.  `DEV-001` argues SPEC's literal biconditional is
-false as written — `costedTrace` is universally quantified, so an arbitrary
-labelling whose erasure happens to be a valid plain trace would satisfy the
-right-hand side without being a run the costed machine can produce — and names
-`Wasm.costed_run_iff_plain_run` as carrying the intended content with no side
-condition.
+direction strictly weaker.
 
-That argument may well be right.  It is still a deviation, so this binding does
-not count towards the SPEC §15 total; `xtask signature` reports it as AMENDED
-and `xtask claims required` reports the name OUTSTANDING.
+`DEV-001` no longer merely *argues* that SPEC's literal biconditional is false;
+it is **proved** false, for every profile, by
+`Wasm.not_costed_erase_iff_plain_run` in `Wasm/Erasure.lean`.  The witness is a
+module that passes `Wasm.validate` together with a costed trace whose erasure is
+exactly the plain trace of a maximal run of that module, and which differs
+from the machine's own labelling in one payload — the installed byte count of
+the harness transition — that `Wasm.CostedEvent.erase` discards
+(`Wasm.erase_enterGemm_eq`).  SPEC's right-hand side holds of it
+(`Counterexample.minimal_run`) and SPEC's left-hand side does not
+(`Counterexample.minimal_not_costedRun`).  `Wasm.costed_run_iff_plain_run`
+carries the intended content with no side condition at all.
+
+A refuted proposition is still a proposition this binding does not carry, so it
+does not count towards the SPEC §15 total; `xtask signature` reports it as
+AMENDED and `xtask claims required` reports the name OUTSTANDING.  What the
+counterexample changes is that the disclosure is now a proof rather than a
+claim.
 -/
 -- spec-signature-amended: Wasm.costed_erase_iff_plain_run (deviation DEV-001)
 theorem costed_erase_iff_plain_run_signature :
@@ -938,26 +948,36 @@ theorem incremental_eq_full_rebuild
         (state.body.declarationBase ∪ delta.declarations))
 ```
 
-WEAKER, and no deviation is filed for it.  The repository's theorem carries two
-hypotheses SPEC's statement does not:
+AMENDED under `DEV-004` (`model/spec-deviations.json`).  The repository's
+theorem carries two hypotheses SPEC's statement does not:
 
 * `Atlas.Coherent state.body`;
 * `state.body.scope = Atlas.Scope.unscoped`.
 
-`Atlas/Rebuild.lean` argues the second is necessary — `semanticRebuildBody` takes
-only the declaration base and so cannot reproduce a scope the declarations do not
-name, making SPEC's literal statement false for a scoped state — and proves the
-general form as `Atlas.incremental_eq_full_rebuild_scoped`, which quantifies over
-the scope instead of fixing it.
+Neither is a convenience, and neither is asserted to be necessary: both are
+**proved** necessary in `Atlas/Rebuild.lean`.
 
-That argument looks sound.  It has NOT been filed in `model/spec-deviations.json`,
-so unlike `DEV-001` there is no reviewed record of it, and this binding therefore
-records the proposition as WEAKER: `xtask signature` prints it as such and
-`xtask claims required` reports the name OUTSTANDING.  Filing the deviation, or
-proving SPEC's literal form, is the repository owner's call and not one this
-binding may make on their behalf.
+* `Atlas.incremental_ne_full_rebuild_of_objectiveId` — `semanticRebuildBody`
+  takes only the declaration base, which names no scope, so it always answers
+  `Atlas.Scope.unscoped`, while `semanticApplyBody` preserves the state's scope
+  and `canonicalize` copies the three identities verbatim.  Every state whose
+  objective identity is not `nullId` therefore falsifies SPEC's equation, for
+  every budget and every delta.
+* `Atlas.not_incremental_eq_full_rebuild_unscoped` — restricting SPEC's
+  statement to unscoped states does not save it either: the witness is a state
+  that records one semantic object its empty declaration base does not derive,
+  on which the equation fails for `Delta.empty`.
+
+`Atlas.not_incremental_eq_full_rebuild` is the resulting refutation of SPEC's
+literal statement, and `Atlas.incremental_eq_full_rebuild_scoped` proves the
+general form, which quantifies over the scope instead of fixing it, without the
+scope hypothesis.
+
+A refuted proposition is still a proposition this binding does not carry, so the
+binding does not count towards the SPEC §15 total; `xtask signature` reports it
+as AMENDED and `xtask claims required` reports the name OUTSTANDING.
 -/
--- spec-signature-weaker: Atlas.incremental_eq_full_rebuild
+-- spec-signature-amended: Atlas.incremental_eq_full_rebuild (deviation DEV-004)
 theorem incremental_eq_full_rebuild_signature :
     ∀ {budget : Atlas.BuildBudget} {state : Atlas.UnsealedState} {delta : Atlas.Delta}
       {successor : Atlas.UnsealedState},
@@ -968,6 +988,67 @@ theorem incremental_eq_full_rebuild_signature :
         Atlas.canonicalize
           (Atlas.semanticRebuildBody (state.body.declarationBase ∪ delta.declarations)) :=
   @Atlas.incremental_eq_full_rebuild
+
+/--
+**SPEC §12.1**, quoted verbatim — the section states no fenced theorem for this
+name:
+
+> The deterministic checkers define `canonicalSealCheckResultId` by storing the
+> complete checker input, result, and retained preimages in canonical form.
+
+and, on what the seal identity is taken over:
+
+> proof-free `SealCertificateBody` records the checked certificate-object
+> identities, `SealCertificate` proves that body/core, and `sealId` identifies
+> only `(core, certificate.body)`.
+
+with **SPEC §20.2** item 10:
+
+> The Atlas seal reconstructs from retained canonical objects.
+
+The repository's proposition is that a *verifier* — a function whose ONLY input
+is the seal identity, `Atlas.SealIdentity`, one
+`ObjectId (SealCore × SealCertificateBody)` — reconstructs
+
+1. exactly the retained preimage list of the sealed state, and
+2. for every identity the seal's own `retentionRoot` records, the exact bytes
+   retained for it, proved to be a member of the state's retained graph.
+
+The distinction this binding exists to keep: `Atlas.sealVerifierPreimages` is
+handed no state, no object graph, no preimage and no proof.  A "reconstruction"
+given the preimages and checking that they hash correctly would be a statement
+about the CALLER; this one opens the seal identity into the proof-free
+`SealCertificateBody`, reads the recorded `retentionCheckResultId` out of it,
+opens THAT identity into the checker record, and returns the record's
+preimages.  Both openings are total executable readers proved to be left
+inverses of the canonical encoders (`Atlas.…R_inverts` in `Atlas/Reconstruct.lean`),
+so the content is effectiveness, not the schemas' injectivity.
+
+SPEC §12.1's proof-free/resolved distinction is preserved: everything
+reconstructed is a proof-free body (`SealCertificateBody`, `SealCheckResultBody`,
+`PreimageEntry`).  The verifier never produces an `Atlas.SealCertificate` or an
+`Atlas.UnsealedState`, both of which carry proofs; the resolved objects appear
+only on the right of the equations, as what the reconstruction is compared
+against.
+
+**Not a coverage claim.**  Every reconstructed byte string comes from
+`state.retainedObjects.graph.preimages`, a finite list the seal itself records.
+Nothing here quantifies over `ByteArray`, competitors, partitions or optimality,
+and a seal retaining three objects satisfies it exactly as one retaining a
+million does.  `Atlas.universalCoverCompleteCheck_scope_blind` is untouched and
+`Atlas.seal_implies_universal_coverage` remains absent.
+-/
+-- spec-signature: Atlas.seal_verifier_reconstructs_every_preimage
+theorem seal_verifier_reconstructs_every_preimage_signature :
+    ∀ sealed : Atlas.SealedState,
+      Atlas.sealVerifierPreimages sealed.sealId =
+          some sealed.state.retainedObjects.graph.preimages ∧
+        ∀ id ∈ sealed.core.retentionRoot.retainedIds,
+          ∃ preimage : ByteArray,
+            Atlas.sealVerifierPreimage sealed.sealId id = some preimage ∧
+            Atlas.PreimageEntry.mk id preimage ∈
+              sealed.state.retainedObjects.graph.preimages :=
+  @Atlas.seal_verifier_reconstructs_every_preimage
 
 /--
 **SPEC §16**, quoted verbatim:
@@ -996,5 +1077,80 @@ theorem lifecycle_prefix_conservation_signature :
       evaluation.total =
         Cost.sumLifecycle (List.map (fun r => r.cost) evaluation.prefixes.elements) :=
   @Atlas.lifecycle_prefix_conservation
+
+/--
+**SPEC §16**, quoted verbatim:
+
+```lean
+theorem lifecycle_native_bound
+    {body : Atlas.LifecycleTraceBody}
+    {trace : Atlas.ResolvedLifecycleTrace body}
+    (evaluation : Atlas.LifecycleEvaluation trace .nativeIncremental) :
+  evaluation.total ≤
+    Atlas.nativeLifecycleBound Release.primitiveCostTable evaluation.size
+```
+
+No deviation.  `≤` is `Cost.LifecycleVector.ComponentwiseLE` via the `LE`
+instance in `Cost/Lifecycle.lean`: all seventeen coordinates at once, no trade
+between them.
+
+`Release.primitiveCostTable` is pinned in `Cost/Lifecycle.lean` — not in
+`Artifact/Release.lean`, because SPEC §10.1's firewall forbids `Cost/` from
+importing upward and `Atlas/Lifecycle.lean` must state the bound over it.  Every
+coefficient is `1`, the componentwise-minimal positive table SPEC §16 admits, so
+the binding cannot be satisfied by inflating a constant;
+`Atlas.lifecycle_native_bound_of_positive` proves the same inequality for every
+positive table, and `Release.primitiveCostTable_minimal` records that the pinned
+table is dominated by all of them.
+
+What the bound constrains is machine-checked, not asserted:
+`Atlas.lifecycle_native_bound_attained` proves fourteen of the seventeen
+coordinates hold with *equality*, and `Atlas.lifecycle_native_bound_slack` gives
+the exact slack on the remaining three (the logarithmic canonicalization factor,
+the threefold index bracket, and the request bytes the query bracket adds).  All
+three are slack in the shape of SPEC §16's polynomial, not in a coefficient.
+-/
+-- spec-signature: Atlas.lifecycle_native_bound
+theorem lifecycle_native_bound_signature :
+    ∀ {body : Atlas.LifecycleTraceBody} {trace : Atlas.ResolvedLifecycleTrace body}
+      (evaluation : Atlas.LifecycleEvaluation trace .nativeIncremental),
+      evaluation.total ≤
+        Atlas.nativeLifecycleBound Release.primitiveCostTable evaluation.size :=
+  @Atlas.lifecycle_native_bound
+
+/--
+**SPEC §16**, quoted verbatim:
+
+```lean
+theorem lifecycle_full_rebuild_comparator_exact
+    {body : Atlas.LifecycleTraceBody}
+    {trace : Atlas.ResolvedLifecycleTrace body}
+    (evaluation : Atlas.LifecycleEvaluation trace .nativeIncremental) :
+  Atlas.regretAgainst .canonicalFullRebuildAtEverySeal evaluation =
+    Cost.truncatedDifference
+      evaluation.total
+      (Atlas.canonicalFullRebuildEvaluation trace).total
+```
+
+The theorem holds by `rfl`, and `Atlas.lifecycle_full_rebuild_comparator_exact`
+says so in its own docstring rather than reading as a deep result.  What the
+binding buys is exactly what a definitional coercion can buy: it pins
+`Atlas.regretAgainst` at the canonical tag to the truncated difference of this
+evaluation's total and the total of `Atlas.canonicalFullRebuildEvaluation` **of
+the same trace**.  A later edit that redirected the comparator to a different
+evaluation, inserted slack, or compared against a stored number would stop this
+file elaborating.
+
+Nothing here claims the regret is zero or bounded; SPEC §16's competitive claim
+is a separate obligation.
+-/
+-- spec-signature: Atlas.lifecycle_full_rebuild_comparator_exact
+theorem lifecycle_full_rebuild_comparator_exact_signature :
+    ∀ {body : Atlas.LifecycleTraceBody} {trace : Atlas.ResolvedLifecycleTrace body}
+      (evaluation : Atlas.LifecycleEvaluation trace .nativeIncremental),
+      Atlas.regretAgainst .canonicalFullRebuildAtEverySeal evaluation =
+        Cost.truncatedDifference evaluation.total
+          (Atlas.canonicalFullRebuildEvaluation trace).total :=
+  @Atlas.lifecycle_full_rebuild_comparator_exact
 
 end WasmGemmGnaf.Conformance

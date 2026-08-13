@@ -26,7 +26,20 @@
   zero-cost trace SPEC section 7.5 forbids.  The costed side here is deliberately
   *not* invariant: `CostedStep` pins the harness installation's byte count, the
   grown page count and the rule identity to the configuration they are taken
-  from.  What is proved is therefore the strongest true form of the display:
+  from.
+
+  That is not an argument this file asks the reader to accept.  SPEC section
+  7.5's literal biconditional is *refuted* here, by an explicit witness:
+  `Counterexample.minimalModule` is a module that passes release validation,
+  `Counterexample.forgedTrace` is a costed trace whose erasure is exactly the
+  plain trace of a maximal run of that module, and
+  `not_costed_erase_iff_plain_run` proves --- for every profile whatsoever ---
+  that the right-hand side holds of it while the left-hand side does not.  The
+  forged label differs from the one the machine computes only in a payload that
+  `CostedEvent.erase` discards, which is the whole of the matter.  This is
+  deviation `DEV-001` of `model/spec-deviations.json`.
+
+  What is proved instead is the strongest true form of the display:
 
   * `costed_erase_iff_plain_run` --- the costed run of `costedTrace` holds
     exactly when the plain run of `eraseCosts costedTrace` holds *and*
@@ -192,6 +205,171 @@ theorem costed_run_iff_finiteExecution {P : Profile} {module : Module}
     exact hfe
   · intro h
     exact ⟨initial, hinit, rfl, h⟩
+
+/-! ## SPEC section 7.5's literal biconditional is false
+
+The display in SPEC section 7.5 reads, with its free variables universally
+quantified as a Lean theorem statement does:
+
+    CostedRun P module invocation costedTrace observation ↔
+      Run module invocation (eraseCosts costedTrace) observation
+
+The forward direction is `costedRun_erase`, proved above.  The backward
+direction is refuted below.  `costedTrace` is universally quantified while the
+right-hand side mentions it only through `eraseCosts costedTrace`, and
+`CostedEvent.erase` is not injective: it discards the installed byte count of
+`enterGemm`, the requested page count of `memoryGrowSucceed`, and it identifies
+the whole of the ordinary-rule family in `Event.step`.  Any labelling in the
+fibre over a genuine plain trace therefore satisfies the right-hand side, while
+`CostedStep` admits exactly the one the machine computes.
+
+The witness below is a real module of the released profile: it passes
+`Wasm.validate`, it has a three-step maximal run, and the forged trace differs
+from the true labelling of that run in exactly one payload. -/
+
+/-- **Erasure is not injective.**  The installed byte count of the harness
+phase transition --- the charge for the raw-byte installation --- is discarded
+by erasure, so no property of an erased trace can recover it. -/
+theorem erase_enterGemm_eq (n m : Nat) :
+    (CostedEvent.enterGemm n).erase = (CostedEvent.enterGemm m).erase := rfl
+
+namespace Counterexample
+
+/-- A module of the released profile: one recursive type group holding the
+pinned GEMM ABI type, one exported `gemm` returning `i32.const 0`, a zero-page
+memory, and exactly the two required exports.  It is not a contrivance:
+`minimalModule_validate` proves it passes the release validator. -/
+def minimalModule : Module where
+  types := [⟨[⟨true, [], .func gemmFuncType⟩]⟩]
+  imports := []
+  funcs := [⟨0, [], .cons (.i32Const 0) .nil⟩]
+  tables := []
+  mems := [⟨⟨.i32, ⟨0, none⟩⟩⟩]
+  tags := []
+  globals := []
+  exports := [⟨gemmExportName, .func 0⟩, ⟨memoryExportName, .mem 0⟩]
+  start := none
+  elems := []
+  datas := []
+
+theorem minimalModule_exportsMemory :
+    Module.exportsMemory minimalModule = true := by
+  simp [Module.exportsMemory, minimalModule]
+
+theorem minimalModule_gemmIndex : Module.gemmIndex? minimalModule = some 0 := by
+  simp [Module.gemmIndex?, minimalModule]
+
+theorem minimalModule_checkGemmExport :
+    Module.checkGemmExport minimalModule = true := by
+  rw [Module.checkGemmExport, minimalModule_gemmIndex]
+  decide
+
+theorem minimalModule_checkExports : Module.checkExports minimalModule = true := by
+  simp [Module.checkExports, minimalModule, Module.distinctExportNames,
+    Ne.symm gemmExportName_ne_memoryExportName]
+
+/-- **The witness module passes release validation.** -/
+theorem minimalModule_validate : validate minimalModule = true := by
+  rw [validate, minimalModule_exportsMemory, minimalModule_checkGemmExport,
+    minimalModule_checkExports]
+  decide
+
+/-- The raw invocation of the witness: no bytes at all, installed at address
+zero.  The harness therefore installs exactly zero bytes. -/
+def minimalRaw : RawInvocation := ⟨0, []⟩
+
+/-- The store the witness module allocates: a zero-page memory and no global. -/
+def minimalStore : Store := { memory := Memory.alloc 0 none, globals := [] }
+
+/-- The pre-start harness configuration of the witness. -/
+def minimalInitial : Config where
+  store := minimalStore
+  harness :=
+    { gemmBody := [Instr.i32Const 0], gemmNumLocals := 0, rawPtr := 0
+      rawBytes := [], args := [UInt32.ofNat 0, UInt32.ofNat 0] }
+  locals := []
+  stack := []
+  code := []
+  ctrl := []
+  phase := .beforeEntry
+  entry? := none
+  status := .running
+
+theorem minimal_initialConfig :
+    initialConfig minimalModule minimalRaw = .ok minimalInitial := by
+  simp only [initialConfig, minimalModule_validate, minimalModule_gemmIndex]
+  rfl
+
+/-- **The forged costed trace.**  Its second and third labels are the ones the
+machine computes; its first claims that the harness installed one raw byte,
+where the invocation carries none.  That payload is the multiplier of the
+installation's `bytesWritten` charge in `eventContribution`, so forging it
+forges the cost --- and the right-hand side of SPEC's display cannot tell. -/
+def forgedTrace : List CostedEvent :=
+  [.enterGemm 1, .i32Const, .returnGemm 0]
+
+/-- The forged trace erases to the plain trace of the run below. -/
+theorem forgedTrace_erase :
+    eraseCosts forgedTrace = [Event.enterGemm, Event.step, Event.returnEvent 0] :=
+  rfl
+
+/-- The observation of that run: the exported `gemm` returns `0`, over an empty
+ABI-visible store. -/
+def minimalObservation : ExecutionObservation :=
+  .returned (eraseCosts forgedTrace) ⟨[]⟩ 0 ⟨[]⟩ ObservableEffects.none'
+
+/-- The run itself: install nothing, cross the harness boundary, push the
+constant, return it. -/
+theorem minimal_finiteExecution : FiniteExecution minimalInitial minimalObservation :=
+  ⟨_,
+   Reduces.cons (Step.enterGemm rfl rfl rfl rfl rfl)
+     (Reduces.cons (Step.i32Const rfl rfl)
+       (Reduces.single (Step.returnGemm rfl rfl rfl rfl))),
+   rfl⟩
+
+/-- **The right-hand side of SPEC's display holds of the forged trace.** -/
+theorem minimal_run :
+    Run minimalModule minimalRaw (eraseCosts forgedTrace) minimalObservation :=
+  ⟨minimalInitial, minimal_initialConfig, rfl, minimal_finiteExecution⟩
+
+/-- **The left-hand side does not**, under any profile: the machine labels the
+harness transition with the byte count it actually installed, which is zero. -/
+theorem minimal_not_costedRun (P : Profile) :
+    ¬ CostedRun P minimalModule minimalRaw forgedTrace minimalObservation := by
+  rintro ⟨initial, configs, hinit, visited, final, hred, -, -, -⟩
+  have hi : initial = minimalInitial := initialConfig_unique hinit minimal_initialConfig
+  subst hi
+  cases hred with
+  | cons hstep _ => exact absurd hstep.2 (by decide)
+
+end Counterexample
+
+/-- **SPEC section 7.5's literal biconditional is false**, and false for every
+profile: instrumentation is transparent, but a plain run does not determine the
+cost labels of the costed run it erases from.  This is what `DEV-001` records
+and what `costed_erase_iff_plain_run` repairs with a condition on labels alone;
+`costed_run_iff_plain_run` carries SPEC's intended content with no side
+condition at all. -/
+theorem not_costed_erase_iff_plain_run (P : Profile) :
+    ¬ ∀ (module : Module) (invocation : RawInvocation)
+        (costedTrace : List CostedEvent) (observation : ExecutionObservation),
+        CostedRun P module invocation costedTrace observation ↔
+          Run module invocation (eraseCosts costedTrace) observation := by
+  intro h
+  exact Counterexample.minimal_not_costedRun P
+    ((h Counterexample.minimalModule Counterexample.minimalRaw
+      Counterexample.forgedTrace Counterexample.minimalObservation).mpr
+      Counterexample.minimal_run)
+
+/-- The failure is one-sided: the forward direction of SPEC's display is
+`costedRun_erase`, proved unconditionally.  Only the backward direction fails,
+and it fails on the labels. -/
+theorem costed_erase_forward {P : Profile} {module : Module}
+    {invocation : RawInvocation} {costedTrace : List CostedEvent}
+    {observation : ExecutionObservation}
+    (h : CostedRun P module invocation costedTrace observation) :
+    Run module invocation (eraseCosts costedTrace) observation :=
+  costedRun_erase h
 
 /-! ## Erasure preserves the observation
 

@@ -19,6 +19,23 @@
   extended constant expressions (`Instr_const/global.get`,
   `Instr_const/binop`, `Instr_const/struct.new`, ...).
 
+  INDEXED OPERATORS AND SHAPES ARE PREMISES.  SpecTec's rules do not spell out
+  which operator symbols belong to which numeric type or shape, because the
+  metavariables carry it: `UNOP nt unop_nt` binds `unop_nt` at the sort
+  `unop_(nt)`, `VBINOP sh vbinop` at `vbinop_(sh)`, `CVTOP nt_1 nt_2 cvtop` at
+  `cvtop__(nt_2, nt_1)`, `LOAD nt loadop? x memarg` at `loadop_(nt)?`, and each
+  of those sorts carries its own `-- if` side conditions --- `EXTEND`'s
+  `sz < $sizenn(Inn)`, `POPCNT`'s `$lsizenn(Jnn) = 8`, `WRAP`'s
+  `size_1 > size_2`, and so on.  `Core/Operators.lean` flattens each family to
+  ONE non-dependent Lean inductive plus a decidable `wf`, because `instr` needs
+  a derived `DecidableEq`; the membership condition therefore has to reappear
+  HERE, as a premise of the rule that mentions it.  Without it the judgment
+  would be strictly WIDER than Core's --- it would type `F32.CLZ` --- which an
+  external audit named, correctly, as a soundness defect rather than a gap.
+  The same applies to `shape`'s `$lsize(lanetype) * dim = 128` and to the two
+  syntax-level `-- if`s on `VSHUFFLE` and `VNARROW`.  `Instr_ok.wf_of` below
+  proves the tightening actually took: nothing outside `Instr.wf` is typable.
+
   STACK POLYMORPHISM IS THE POINT.  `UNREACHABLE`, `BR`, `BR_TABLE`, `RETURN`,
   `RETURN_CALL*`, `THROW` and `THROW_REF` are typed in Core 3.0 by instruction
   types with FREE result-type variables, constrained only by `Instrtype_ok`.
@@ -837,6 +854,7 @@ inductive Instr_ok : Context → Instr → InstrType → Prop where
       {ao : MemArg} {mt : MemType} :
       C.mems[x.val]? = some mt →
       2 ^ ao.align.val ≤ nt.size / 8 →
+      OptAll (fun (o : LoadOp) => LoadOp.wf nt o = true) op →
       OptAll (fun (o : LoadOp) =>
           2 ^ ao.align.val ≤ o.sz.toNat / 8 ∧ o.sz.toNat / 8 < nt.size / 8) op →
       (op = none ∨ nt.toInn?.isSome = true) →
@@ -853,11 +871,17 @@ inductive Instr_ok : Context → Instr → InstrType → Prop where
   /-- `rule Instr_ok/load-pack:
         C |- LOAD Inn (M _ sx) x memarg : at -> Inn
         -- if C.MEMS[x] = at lim PAGE
-        -- if $(2^(memarg.ALIGN) <= M/8)`. -/
+        -- if $(2^(memarg.ALIGN) <= M/8)`.
+
+  `(M _ sx)` is a `loadop_(Inn)`, whose own `-- if sz < $sizenn(Inn)` says the
+  packed width is strictly narrower than the operand type; that is `LoadOp.wf`,
+  and it is what distinguishes `I32.LOAD8_S` from a `loadop_`-shaped spelling of
+  a plain `I32.LOAD`. -/
   -- core-rule: Instr_ok/load-pack
   | load_pack {C : Context} {n : Inn} {op : LoadOp} {x : MemIdx} {ao : MemArg}
       {mt : MemType} :
       C.mems[x.val]? = some mt →
+      LoadOp.wf n.toNumType op = true →
       2 ^ ao.align.val ≤ op.sz.toNat / 8 →
       Instr_ok C (.load n.toNumType (some op) x ao)
         ⟨[mt.addr.toValType], [], [.num n.toNumType]⟩
@@ -873,6 +897,7 @@ inductive Instr_ok : Context → Instr → InstrType → Prop where
       {ao : MemArg} {mt : MemType} :
       C.mems[x.val]? = some mt →
       2 ^ ao.align.val ≤ nt.size / 8 →
+      OptAll (fun (o : StoreOp) => StoreOp.wf nt o = true) op →
       OptAll (fun (o : StoreOp) =>
           2 ^ ao.align.val ≤ o.sz.toNat / 8 ∧ o.sz.toNat / 8 < nt.size / 8) op →
       (op = none ∨ nt.toInn?.isSome = true) →
@@ -889,11 +914,14 @@ inductive Instr_ok : Context → Instr → InstrType → Prop where
   /-- `rule Instr_ok/store-pack:
         C |- STORE Inn M x memarg : at Inn -> eps
         -- if C.MEMS[x] = at lim PAGE
-        -- if $(2^(memarg.ALIGN) <= M/8)`. -/
+        -- if $(2^(memarg.ALIGN) <= M/8)`.
+
+  `M` is a `storeop_(Inn)`, whose `-- if sz < $sizenn(Inn)` is `StoreOp.wf`. -/
   -- core-rule: Instr_ok/store-pack
   | store_pack {C : Context} {n : Inn} {op : StoreOp} {x : MemIdx} {ao : MemArg}
       {mt : MemType} :
       C.mems[x.val]? = some mt →
+      StoreOp.wf n.toNumType op = true →
       2 ^ ao.align.val ≤ op.sz.toNat / 8 →
       Instr_ok C (.store n.toNumType (some op) x ao)
         ⟨[mt.addr.toValType, .num n.toNumType], [], []⟩
@@ -909,11 +937,16 @@ inductive Instr_ok : Context → Instr → InstrType → Prop where
   /-- `rule Instr_ok/vload-pack:
         C |- VLOAD V128 (SHAPE M X N _ sx) x memarg : at -> V128
         -- if C.MEMS[x] = at lim PAGE
-        -- if $(2^(memarg.ALIGN) <= M/8 * N)`. -/
+        -- if $(2^(memarg.ALIGN) <= M/8 * N)`.
+
+  `(SHAPE M X N _ sx)` is a `vloadop_(V128)`, whose own
+  `-- if $(sz * M = $vsize(vectype)/2)` fixes the packed half-vector: the shape
+  covers exactly 64 of the 128 bits. -/
   -- core-rule: Instr_ok/vload-pack
   | vload_pack {C : Context} {sz : Sz} {n : Nat} {sx : Sx} {x : MemIdx}
       {ao : MemArg} {mt : MemType} :
       C.mems[x.val]? = some mt →
+      VLoadOp.wf .v128 (.shape sz n sx) = true →
       2 ^ ao.align.val ≤ sz.toNat / 8 * n →
       Instr_ok C (.vload .v128 (some (.shape sz n sx)) x ao)
         ⟨[mt.addr.toValType], [], [ValType.v128]⟩
@@ -930,10 +963,14 @@ inductive Instr_ok : Context → Instr → InstrType → Prop where
   /-- `rule Instr_ok/vload-zero:
         C |- VLOAD V128 (ZERO N) x memarg : at -> V128
         -- if C.MEMS[x] = at lim PAGE
-        -- if $(2^(memarg.ALIGN) <= N/8)`. -/
+        -- if $(2^(memarg.ALIGN) <= N/8)`.
+
+  `(ZERO N)` is a `vloadop_(V128)`, whose own `-- if sz >= 32` rules out an
+  8- or 16-bit zero-extending vector load. -/
   -- core-rule: Instr_ok/vload-zero
   | vload_zero {C : Context} {sz : Sz} {x : MemIdx} {ao : MemArg} {mt : MemType} :
       C.mems[x.val]? = some mt →
+      VLoadOp.wf .v128 (.zero sz) = true →
       2 ^ ao.align.val ≤ sz.toNat / 8 →
       Instr_ok C (.vload .v128 (some (.zero sz)) x ao)
         ⟨[mt.addr.toValType], [], [ValType.v128]⟩
@@ -974,29 +1011,45 @@ inductive Instr_ok : Context → Instr → InstrType → Prop where
         ⟨[mt.addr.toValType, ValType.v128], [], []⟩
 
   -- Numeric instructions
-  /-- `rule Instr_ok/const: C |- CONST nt c_nt : eps -> nt`. -/
+  /-- `rule Instr_ok/const: C |- CONST nt c_nt : eps -> nt`.
+
+  `c_nt` is a `num_(nt)`, whose float instances are bounded by `fNmag`;
+  `Num_.wf` is that bound. -/
   -- core-rule: Instr_ok/const
   | const {C : Context} {nt : NumType} {c : Num_ nt} :
+      Num_.wf nt c = true →
       Instr_ok C (.const nt c) ⟨[], [], [.num nt]⟩
-  /-- `rule Instr_ok/unop: C |- UNOP nt unop_nt : nt -> nt`. -/
+  /-- `rule Instr_ok/unop: C |- UNOP nt unop_nt : nt -> nt`.
+
+  `unop_nt` is a member of the family `unop_(numtype)` AT `nt`, which is what
+  `Unop.wf nt` says; the flat Lean `Unop` cannot say it by typing. -/
   -- core-rule: Instr_ok/unop
   | unop {C : Context} {nt : NumType} {op : Unop} :
+      Unop.wf nt op = true →
       Instr_ok C (.unop nt op) ⟨[.num nt], [], [.num nt]⟩
   /-- `rule Instr_ok/binop: C |- BINOP nt binop_nt : nt nt -> nt`. -/
   -- core-rule: Instr_ok/binop
   | binop {C : Context} {nt : NumType} {op : Binop} :
+      Binop.wf nt op = true →
       Instr_ok C (.binop nt op) ⟨[.num nt, .num nt], [], [.num nt]⟩
   /-- `rule Instr_ok/testop: C |- TESTOP nt testop_nt : nt -> I32`. -/
   -- core-rule: Instr_ok/testop
   | testop {C : Context} {nt : NumType} {op : Testop} :
+      Testop.wf nt op = true →
       Instr_ok C (.testop nt op) ⟨[.num nt], [], [ValType.i32]⟩
   /-- `rule Instr_ok/relop: C |- RELOP nt relop_nt : nt nt -> I32`. -/
   -- core-rule: Instr_ok/relop
   | relop {C : Context} {nt : NumType} {op : Relop} :
+      Relop.wf nt op = true →
       Instr_ok C (.relop nt op) ⟨[.num nt, .num nt], [], [ValType.i32]⟩
-  /-- `rule Instr_ok/cvtop: C |- CVTOP nt_1 nt_2 cvtop : nt_2 -> nt_1`. -/
+  /-- `rule Instr_ok/cvtop: C |- CVTOP nt_1 nt_2 cvtop : nt_2 -> nt_1`.
+
+  `cvtop` is a member of `cvtop__(nt_2, nt_1)` --- operand type first --- which
+  carries `WRAP`'s `size_1 > size_2`, `EXTEND`'s converse and `REINTERPRET`'s
+  equal-width condition. -/
   -- core-rule: Instr_ok/cvtop
   | cvtop {C : Context} {nt₁ nt₂ : NumType} {op : Cvtop} :
+      Cvtop.wf nt₂ nt₁ op = true →
       Instr_ok C (.cvtop nt₁ nt₂ op) ⟨[.num nt₂], [], [.num nt₁]⟩
 
   -- Vector instructions
@@ -1022,55 +1075,81 @@ inductive Instr_ok : Context → Instr → InstrType → Prop where
   -- core-rule: Instr_ok/vvtestop
   | vvtestop {C : Context} {op : VVTestop} :
       Instr_ok C (.vvtestop .v128 op) ⟨[ValType.v128], [], [ValType.i32]⟩
-  /-- `rule Instr_ok/vunop: C |- VUNOP sh vunop : V128 -> V128`. -/
+  /-- `rule Instr_ok/vunop: C |- VUNOP sh vunop : V128 -> V128`.
+
+  `sh` is a `shape`, whose `$lsize(lanetype) * dim = 128` is `Shape.wf`, and
+  `vunop` is a member of `vunop_(sh)`, which carries `POPCNT`'s
+  `$lsizenn(Jnn) = 8`. -/
   -- core-rule: Instr_ok/vunop
   | vunop {C : Context} {sh : Shape} {op : VUnop} :
+      sh.wf = true → VUnop.wf sh op = true →
       Instr_ok C (.vunop sh op) ⟨[ValType.v128], [], [ValType.v128]⟩
   /-- `rule Instr_ok/vbinop: C |- VBINOP sh vbinop : V128 V128 -> V128`. -/
   -- core-rule: Instr_ok/vbinop
   | vbinop {C : Context} {sh : Shape} {op : VBinop} :
+      sh.wf = true → VBinop.wf sh op = true →
       Instr_ok C (.vbinop sh op) ⟨[ValType.v128, ValType.v128], [], [ValType.v128]⟩
   /-- `rule Instr_ok/vternop: C |- VTERNOP sh vternop : V128 V128 V128 -> V128`. -/
   -- core-rule: Instr_ok/vternop
   | vternop {C : Context} {sh : Shape} {op : VTernop} :
+      sh.wf = true → VTernop.wf sh op = true →
       Instr_ok C (.vternop sh op)
         ⟨[ValType.v128, ValType.v128, ValType.v128], [], [ValType.v128]⟩
   /-- `rule Instr_ok/vtestop: C |- VTESTOP sh vtestop : V128 -> I32`. -/
   -- core-rule: Instr_ok/vtestop
   | vtestop {C : Context} {sh : Shape} {op : VTestop} :
+      sh.wf = true → VTestop.wf sh op = true →
       Instr_ok C (.vtestop sh op) ⟨[ValType.v128], [], [ValType.i32]⟩
   /-- `rule Instr_ok/vrelop: C |- VRELOP sh vrelop : V128 V128 -> V128`. -/
   -- core-rule: Instr_ok/vrelop
   | vrelop {C : Context} {sh : Shape} {op : VRelop} :
+      sh.wf = true → VRelop.wf sh op = true →
       Instr_ok C (.vrelop sh op) ⟨[ValType.v128, ValType.v128], [], [ValType.v128]⟩
-  /-- `rule Instr_ok/vshiftop: C |- VSHIFTOP sh vshiftop : V128 I32 -> V128`. -/
+  /-- `rule Instr_ok/vshiftop: C |- VSHIFTOP sh vshiftop : V128 I32 -> V128`.
+
+  `ishape`'s own `-- if $lanetype(shape) = Jnn` is carried by the subtype; what
+  is left is `shape`'s `$lsize(lanetype) * dim = 128`. -/
   -- core-rule: Instr_ok/vshiftop
   | vshiftop {C : Context} {sh : IShape} {op : VShiftop} :
+      sh.val.wf = true →
       Instr_ok C (.vshiftop sh op) ⟨[ValType.v128, ValType.i32], [], [ValType.v128]⟩
   /-- `rule Instr_ok/vbitmask: C |- VBITMASK sh : V128 -> I32`. -/
   -- core-rule: Instr_ok/vbitmask
   | vbitmask {C : Context} {sh : IShape} :
+      sh.val.wf = true →
       Instr_ok C (.vbitmask sh) ⟨[ValType.v128], [], [ValType.i32]⟩
   /-- `rule Instr_ok/vswizzlop: C |- VSWIZZLOP sh vswizzlop : V128 V128 -> V128`. -/
   -- core-rule: Instr_ok/vswizzlop
   | vswizzlop {C : Context} {sh : BShape} {op : VSwizzlop} :
+      sh.val.wf = true →
       Instr_ok C (.vswizzlop sh op)
         ⟨[ValType.v128, ValType.v128], [], [ValType.v128]⟩
   /-- `rule Instr_ok/vshuffle: C |- VSHUFFLE sh i* : V128 V128 -> V128
-      -- (if $(i < 2*$dim(sh)))*`. -/
+      -- (if $(i < 2*$dim(sh)))*`.
+
+  The syntax of `VSHUFFLE bshape laneidx*` additionally carries
+  `-- if |laneidx*| = $dim(bshape)`: a shuffle names exactly as many lanes as
+  the shape has. -/
   -- core-rule: Instr_ok/vshuffle
   | vshuffle {C : Context} {sh : BShape} {is : List LaneIdx} :
+      sh.val.wf = true → is.length = sh.val.dim.toNat →
       SeqAll (fun (i : LaneIdx) => i.val < 2 * sh.val.dim.toNat) is →
       Instr_ok C (.vshuffle sh is) ⟨[ValType.v128, ValType.v128], [], [ValType.v128]⟩
   /-- `rule Instr_ok/vsplat: C |- VSPLAT sh : $unpackshape(sh) -> V128`. -/
   -- core-rule: Instr_ok/vsplat
   | vsplat {C : Context} {sh : Shape} :
+      sh.wf = true →
       Instr_ok C (.vsplat sh) ⟨[.num sh.unpack], [], [ValType.v128]⟩
   /-- `rule Instr_ok/vextract_lane:
         C |- VEXTRACT_LANE sh sx? i : V128 -> $unpackshape(sh)
-        -- if i < $dim(sh)`. -/
+        -- if i < $dim(sh)`.
+
+  The syntax of `VEXTRACT_LANE shape sx? laneidx` additionally carries
+  `-- if sx? = eps <=> $lanetype(shape) <- I32 I64 F32 F64`: the signedness is
+  present exactly when the lane type is packed. -/
   -- core-rule: Instr_ok/vextract_lane
   | vextract_lane {C : Context} {sh : Shape} {sx : Option Sx} {i : LaneIdx} :
+      sh.wf = true → sx.isNone = sh.laneIsNum →
       i.val < sh.dim.toNat →
       Instr_ok C (.vextractLane sh sx i) ⟨[ValType.v128], [], [.num sh.unpack]⟩
   /-- `rule Instr_ok/vreplace_lane:
@@ -1078,32 +1157,50 @@ inductive Instr_ok : Context → Instr → InstrType → Prop where
         -- if i < $dim(sh)`. -/
   -- core-rule: Instr_ok/vreplace_lane
   | vreplace_lane {C : Context} {sh : Shape} {i : LaneIdx} :
-      i.val < sh.dim.toNat →
+      sh.wf = true → i.val < sh.dim.toNat →
       Instr_ok C (.vreplaceLane sh i)
         ⟨[ValType.v128, .num sh.unpack], [], [ValType.v128]⟩
-  /-- `rule Instr_ok/vextunop: C |- VEXTUNOP sh_1 sh_2 vextunop : V128 -> V128`. -/
+  /-- `rule Instr_ok/vextunop: C |- VEXTUNOP sh_1 sh_2 vextunop : V128 -> V128`.
+
+  `vextunop` is a member of `vextunop__(sh_2, sh_1)` --- operand shape first ---
+  which carries `EXTADD_PAIRWISE`'s
+  `16 <= 2 * $lsizenn1(Jnn_1) = $lsizenn2(Jnn_2) <= 32`. -/
   -- core-rule: Instr_ok/vextunop
   | vextunop {C : Context} {sh₁ sh₂ : IShape} {op : VExtUnop} :
+      sh₁.val.wf = true → sh₂.val.wf = true → VExtUnop.wf sh₂ sh₁ op = true →
       Instr_ok C (.vextunop sh₁ sh₂ op) ⟨[ValType.v128], [], [ValType.v128]⟩
   /-- `rule Instr_ok/vextbinop: C |- VEXTBINOP sh_1 sh_2 vextbinop : V128 V128 -> V128`. -/
   -- core-rule: Instr_ok/vextbinop
   | vextbinop {C : Context} {sh₁ sh₂ : IShape} {op : VExtBinop} :
+      sh₁.val.wf = true → sh₂.val.wf = true → VExtBinop.wf sh₂ sh₁ op = true →
       Instr_ok C (.vextbinop sh₁ sh₂ op)
         ⟨[ValType.v128, ValType.v128], [], [ValType.v128]⟩
   /-- `rule Instr_ok/vextternop:
       C |- VEXTTERNOP sh_1 sh_2 vextternop : V128 V128 V128 -> V128`. -/
   -- core-rule: Instr_ok/vextternop
   | vextternop {C : Context} {sh₁ sh₂ : IShape} {op : VExtTernop} :
+      sh₁.val.wf = true → sh₂.val.wf = true → VExtTernop.wf sh₂ sh₁ op = true →
       Instr_ok C (.vextternop sh₁ sh₂ op)
         ⟨[ValType.v128, ValType.v128, ValType.v128], [], [ValType.v128]⟩
-  /-- `rule Instr_ok/vnarrow: C |- VNARROW sh_1 sh_2 sx : V128 V128 -> V128`. -/
+  /-- `rule Instr_ok/vnarrow: C |- VNARROW sh_1 sh_2 sx : V128 V128 -> V128`.
+
+  The syntax of `VNARROW ishape_1 ishape_2 sx` carries
+  `-- if $($lsize($lanetype(ishape_2)) = 2*$lsize($lanetype(ishape_1)) <= 32)`:
+  the operand lanes are twice the result lanes, and at most 32 bits wide. -/
   -- core-rule: Instr_ok/vnarrow
   | vnarrow {C : Context} {sh₁ sh₂ : IShape} {sx : Sx} :
+      sh₁.val.wf = true → sh₂.val.wf = true →
+      sh₂.laneSize = 2 * sh₁.laneSize → 2 * sh₁.laneSize ≤ 32 →
       Instr_ok C (.vnarrow sh₁ sh₂ sx)
         ⟨[ValType.v128, ValType.v128], [], [ValType.v128]⟩
-  /-- `rule Instr_ok/vcvtop: C |- VCVTOP sh_1 sh_2 vcvtop : V128 -> V128`. -/
+  /-- `rule Instr_ok/vcvtop: C |- VCVTOP sh_1 sh_2 vcvtop : V128 -> V128`.
+
+  `vcvtop` is a member of `vcvtop__(sh_2, sh_1)` --- operand shape first ---
+  which carries every width and `half?`/`zero?` condition of the four
+  instances. -/
   -- core-rule: Instr_ok/vcvtop
   | vcvtop {C : Context} {sh₁ sh₂ : Shape} {op : VCvtop} :
+      sh₁.wf = true → sh₂.wf = true → VCvtop.wf sh₂ sh₁ op = true →
       Instr_ok C (.vcvtop sh₁ sh₂ op) ⟨[ValType.v128], [], [ValType.v128]⟩
 
 /-- `relation Instrs_ok: context |- instr* : instrtype`. -/
@@ -1147,6 +1244,80 @@ inductive Instrs_ok : Context → List Instr → InstrType → Prop where
 
 end
 
+/-! ## The tightened judgment admits no ill-formed instruction
+
+Every rule that mentions an indexed operator, an indexed shape or a syntax-level
+`-- if` now carries that condition as a premise.  The two theorems below are the
+check that the transcription is COMPLETE rather than merely improved: a typable
+instruction satisfies every side condition `Core/Instructions.lean` collects, and
+so does every instruction of a typable sequence.
+
+They are proved by mutual induction on `Instr_ok`/`Instrs_ok`, so a premise
+missing from any single rule would break them --- which is what makes them worth
+stating.  Note what they are NOT: they say the judgment is no wider than
+`Instr.wf`, not that it is as wide.  The derivations in the sanity section below
+are the other direction, on representative families. -/
+
+/-- A typable instruction satisfies every `-- if` side condition of the pinned
+instruction fragments. -/
+theorem Instr_ok.wf_of {C : Context} {i : Instr} {it : InstrType}
+    (h : Instr_ok C i it) : Instr.wf i = true := by
+  induction h using Instr_ok.rec
+    (motive_2 := fun _ is _ _ => ∀ j ∈ is, Instr.wf j = true)
+  case load _ _ op _ _ _ _ _ hwf _ _ =>
+    cases op with
+    | none => rfl
+    | some o => exact hwf o rfl
+  case store _ _ op _ _ _ _ _ hwf _ _ =>
+    cases op with
+    | none => rfl
+    | some o => exact hwf o rfl
+  case seq =>
+    rename_i ih₁ ih₂ j hj
+    cases hj with
+    | head => exact ih₁
+    | tail _ hj => exact ih₂ j hj
+  all_goals
+    first
+      | rfl
+      | assumption
+      | (rw [InstrSeq.wf_iff_forall]; assumption)
+      | simp_all [Instr.wf, InstrSeq.wf_iff_forall]
+
+/-- Every instruction of a typable sequence satisfies every side condition. -/
+theorem Instrs_ok.wf_of {C : Context} {is : List Instr} {it : InstrType}
+    (h : Instrs_ok C is it) : ∀ i ∈ is, Instr.wf i = true := by
+  induction h using Instrs_ok.rec
+    (motive_1 := fun _ i _ _ => Instr.wf i = true)
+  case load _ _ op _ _ _ _ _ hwf _ _ =>
+    cases op with
+    | none => rfl
+    | some o => exact hwf o rfl
+  case store _ _ op _ _ _ _ _ hwf _ _ =>
+    cases op with
+    | none => rfl
+    | some o => exact hwf o rfl
+  case seq =>
+    rename_i ih₁ ih₂
+    intro j hj
+    cases hj with
+    | head => exact ih₁
+    | tail _ hj => exact ih₂ j hj
+  all_goals
+    first
+      | rfl
+      | assumption
+      | (rw [InstrSeq.wf_iff_forall]; assumption)
+      | simp_all [Instr.wf, InstrSeq.wf_iff_forall]
+
+/-- The contrapositive, which is the form the defect is stated in: an
+instruction that fails a side condition has NO type in ANY context. -/
+theorem Instr_ok.not_of_wf_eq_false {C : Context} {i : Instr} {it : InstrType}
+    (h : Instr.wf i = false) : ¬ Instr_ok C i it := by
+  intro hok
+  rw [Instr_ok.wf_of hok] at h
+  exact Bool.noConfusion h
+
 /-! ## Expressions -/
 
 /-- `relation Expr_ok: context |- expr : resulttype`. -/
@@ -1156,13 +1327,25 @@ inductive Expr_ok : Context → Expr → List ValType → Prop where
   | mk {C : Context} {e : Expr} {ts : List ValType} :
       Instrs_ok C (InstrSeq.toList e) ⟨[], [], ts⟩ → Expr_ok C e ts
 
+/-- A typable expression is an expression of Core 3.0: every side condition of
+every instruction in it holds.  This is the form the module rules consume ---
+`Func_ok`, `Global_ok`, `Table_ok`, `Data_ok` and `Elem_ok` all reach the
+instruction judgment only through `Expr_ok`. -/
+theorem Expr_ok.wf_of {C : Context} {e : Expr} {ts : List ValType}
+    (h : Expr_ok C e ts) : InstrSeq.wf e = true := by
+  cases h with
+  | mk h => exact (InstrSeq.wf_iff_forall e).mpr (Instrs_ok.wf_of h)
+
 /-! ## Constant expressions -/
 
 /-- `relation Instr_const: context |- instr CONST`. -/
 inductive Instr_const : Context → Instr → Prop where
-  /-- `rule Instr_const/const: C |- (CONST nt c_nt) CONST`. -/
+  /-- `rule Instr_const/const: C |- (CONST nt c_nt) CONST`.
+
+  As in `Instr_ok/const`, `c_nt` is a `num_(nt)`. -/
   -- core-rule: Instr_const/const
-  | const {C : Context} {nt : NumType} {c : Num_ nt} : Instr_const C (.const nt c)
+  | const {C : Context} {nt : NumType} {c : Num_ nt} :
+      Num_.wf nt c = true → Instr_const C (.const nt c)
   /-- `rule Instr_const/vconst: C |- (VCONST vt c_vt) CONST`. -/
   -- core-rule: Instr_const/vconst
   | vconst {C : Context} {vt : VecType} {c : VecLit vt.toVnn} :
@@ -1219,6 +1402,29 @@ inductive Expr_const : Context → Expr → Prop where
   -- core-rule: Expr_const
   | mk {C : Context} {e : Expr} :
       SeqAll (Instr_const C) (InstrSeq.toList e) → Expr_const C e
+
+/-- `binop_(Inn)` contains every `BinopI`, at both `I32` and `I64`.  This is why
+`Instr_const/binop` needs no membership premise where `Instr_ok/binop` does: its
+own binders `Inn` and `BinopI` already pin the family, so the condition is
+discharged rather than assumed. -/
+private theorem binop_wf_int (n : Inn) (op : BinopI) :
+    Binop.wf n.toNumType (.int op) = true := by cases n <;> rfl
+
+/-- A constant instruction satisfies every side condition too.  Only
+`Instr_const/const` needed a premise for this; the remaining twelve rules name
+instruction forms `Instr.wf` accepts outright. -/
+theorem Instr_const.wf_of {C : Context} {i : Instr} (h : Instr_const C i) :
+    Instr.wf i = true := by
+  cases h with
+  | const h => exact h
+  | binop _ => rename_i n op _; exact binop_wf_int n op
+  | _ => rfl
+
+/-- Hence a constant expression is an expression of Core 3.0. -/
+theorem Expr_const.wf_of {C : Context} {e : Expr} (h : Expr_const C e) :
+    InstrSeq.wf e = true := by
+  cases h with
+  | mk h => exact (InstrSeq.wf_iff_forall e).mpr (fun i hi => Instr_const.wf_of (h i hi))
 
 /-- `relation Expr_ok_const: context |- expr : valtype CONST`. -/
 inductive Expr_ok_const : Context → Expr → ValType → Prop where
@@ -1285,12 +1491,116 @@ example :
     Expr_ok_const Context.empty (InstrSeq.ofList [.const .i32 default]) ValType.i32 := by
   refine Expr_ok_const.mk (Expr_ok.mk ?_) (Expr_const.mk ?_)
   · rw [InstrSeq.toList_ofList]
-    exact Instrs_ok.seq (ts := []) Instr_ok.const rfl seq_all₂_nil
+    exact Instrs_ok.seq (ts := []) (Instr_ok.const rfl) rfl seq_all₂_nil
       (Instrs_ok.frame Instrs_ok.empty (rt_ok_cons (.num .mk) rt_ok_nil))
   · rw [InstrSeq.toList_ofList]
     refine fun i h => ?_
     cases h with
-    | head => exact .const
+    | head => exact .const rfl
     | tail _ h => nomatch h
+
+/-! ### The tightened rules are still inhabited
+
+A judgment nobody can satisfy would "fix" the width defect by rejecting
+everything, so each family that gained a premise is checked in BOTH directions:
+a derivation that still goes through, and an instruction the pinned syntax does
+not define, shown underivable in EVERY context and at EVERY instruction type.
+The negative half is `Instr_ok.not_of_wf_eq_false`, i.e. it rests on the mutual
+induction above rather than on inspection of one rule. -/
+
+/-- NUMERIC OPERATORS, positive: `I32.EXTEND8_S` types, because `EXTEND 8` is a
+case of `unop_(I32)` --- `8 < $sizenn(I32)`. -/
+example :
+    Instr_ok Context.empty (.unop .i32 (.int (.extend .s8)))
+      ⟨[ValType.i32], [], [ValType.i32]⟩ := .unop rfl
+
+/-- ... negative: `I32.EXTEND32_S` is not a case of `unop_(I32)`, and now has no
+type in any context. -/
+example {C : Context} {it : InstrType} :
+    ¬ Instr_ok C (.unop .i32 (.int (.extend .s32))) it :=
+  Instr_ok.not_of_wf_eq_false (by decide)
+
+/-- ... negative: `F32.CLZ` --- the auditor's own example of a combination the
+untightened judgment admitted --- is underivable. -/
+example {C : Context} {it : InstrType} :
+    ¬ Instr_ok C (.unop .f32 (.int .clz)) it :=
+  Instr_ok.not_of_wf_eq_false (by decide)
+
+/-- CONVERSIONS, positive: `I32.WRAP_I64` types; the result is `I32` and the
+operand `I64`, so `WRAP`'s `size_1 > size_2` holds. -/
+example :
+    Instr_ok Context.empty (.cvtop .i32 .i64 (.ii .wrap))
+      ⟨[.num .i64], [], [ValType.i32]⟩ := .cvtop rfl
+
+/-- ... negative: a `WRAP` in the widening direction is underivable. -/
+example {C : Context} {it : InstrType} :
+    ¬ Instr_ok C (.cvtop .i64 .i32 (.ii .wrap)) it :=
+  Instr_ok.not_of_wf_eq_false (by decide)
+
+/-- VECTOR OPERATORS AND SHAPES, positive: `I8X16.ADD_SAT_S` types at the
+`I8 X 16` shape, whose lanes fill exactly 128 bits. -/
+example :
+    Instr_ok Context.empty
+      (.vbinop { lane := .pack .i8, dim := .d16 } (.int (.addSat .s)))
+      ⟨[ValType.v128, ValType.v128], [], [ValType.v128]⟩ :=
+  .vbinop (by decide) (by decide)
+
+/-- ... negative: `I32X4.POPCNT` fails `POPCNT`'s `$lsizenn(Jnn) = 8`. -/
+example {C : Context} {it : InstrType} :
+    ¬ Instr_ok C (.vunop { lane := .num .i32, dim := .d4 } (.int .popcnt)) it :=
+  Instr_ok.not_of_wf_eq_false (by decide)
+
+/-- ... negative: `I8 X 8` is not a `shape` at all --- its lanes fill 64 bits,
+not 128 --- so no operator types at it. -/
+example {C : Context} {it : InstrType} :
+    ¬ Instr_ok C (.vunop { lane := .pack .i8, dim := .d8 } (.int .abs)) it :=
+  Instr_ok.not_of_wf_eq_false (by decide)
+
+/-- LANE INDEXING, positive: `I8X16.EXTRACT_LANE_S 0` types.  The shape is
+well-formed, the signedness is present because the lane type is packed, and the
+lane index is in range. -/
+example :
+    Instr_ok Context.empty
+      (.vextractLane { lane := .pack .i8, dim := .d16 } (some .s) default)
+      ⟨[ValType.v128], [], [.num .i32]⟩ :=
+  .vextract_lane (by decide) (by decide) (by decide)
+
+/-- ... negative: the same extraction WITHOUT the signedness fails
+`sx? = eps <=> $lanetype(shape) <- I32 I64 F32 F64`. -/
+example {C : Context} {it : InstrType} :
+    ¬ Instr_ok C
+        (.vextractLane { lane := .pack .i8, dim := .d16 } none default) it :=
+  Instr_ok.not_of_wf_eq_false (by decide)
+
+/-- A context with a single 32-bit memory, for the two memory checks. -/
+private def oneMem : Context :=
+  { Context.empty with
+    mems := [{ addr := .i32, lim := { min := default, max := none } }] }
+
+/-- PACKED MEMORY OPERATORS, positive: `I32.LOAD8_S` types against that memory;
+`8 _ S` is a case of `loadop_(I32)` and the alignment fits. -/
+example :
+    Instr_ok oneMem (.load .i32 (some { sz := .s8, sx := .s }) default MemArg.zero)
+      ⟨[ValType.i32], [], [ValType.i32]⟩ :=
+  .load_pack (n := .i32) (op := { sz := .s8, sx := .s }) (x := default)
+    (ao := MemArg.zero) (mt := { addr := .i32, lim := { min := default, max := none } })
+    rfl (by decide) (by decide)
+
+/-- ... negative: a 32-bit `loadop_` at `I32` is not a `loadop_(I32)` --- that
+form is written with no `loadop_` at all --- and is now underivable, in every
+context and at every type. -/
+example {C : Context} {it : InstrType} :
+    ¬ Instr_ok C (.load .i32 (some { sz := .s32, sx := .s }) default MemArg.zero) it :=
+  Instr_ok.not_of_wf_eq_false (by decide)
+
+/-- The whole-expression form: a typable expression is an expression of Core
+3.0.  This is what carries the tightening up to `Func_ok` and `Global_ok`. -/
+example :
+    InstrSeq.wf (InstrSeq.ofList [Instr.const .i32 default]) = true :=
+  Expr_ok.wf_of (C := Context.empty) (ts := [ValType.i32])
+    (Expr_ok.mk (by
+      rw [InstrSeq.toList_ofList]
+      exact Instrs_ok.seq (ts := []) (Instr_ok.const rfl) rfl seq_all₂_nil
+        (Instrs_ok.frame Instrs_ok.empty (rt_ok_cons (.num .mk) rt_ok_nil))))
 
 end WasmGemmGnaf.Wasm.Core

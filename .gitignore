@@ -27,6 +27,9 @@
 /.gate_decl.lean
 /.axioms_probe.lean
 /.required_probe.lean
+/.core_probe.lean
+/.signature_probe.lean
+/.adversary_probe.lean
 
 # Scratch Lean. Anything under `WasmGemmGnaf/` that belongs to no SPEC section 5
 # layer is rejected by `just root-check` rather than ignored here -- a scratch

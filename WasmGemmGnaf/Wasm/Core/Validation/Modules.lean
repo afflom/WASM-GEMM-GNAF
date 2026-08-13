@@ -354,6 +354,121 @@ inductive Module_ok : Module → ModuleType → Prop where
       funcsXt xtsI = some dtsI →
       Module_ok m (C.closModuleType ⟨xtsI, xtsE⟩)
 
+/-! ## The instruction side conditions reach the module level
+
+`Instr_ok` now carries the membership condition of every indexed operator and
+shape it mentions, and `Instr_ok.wf_of` turns that into: a typable instruction
+satisfies every `-- if` the pinned syntax fragments carry.  The module rules
+reach the instruction judgment only through `Expr_ok`, so the same holds of
+every expression of every module `Module_ok` accepts --- the initialisers, the
+offsets and the function bodies alike.  That is what the theorems below say, and
+it is the statement the width defect was about: the accepted set is Core's, not
+a superset of it.
+
+What they do NOT say is anything about the `/syn` phase invariant.  The pinned
+validation admits `BOT` outright (`rule Valtype_ok/bot`), so `Module_ok` cannot
+imply `Module.isSyn` and does not carry it as a premise: adding one would make
+the judgment NARROWER than Core's, which is the same kind of error in the other
+direction.  The phase invariant belongs to the module SORT, and lives in
+`Core/Modules.lean` as `Module.isSyn`. -/
+
+/-- From a lockstep `(...)* ` premise together with the length agreement it
+comes with: every member of the left sequence is related to SOME member of the
+right one.  `SeqAll₂` is indexed rather than membership-based, for the
+strict-positivity reason given in `Core/Context.lean`. -/
+private theorem seqAll₂_mem {α β : Type} {R : α → β → Prop}
+    {as : List α} {bs : List β} (hlen : SeqLen₂ as bs) (h : SeqAll₂ R as bs) :
+    ∀ a ∈ as, ∃ b, R a b := by
+  intro a ha
+  rcases List.mem_iff_getElem.mp ha with ⟨i, hi, rfl⟩
+  have hb : i < bs.length := by omega
+  exact ⟨bs[i], h i _ _ (List.getElem?_eq_getElem hi) (List.getElem?_eq_getElem hb)⟩
+
+/-- A validated global's initialiser satisfies every instruction side
+condition. -/
+theorem Global_ok.wf_of {C : Context} {g : Global} {gt : GlobalType}
+    (h : Global_ok C g gt) : Global.wf g = true := by
+  cases h with
+  | mk _ hc => cases hc with | mk he _ => exact Expr_ok.wf_of he
+
+/-- ... and so does a validated table's. -/
+theorem Table_ok.wf_of {C : Context} {t : Table} {tt : TableType}
+    (h : Table_ok C t tt) : Table.wf t = true := by
+  cases h with
+  | mk _ hc => cases hc with | mk he _ => exact Expr_ok.wf_of he
+
+/-- ... and a validated function's body. -/
+theorem Func_ok.wf_of {C : Context} {f : Func} {dt : DefType}
+    (h : Func_ok C f dt) : Func.wf f = true := by
+  cases h with
+  | mk _ _ _ _ he => exact Expr_ok.wf_of he
+
+/-- ... and the offset expression of a validated `datamode`. -/
+theorem Datamode_ok.wf_of {C : Context} {dm : DataMode} {dt : DataType}
+    (h : Datamode_ok C dm dt) : DataMode.wf dm = true := by
+  cases h with
+  | passive => rfl
+  | active _ hc => cases hc with | mk he _ => exact Expr_ok.wf_of he
+
+/-- ... hence of a validated data segment. -/
+theorem Data_ok.wf_of {C : Context} {d : Data} {dt : DataType}
+    (h : Data_ok C d dt) : Data.wf d = true := by
+  cases h with
+  | mk h => exact Datamode_ok.wf_of h
+
+/-- ... and the offset expression of a validated `elemmode`. -/
+theorem Elemmode_ok.wf_of {C : Context} {em : ElemMode} {rt : ElemType}
+    (h : Elemmode_ok C em rt) : ElemMode.wf em = true := by
+  cases h with
+  | passive => rfl
+  | declare => rfl
+  | active _ _ hc => cases hc with | mk he _ => exact Expr_ok.wf_of he
+
+/-- ... hence of a validated element segment, initialisers included. -/
+theorem Elem_ok.wf_of {C : Context} {e : Elem} {rt : ElemType}
+    (h : Elem_ok C e rt) : Elem.wf e = true := by
+  cases h with
+  | mk _ hinit hmode =>
+      have h₁ : e.init.all InstrSeq.wf = true :=
+        List.all_eq_true.mpr (fun ex hex => by
+          cases hinit ex hex with | mk he _ => exact Expr_ok.wf_of he)
+      simp [Elem.wf, h₁, Elemmode_ok.wf_of hmode]
+
+/-- ... and of every global in a validated global section. -/
+theorem Globals_ok.wf_of {C : Context} {gs : List Global} {gts : List GlobalType}
+    (h : Globals_ok C gs gts) : gs.all Global.wf = true := by
+  induction h with
+  | empty => rfl
+  | cons hg _ ih => simp [Global_ok.wf_of hg, ih]
+
+/-- EVERY expression of a validated module is an expression of Core 3.0: no
+instruction in it is outside the operator family, shape or width its own form
+requires.  This is the module-level form of `Instr_ok.wf_of`, and it is the
+property a validator that admitted `F32.CLZ` would not have. -/
+theorem Module_ok.exprs_wf {m : Module} {mt : ModuleType} (h : Module_ok m mt) :
+    (m.globals.all Global.wf && m.tables.all Table.wf && m.funcs.all Func.wf &&
+      m.datas.all Data.wf && m.elems.all Elem.wf) = true := by
+  cases h with
+  | mk _ _ _ _ _ hg _ _ hlt htt hlf hf hld hd hle he _ _ _ _ _ _ _ _ _ _ _ _ =>
+      have hglob : m.globals.all Global.wf = true := Globals_ok.wf_of hg
+      have htab : m.tables.all Table.wf = true :=
+        List.all_eq_true.mpr (fun t ht => by
+          rcases seqAll₂_mem hlt htt t ht with ⟨_, hok⟩
+          exact Table_ok.wf_of hok)
+      have hfun : m.funcs.all Func.wf = true :=
+        List.all_eq_true.mpr (fun f hfm => by
+          rcases seqAll₂_mem hlf hf f hfm with ⟨_, hok⟩
+          exact Func_ok.wf_of hok)
+      have hdat : m.datas.all Data.wf = true :=
+        List.all_eq_true.mpr (fun d hdm => by
+          rcases seqAll₂_mem hld hd d hdm with ⟨_, hok⟩
+          exact Data_ok.wf_of hok)
+      have hele : m.elems.all Elem.wf = true :=
+        List.all_eq_true.mpr (fun e hem => by
+          rcases seqAll₂_mem hle he e hem with ⟨_, hok⟩
+          exact Elem_ok.wf_of hok)
+      simp [hglob, htab, hfun, hdat, hele]
+
 /-! ## Sanity checks
 
 Kernel-checked derivations, not tests. -/

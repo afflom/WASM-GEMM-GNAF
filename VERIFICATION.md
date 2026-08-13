@@ -16,6 +16,7 @@ would mean the gate had been weakened.
 | `just schema` | every `scopeCriticalDefinitions` entry of the frozen `WGG-GO-1` authority is bound to its fully spelled-out body by `Iff.rfl` / `rfl` | `M11` |
 | `just signature` | every SPEC §15 declaration the compiled environment credits is bound to SPEC's **proposition** — restated in full in `Conformance/RequiredSignatures.lean` and closed by `:= @Name`, so the comparison is definitional | `M15` |
 | `just vendor` | the vendored Core 3.0 tree, recomputed from CONTENT, matches the literals `Wasm.profile_matches_pinned_revision` stands on — the digest of `SHA256SUMS`, the per-file digests, the file count, the pinned commit — and every vendored rule anchor the conformance map cites is a label the vendored sources define | `M13` |
+| `just independence` | the declarative side of each reflection theorem is neither DEFINED nor PROVED through its executable side (SPEC §7.3); `just required` demotes what it rejects | `M16` |
 | `just core` | how much of the pinned Core 3.0 front end the Lean tree covers, against a checklist extracted from the vendored SpecTec sources; a marker naming an item those sources do not define fails | `M14` |
 | `just mutation` | each decisive checker rejects a planted fault | self-testing |
 | `just docs` | `CONFORMANCE.md` is generated, deterministic, byte-clean | `reproducible.yml` |
@@ -61,6 +62,7 @@ to a **copy**, never to the repository.
 | M12 | GO | a required declaration present but choice-tainted | SPEC §15 inventory reports `TAINTED`, not discharged |
 | M13 | WS | a flipped digest, an appended line and a deleted entry in `vendor/wasm-spec/SHA256SUMS`, each on a copy of the vendored tree | `vendor::binding`, the checker `just vendor` and release gate step 1 both call |
 | M15 | CM | a required SPEC §15 **name** carrying the type `Nat`, bound at `:= 0`; plus a deleted marker, a tactic-closed binding, a marker naming something SPEC does not require, and a stale SPEC quotation, each on a copy of the binding source | the `:= @Name` coercion in `Conformance/RequiredSignatures.lean`, and `signature::audit` / `required::apply_signatures`, which `just signature`, `just required` and release gate step 2 all call |
+| M16 | GO | a reflection theorem whose declarative side is its executable side, attacked through the real checker with planted tables, plus a nothing-forbidden control and a direct attack on the demotion rule | `independence::report_over` and `required::apply_independence`, which `just independence`, `just required` and release gate step 2 all call |
 
 ## What a *name* proves, and what it does not
 

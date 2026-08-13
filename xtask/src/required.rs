@@ -45,6 +45,15 @@ pub struct Report {
     /// Present and choice-free, but with no `-- spec-signature:` binding, so not
     /// known to carry SPEC's proposition. Also counted in `missing`.
     pub unsigned: Vec<String>,
+    /// Present, signed, but whose reflection independence fails: the declarative
+    /// side is defined or proved through the executable side, so the theorem is
+    /// circular. Also counted in `missing`.
+    pub circular: Vec<String>,
+    /// Credited, and bound -- but to a proposition this repository CHOSE, because
+    /// SPEC 15 lists the name while no section states it in a fenced block. The
+    /// binding is exact against that reading; there is no SPEC text to compare
+    /// it with. Reported so the headline number never appears without it.
+    pub in_house: usize,
 }
 
 impl Report {
@@ -78,9 +87,31 @@ impl Report {
                 ));
             }
         }
+        if self.in_house > 0 {
+            out.push(format!(
+                "  of which bound to an IN-HOUSE reading -- SPEC states no fenced \
+                 proposition for the name: {}",
+                self.in_house
+            ));
+        }
+        if !self.circular.is_empty() {
+            out.push(format!(
+                "  of which circular -- the declarative side is the executable side: {}",
+                self.circular.len()
+            ));
+            for name in &self.circular {
+                out.push(format!(
+                    "    CIRCULAR {name}  (reflection independence fails, SPEC 7.3; \
+                     run `xtask independence`)"
+                ));
+            }
+        }
         if list {
             for name in &self.missing {
-                if !self.tainted.contains(name) && !self.unsigned.contains(name) {
+                if !self.tainted.contains(name)
+                    && !self.unsigned.contains(name)
+                    && !self.circular.contains(name)
+                {
                     out.push(format!("    MISSING  {name}"));
                 }
             }
@@ -215,18 +246,60 @@ pub fn run(root: &Path, list: bool, check: bool) -> Result<Outcome> {
 }
 
 /// The SPEC section 15 inventory: the compiled environment's answer, then the
-/// signature bindings applied to it.
+/// signature bindings, then reflection independence.
 ///
-/// Both halves are needed and neither is sufficient. `#print axioms` decides
-/// whether a declaration EXISTS and what it rests on; only the elaborated
-/// `:= @Name` bindings in `Conformance/RequiredSignatures.lean` decide whether it
-/// carries SPEC's PROPOSITION. An external audit found this command crediting a
-/// name whose type was `Nat`, which is exactly the gap the second half closes.
+/// Three halves, and none is sufficient. `#print axioms` decides whether a
+/// declaration EXISTS and what it rests on. The elaborated `:= @Name` bindings
+/// in `Conformance/RequiredSignatures.lean` decide whether it carries SPEC's
+/// PROPOSITION -- an external audit found this command crediting a name whose
+/// type was `Nat`. And `xtask independence` decides, for the reflection
+/// theorems, whether the declarative side is genuinely independent of the
+/// executable side -- four audits called those three names circular while the
+/// first two checks passed them, because a circular theorem has the right name
+/// AND the right statement AND a clean axiom closure. Only the proof term shows
+/// it.
 pub fn report(root: &Path) -> Result<Report> {
     let mut report = environment_report(root)?;
     let bindings = crate::signature::tracked_bindings()?;
     apply_signatures(&mut report, &crate::signature::exact_names(&bindings));
+    apply_independence(&mut report, &crate::independence::report(root)?.rejected());
+
+    // How many credited names are bound to a proposition SPEC never states in a
+    // fenced block. An adversarial review found one such -- SPEC 15 lists
+    // `Atlas.seal_verifier_reconstructs_every_preimage` but no section states it
+    // -- and observed that the ledger credits it identically to a
+    // verbatim-fenced one. It is not a defect and the binding is honest, but
+    // "37 of 58" should never be read as 37 SPEC-fenced statements.
+    let spec = std::fs::read(Path::new("SPEC.md"))
+        .map(|b| String::from_utf8_lossy(&b).into_owned())
+        .map_err(|e| SpecError::io(CLAUSE, "cannot read", Path::new("SPEC.md"), e))?;
+    report.in_house = bindings
+        .iter()
+        .filter(|b| {
+            !report.missing.contains(&b.name) && crate::signature::spec_block(&spec, &b.name).is_none()
+        })
+        .count();
     Ok(report)
+}
+
+/// Demote every credited name whose reflection independence fails.
+///
+/// Pure and separate for the same reason `apply_signatures` is: `M16` attacks
+/// this rule directly, and emptying this function must turn it red.
+pub fn apply_independence(report: &mut Report, rejected: &[String]) {
+    let circular: Vec<String> = report
+        .credited
+        .iter()
+        .filter(|name| rejected.iter().any(|r| r == *name))
+        .cloned()
+        .collect();
+    for name in &circular {
+        if !report.missing.contains(name) {
+            report.missing.push(name.clone());
+            report.discharged = report.discharged.saturating_sub(1);
+        }
+    }
+    report.circular = circular;
 }
 
 /// The compiled environment's answer alone: present, and choice-free where SPEC
@@ -315,7 +388,7 @@ pub fn classify(names: &[&str], flat: &str) -> Report {
         }
     }
 
-    Report { total: names.len(), discharged, missing, tainted, credited, unsigned: Vec::new() }
+    Report { total: names.len(), discharged, missing, tainted, credited, unsigned: Vec::new(), circular: Vec::new(), in_house: 0 }
 }
 
 /// The declaration list fenced in SPEC section 15.

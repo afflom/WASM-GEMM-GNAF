@@ -31,10 +31,14 @@
   implicit, because an implicit `otherwise` is a rule that claims more than it
   states.
 
-  WHAT IS NOT HERE.  The lanewise meaning of the vector operators
-  (`3.2-numerics.vector.spectec`) is a parameter, carried by `Numerics`; see the
-  header of `Core/Numerics.lean`.  The rules that invoke those operators are
-  transcribed; their operators are not.
+  WHAT `Numerics` IS.  The lanewise meaning of the vector operators
+  (`3.2-numerics.vector.spectec`) is transcribed in `Core/Numerics.lean` and is
+  reached below through `Numerics` by ordinary dot notation: `Nm.vbinop_`,
+  `Nm.vcvtop__` and the rest are DEFINITIONS, not fields, so the relation is
+  pinned to the source's own equations rather than quantified over every
+  interpretation of them.  What `Nm` still quantifies over is exactly what the
+  pinned source leaves abstract -- its 74 `hint(builtin)` primitives, of which
+  this development calls 61 -- and `Core/Numerics.lean`'s header names them.
 -/
 import WasmGemmGnaf.Wasm.Core.Runtime
 
@@ -534,14 +538,14 @@ inductive Step_pure (Nm : Numerics) : List AdminInstr → List AdminInstr → Pr
       -- if i = $vtestop_(sh, vtestop, c_1)`. -/
   -- core-exec: Step_pure/vtestop
   | vtestop {sh : Shape} {op : VTestop} {c₁ : V128Lit} {i : U32} :
-      Nm.vtestop_ sh op c₁ = i →
+      Nm.vtestop_ sh op c₁ = some i →
       Step_pure Nm [.plain (.vconst .v128 c₁), .plain (.vtestop sh op)] [constI32 i]
   /-- `rule Step_pure/vrelop:
       (VCONST V128 c_1) (VCONST V128 c_2) (VRELOP sh vrelop) ~> (VCONST V128 c)
       -- if c = $vrelop_(sh, vrelop, c_1, c_2)`. -/
   -- core-exec: Step_pure/vrelop
   | vrelop {sh : Shape} {op : VRelop} {c₁ c₂ c : V128Lit} :
-      Nm.vrelop_ sh op c₁ c₂ = c →
+      Nm.vrelop_ sh op c₁ c₂ = some c →
       Step_pure Nm [.plain (.vconst .v128 c₁), .plain (.vconst .v128 c₂),
         .plain (.vrelop sh op)] [.plain (.vconst .v128 c)]
   /-- `rule Step_pure/vshiftop:
@@ -549,21 +553,21 @@ inductive Step_pure (Nm : Numerics) : List AdminInstr → List AdminInstr → Pr
       -- if c = $vshiftop_(sh, vshiftop, c_1, i)`. -/
   -- core-exec: Step_pure/vshiftop
   | vshiftop {sh : IShape} {op : VShiftop} {c₁ c : V128Lit} {i : U32} :
-      Nm.vshiftop_ sh op c₁ i = c →
+      Nm.vshiftop_ sh op c₁ i = some c →
       Step_pure Nm [.plain (.vconst .v128 c₁), constI32 i, .plain (.vshiftop sh op)]
         [.plain (.vconst .v128 c)]
   /-- `rule Step_pure/vbitmask: (VCONST V128 c_1) (VBITMASK sh) ~> (CONST I32 c)
       -- if c = $vbitmaskop_(sh, c_1)`. -/
   -- core-exec: Step_pure/vbitmask
   | vbitmask {sh : IShape} {c₁ : V128Lit} {c : U32} :
-      Nm.vbitmaskop_ sh c₁ = c →
+      Nm.vbitmaskop_ sh c₁ = some c →
       Step_pure Nm [.plain (.vconst .v128 c₁), .plain (.vbitmask sh)] [constI32 c]
   /-- `rule Step_pure/vswizzlop:
       (VCONST V128 c_1) (VCONST V128 c_2) (VSWIZZLOP sh swizzlop) ~> (VCONST V128 c)
       -- if c = $vswizzlop_(sh, swizzlop, c_1, c_2)`. -/
   -- core-exec: Step_pure/vswizzlop
   | vswizzlop {sh : BShape} {op : VSwizzlop} {c₁ c₂ c : V128Lit} :
-      Nm.vswizzlop_ sh op c₁ c₂ = c →
+      Nm.vswizzlop_ sh op c₁ c₂ = some c →
       Step_pure Nm [.plain (.vconst .v128 c₁), .plain (.vconst .v128 c₂),
         .plain (.vswizzlop sh op)] [.plain (.vconst .v128 c)]
   /-- `rule Step_pure/vshuffle:
@@ -571,7 +575,7 @@ inductive Step_pure (Nm : Numerics) : List AdminInstr → List AdminInstr → Pr
       -- if c = $vshufflop_(sh, i*, c_1, c_2)`. -/
   -- core-exec: Step_pure/vshuffle
   | vshuffle {sh : BShape} {is : List LaneIdx} {c₁ c₂ c : V128Lit} :
-      Nm.vshufflop_ sh is c₁ c₂ = c →
+      Nm.vshufflop_ sh is c₁ c₂ = some c →
       Step_pure Nm [.plain (.vconst .v128 c₁), .plain (.vconst .v128 c₂),
         .plain (.vshuffle sh is)] [.plain (.vconst .v128 c)]
   /-- `rule Step_pure/vsplat:
@@ -617,7 +621,7 @@ inductive Step_pure (Nm : Numerics) : List AdminInstr → List AdminInstr → Pr
       -- if $vextunop__(sh_1, sh_2, vextunop, c_1) = c`. -/
   -- core-exec: Step_pure/vextunop
   | vextunop {sh₁ sh₂ : IShape} {op : VExtUnop} {c₁ c : V128Lit} :
-      Nm.vextunop__ sh₁ sh₂ op c₁ = c →
+      Nm.vextunop__ sh₁ sh₂ op c₁ = some c →
       Step_pure Nm [.plain (.vconst .v128 c₁), .plain (.vextunop sh₂ sh₁ op)]
         [.plain (.vconst .v128 c)]
   /-- `rule Step_pure/vextbinop:
@@ -625,7 +629,7 @@ inductive Step_pure (Nm : Numerics) : List AdminInstr → List AdminInstr → Pr
       ~> (VCONST V128 c)  -- if $vextbinop__(sh_1, sh_2, vextbinop, c_1, c_2) = c`. -/
   -- core-exec: Step_pure/vextbinop
   | vextbinop {sh₁ sh₂ : IShape} {op : VExtBinop} {c₁ c₂ c : V128Lit} :
-      Nm.vextbinop__ sh₁ sh₂ op c₁ c₂ = c →
+      Nm.vextbinop__ sh₁ sh₂ op c₁ c₂ = some c →
       Step_pure Nm [.plain (.vconst .v128 c₁), .plain (.vconst .v128 c₂),
         .plain (.vextbinop sh₂ sh₁ op)] [.plain (.vconst .v128 c)]
   /-- `rule Step_pure/vextternop:
@@ -634,7 +638,7 @@ inductive Step_pure (Nm : Numerics) : List AdminInstr → List AdminInstr → Pr
       -- if $vextternop__(sh_1, sh_2, vextternop, c_1, c_2, c_3) = c`. -/
   -- core-exec: Step_pure/vextternop
   | vextternop {sh₁ sh₂ : IShape} {op : VExtTernop} {c₁ c₂ c₃ c : V128Lit} :
-      Nm.vextternop__ sh₁ sh₂ op c₁ c₂ c₃ = c →
+      Nm.vextternop__ sh₁ sh₂ op c₁ c₂ c₃ = some c →
       Step_pure Nm [.plain (.vconst .v128 c₁), .plain (.vconst .v128 c₂),
         .plain (.vconst .v128 c₃), .plain (.vextternop sh₂ sh₁ op)]
         [.plain (.vconst .v128 c)]
@@ -643,7 +647,7 @@ inductive Step_pure (Nm : Numerics) : List AdminInstr → List AdminInstr → Pr
       -- if c = $vnarrowop__(sh_1, sh_2, sx, c_1, c_2)`. -/
   -- core-exec: Step_pure/vnarrow
   | vnarrow {sh₁ sh₂ : IShape} {sx : Sx} {c₁ c₂ c : V128Lit} :
-      Nm.vnarrowop__ sh₁ sh₂ sx c₁ c₂ = c →
+      Nm.vnarrowop__ sh₁ sh₂ sx c₁ c₂ = some c →
       Step_pure Nm [.plain (.vconst .v128 c₁), .plain (.vconst .v128 c₂),
         .plain (.vnarrow sh₂ sh₁ sx)] [.plain (.vconst .v128 c)]
   /-- `rule Step_pure/vcvtop:
@@ -651,7 +655,7 @@ inductive Step_pure (Nm : Numerics) : List AdminInstr → List AdminInstr → Pr
       -- if c = $vcvtop__(sh_1, sh_2, vcvtop, c_1)`. -/
   -- core-exec: Step_pure/vcvtop
   | vcvtop {sh₁ sh₂ : Shape} {op : VCvtop} {c₁ c : V128Lit} :
-      Nm.vcvtop__ sh₁ sh₂ op c₁ = c →
+      c ∈ Nm.vcvtop__ sh₁ sh₂ op c₁ →
       Step_pure Nm [.plain (.vconst .v128 c₁), .plain (.vcvtop sh₂ sh₁ op)]
         [.plain (.vconst .v128 c)]
 

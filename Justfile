@@ -94,6 +94,15 @@ releasepath: tools
 vendor: tools
     @{{xtask}} vendor --list
 
+# SPEC 7.3: a reflection theorem's declarative side must not be defined or
+# proved through its executable side. Four audits called decode_sound,
+# decode_complete and validate_iff_declarative circular while every other gate
+# passed them -- right name, right statement, clean axioms. Only the proof term
+# shows it, so this reads `#print` on both and `just required` demotes what it
+# rejects.
+independence: tools
+    @{{xtask}} independence
+
 # SPEC 7.1: how much of the PINNED Core 3.0 front end the Lean tree covers. The
 # checklist is EXTRACTED from the vendored SpecTec sources -- every opcode
 # production, typing rule, syntax production and execution rule -- so it cannot
