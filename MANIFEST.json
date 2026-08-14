@@ -38,8 +38,8 @@
       },
       {
         "path": "CERTIFICATION.md",
-        "sha256": "d280db33bbe02f948ad1013b8c14c2242c997943fe0de7aee8b399405eaac4fc",
-        "bytes": 27596
+        "sha256": "f04e5ff2158393c6784904734c509f65fb5c110c2befd1d768ce4161e6c3d66f",
+        "bytes": 22504
       },
       {
         "path": "Cargo.lock",
@@ -68,13 +68,13 @@
       },
       {
         "path": "README.md",
-        "sha256": "d09c03bfbc6a57f0d4e4e4763202291c23a49130a90200f8054d9fc3cff0f485",
-        "bytes": 5185
+        "sha256": "8441f5a4f7b867fdb1f2f33ffcb0a981d55f907b404190b78934549e9626e504",
+        "bytes": 5806
       },
       {
         "path": "SPEC.md",
-        "sha256": "c58d1a19c13a8a175341d2720a26346be9191864bf0c0aefae8e8bea9b83c223",
-        "bytes": 173657
+        "sha256": "10fa785ebafcc2d20aa9b59cbc719023ca4d3ac0efa9a3a762c10c0e183082f6",
+        "bytes": 180732
       },
       {
         "path": "Tests/README.md",
@@ -83,33 +83,33 @@
       },
       {
         "path": "VERIFICATION.md",
-        "sha256": "0d3f7f794a53cf28dd94112cb86c121c4d4805280429dfa830ee1e92ac954351",
-        "bytes": 14088
+        "sha256": "b59a8093d7ba67136dcfbaed07d24544a1e588e7613745012072018c313c8390",
+        "bytes": 16779
       },
       {
         "path": "WasmGemmGnaf/Artifact/Baseline.lean",
-        "sha256": "874e57ff1c7c7eab1ff2f2d18159ecf6078f49090239536e68567172fedebf02",
-        "bytes": 20298
+        "sha256": "b71c1b970a99e79a63d0eaf4dd5fe2de7337d94cf76829cd7c95a4ea9cd326b3",
+        "bytes": 4268
       },
       {
         "path": "WasmGemmGnaf/Artifact/Emit.lean",
-        "sha256": "2997acf43fa4b3d6b5fa29d85702d6bde5182b83976c08183f728fc9f83f76ce",
-        "bytes": 3745
+        "sha256": "4ce1317013773ac8360c1dcd31c6bd4e3cd1ffd7fd76b5e8f37cef664c5e15b1",
+        "bytes": 1080
       },
       {
         "path": "WasmGemmGnaf/Artifact/Release.lean",
-        "sha256": "a361dbe3f11b3af2cfdaa851475e18f55924e44bff30d558a1756ae1d5f92ae3",
-        "bytes": 97321
+        "sha256": "4df40e09b134fda65a516e579414714969dca8ae19f61a9d60471c411a3ea788",
+        "bytes": 88532
       },
       {
         "path": "WasmGemmGnaf/Atlas/Attention.lean",
-        "sha256": "6627370f7397e49a1a371060f1dec4941536b9a85a4d9cbf6117924c06d97da6",
-        "bytes": 15087
+        "sha256": "5177f115774a858faba0a3672de17dedb22bc6c1482fa84efb9c84f7b8a45235",
+        "bytes": 15219
       },
       {
         "path": "WasmGemmGnaf/Atlas/AttentionCoverage.lean",
-        "sha256": "a62cdb8141f5d3f3e973f79d65dffea64a900d1fdf0fa2407656e98774d28e77",
-        "bytes": 40530
+        "sha256": "fe145103796e127003f9d68ce6236fd8e616ce77347abebd89d34d2980d9fbab",
+        "bytes": 17545
       },
       {
         "path": "WasmGemmGnaf/Atlas/Certificate.lean",
@@ -123,8 +123,8 @@
       },
       {
         "path": "WasmGemmGnaf/Atlas/CoverageScope.lean",
-        "sha256": "790a8b449f35dcf40cdc206c425c890434310d598ffdf459a157b1693c4e806b",
-        "bytes": 3137
+        "sha256": "86e6cd1d41d949363417db11b827198585275e7c1de21e3fed609186b30df5af",
+        "bytes": 3126
       },
       {
         "path": "WasmGemmGnaf/Atlas/Delta.lean",
@@ -208,13 +208,13 @@
       },
       {
         "path": "WasmGemmGnaf/Conformance/RequiredSignatures.lean",
-        "sha256": "225a89871d96641a941129efc13f1eae2697120d2c9730a3f59b5986dddd06dd",
-        "bytes": 52594
+        "sha256": "ae23198f7ae5033cf659487894b1efc12921dc45f446bd9a9ed2fd4964289210",
+        "bytes": 55285
       },
       {
         "path": "WasmGemmGnaf/Conformance/Schema.lean",
-        "sha256": "27780ec6d83608e36816886f531e9c9d8228993797fd853326d316c874b5a5e5",
-        "bytes": 18335
+        "sha256": "6b092247c8f5c3875f151aa473cea1476c54dc209e4a2a3ea682e249b7700d25",
+        "bytes": 19050
       },
       {
         "path": "WasmGemmGnaf/Cost/Aggregate.lean",
@@ -267,9 +267,19 @@
         "bytes": 7983
       },
       {
+        "path": "WasmGemmGnaf/Foundation/ExactFloat.lean",
+        "sha256": "fde3b6d759e82e196cac87a5b2283daf06cda5a83e1cb697daec857b528415fb",
+        "bytes": 14289
+      },
+      {
         "path": "WasmGemmGnaf/Foundation/Finite.lean",
         "sha256": "cbf2e8c28695390a727d9ad0326e1ae7162ce311d431089567027acc0770cd32",
         "bytes": 12766
+      },
+      {
+        "path": "WasmGemmGnaf/Foundation/FloatBits.lean",
+        "sha256": "36ed1ac25e92c796e70abd69aaef5c8ec28f22186adf917d7c1c2d05b492d5ba",
+        "bytes": 16171
       },
       {
         "path": "WasmGemmGnaf/Foundation/Identity.lean",
@@ -287,6 +297,11 @@
         "bytes": 10135
       },
       {
+        "path": "WasmGemmGnaf/Foundation/Rounding.lean",
+        "sha256": "e32b41cb5a1eaed9c99885409155b34beffbdecbd8bd46cf1f39a41fb9ecf890",
+        "bytes": 3669
+      },
+      {
         "path": "WasmGemmGnaf/Foundation/SchemaRegistry.lean",
         "sha256": "d9acc48051a4a5fd75f135e94458d116048ec8862a0802b9fffc958e423df892",
         "bytes": 11463
@@ -298,18 +313,18 @@
       },
       {
         "path": "WasmGemmGnaf/GNAF/Compile.lean",
-        "sha256": "509d298274f4d6bd72511ef1bb5c92b01097cd5cc373b96d0fa1363f473abefc",
-        "bytes": 83646
+        "sha256": "18c683a113aa7fcec4fd6e6de3cbe5f03c252e94c5ef7bba2a0b51fe26d0f3dc",
+        "bytes": 84130
       },
       {
         "path": "WasmGemmGnaf/GNAF/CompileCorrect.lean",
-        "sha256": "911500419fe5254b4f729800d05ac7b40fc1bfcdaefc733714d478ca4791fa95",
-        "bytes": 87127
+        "sha256": "0fc2bfb3d51e5549f995a8a38aefba25048892feced596e5f3ce1f436c2ab573",
+        "bytes": 85876
       },
       {
         "path": "WasmGemmGnaf/GNAF/CoreGap.lean",
-        "sha256": "fc7646da1f9d35259dc4f90efff4935898908e58c5dd7cc8b51784428e0dd963",
-        "bytes": 8171
+        "sha256": "0cbb160509bef538ad62a5074af46f8fb2b0b03d684a5104750de7c686e8a8d4",
+        "bytes": 8318
       },
       {
         "path": "WasmGemmGnaf/GNAF/Edge.lean",
@@ -363,8 +378,8 @@
       },
       {
         "path": "WasmGemmGnaf/Gemm/Arithmetic.lean",
-        "sha256": "89ce4e3464caa4ecd2ff410c602716906cc4cc2a73aa5ca527122840c3e54af0",
-        "bytes": 33725
+        "sha256": "c26eb3a0ad8b522aee485339c451f6c18080d3804326f1b418805a18838afc4d",
+        "bytes": 30402
       },
       {
         "path": "WasmGemmGnaf/Gemm/Classify.lean",
@@ -377,9 +392,14 @@
         "bytes": 12249
       },
       {
+        "path": "WasmGemmGnaf/Gemm/ExactFloat.lean",
+        "sha256": "18ae42b0774f5be88c912cb33529c56bc9d035da3e65f0f199515ebd65ef4d48",
+        "bytes": 3226
+      },
+      {
         "path": "WasmGemmGnaf/Gemm/FloatBits.lean",
-        "sha256": "677fb225adcccde7e6ab22bb710577c8903866ab1560d27dc9a5302715c438b4",
-        "bytes": 18493
+        "sha256": "4019fdc3e220cc2d4d4b5f90a58f1e307bf379cf1b708ca6c137aa6293736901",
+        "bytes": 2362
       },
       {
         "path": "WasmGemmGnaf/Gemm/Layout.lean",
@@ -398,8 +418,8 @@
       },
       {
         "path": "WasmGemmGnaf/Gemm/Reference.lean",
-        "sha256": "5247d77edccd213685e744f0facf0e446f0422a17c6d73068ce54d90b4c90239",
-        "bytes": 85053
+        "sha256": "22849b725b0e9cc0b0c373c97c357014ca6f14bbf69b8c88eb317b8eb657e843",
+        "bytes": 73144
       },
       {
         "path": "WasmGemmGnaf/Gemm/Scalar.lean",
@@ -413,53 +433,53 @@
       },
       {
         "path": "WasmGemmGnaf/Theorems/AtlasLaws.lean",
-        "sha256": "21c449dd24d6d7169595f18266d87d7570a9196fb5d0d61f96c3e17c1f2d1f5c",
-        "bytes": 11047
+        "sha256": "82299ad4dc9a67dade3d079d3f678bac91b25a7339649e85e75f664c578638bf",
+        "bytes": 11010
       },
       {
         "path": "WasmGemmGnaf/Theorems/CostModel.lean",
-        "sha256": "b6760f0d9bae7fd179c97f7611c50e662b82906133c243a31668a4a364efc4ec",
-        "bytes": 12926
+        "sha256": "ee0e274e9eb91ddd03b13e4808ee252cd094758718c7648cf0779fd116e25dc6",
+        "bytes": 13077
       },
       {
         "path": "WasmGemmGnaf/Theorems/GemmTotal.lean",
-        "sha256": "639a2cd1588828c8bbf986b3f367bca3ca9d48e2e1b0f2957885bad24e2e70db",
-        "bytes": 13800
+        "sha256": "6a76e910b078a0132f5230d72f50f12979f876bf1188a6f3a3dc4016ade4b982",
+        "bytes": 13349
       },
       {
         "path": "WasmGemmGnaf/Theorems/Release.lean",
-        "sha256": "56755f94b95c20d1aedb368dd0220edebb520b32ef998c32945ca7a386c0474e",
-        "bytes": 18068
+        "sha256": "d77bdb3f10791e96f31a473f300c903d546ff3c306a39b825334d7ad5158bde5",
+        "bytes": 16189
       },
       {
         "path": "WasmGemmGnaf/Theorems/Status.lean",
-        "sha256": "de9f6921717a85e3e8e7a86b73c6d2f90bb83dac532c5829f1d6b2f8d3081799",
-        "bytes": 61137
+        "sha256": "f8daa68821cf6430e96c95a565a87d655361ffdc57c517b1fb664821683bf5c8",
+        "bytes": 3125
       },
       {
         "path": "WasmGemmGnaf/Theorems/WasmModel.lean",
-        "sha256": "dd293dc31726bf40042cea60e3bb0c63dd27546450bc14ef22bc1928e800dcab",
-        "bytes": 17756
+        "sha256": "a9bcc09f00e93499af4ef3b38ff3447c699b811c5e915d019c92a5a26e6cf7d6",
+        "bytes": 17001
       },
       {
         "path": "WasmGemmGnaf/Universal/Argmin.lean",
-        "sha256": "df1f19cc9b41b26a4dc6d08de8d0e0a838b7a4f2a646dbb549313c4456f1945a",
-        "bytes": 26309
+        "sha256": "adcd1d0c6fa0d50c5f1fa47cf1ceb11b0c112817dba08f49d1631f628b651d88",
+        "bytes": 26758
       },
       {
         "path": "WasmGemmGnaf/Universal/BilinearLowerBound.lean",
-        "sha256": "30f0f99b0e22423d81bf257874c6ddc1cda9244d76391967fbff5891398f77f8",
-        "bytes": 4946
+        "sha256": "e9ef920a4223d8c4c1de941dea3710bd5f1a36c7b46b5d0d47f835087c41f052",
+        "bytes": 4647
       },
       {
         "path": "WasmGemmGnaf/Universal/Competitor.lean",
-        "sha256": "69fc3bf8631fb25bfd6241c2bfb741abe033d68b4467a33b7f89a2db7b423ac8",
-        "bytes": 27823
+        "sha256": "10249c53bb8058334d3e8e1b3017bbb97fba2b716a8438cb6ae345368a450e10",
+        "bytes": 27798
       },
       {
         "path": "WasmGemmGnaf/Universal/Correct.lean",
-        "sha256": "5324d8bd7260ef7d95f390cf25b5bfea72c7df99d1b00aee694d03eca46e5822",
-        "bytes": 4656
+        "sha256": "26892938a3422652025837306bd98b9b5c85e6206ee204820b8fac5fb48e0219",
+        "bytes": 4670
       },
       {
         "path": "WasmGemmGnaf/Universal/EnumerateInputs.lean",
@@ -473,33 +493,38 @@
       },
       {
         "path": "WasmGemmGnaf/Universal/LowerBound.lean",
-        "sha256": "1756680c50fb76c92e710ac617f4afaa6b3f48558d81b54e78a18de4466c97b3",
-        "bytes": 5345
+        "sha256": "3ab33ab9d1d130cb191c5ba024c888aa1f2703e5ae144ef43b4a84db9a5b8deb",
+        "bytes": 5383
       },
       {
         "path": "WasmGemmGnaf/Universal/Partition.lean",
-        "sha256": "9c0d0becf1ca50ce4e242994768da9e59ad06edc47efdc71198a4eeacac33c64",
-        "bytes": 60938
+        "sha256": "741e12aef621f257686ad3bc852d8f797ac65627af8cac8cb54a5dc772a1edf0",
+        "bytes": 60980
       },
       {
         "path": "WasmGemmGnaf/Universal/Sublevel.lean",
-        "sha256": "3889fe8deed791ec3dce6ac567698484c52d32813d3c7d197eb54338bfd507ae",
-        "bytes": 24709
+        "sha256": "ba414a123c392cbbd938b5ffe74df34e3724584dffdcceee4b206ab6c55b9169",
+        "bytes": 25394
       },
       {
         "path": "WasmGemmGnaf/Wasm/Adequacy.lean",
-        "sha256": "ba6b1dcb7947200aef104bc6b26661d5810119ef4762e24ef94a54b1ac0a13c8",
-        "bytes": 58376
+        "sha256": "8aadedbbe3afc97fea11a1c555ba1fbf99f7762fcb58a28fe0d35b569947e5dc",
+        "bytes": 58510
+      },
+      {
+        "path": "WasmGemmGnaf/Wasm/AuthorityAmendments.lean",
+        "sha256": "3c9808ff5b56a0d1f6b9ef7836f8a58ecc69886c6eb644dbf1b7a882b16a31d7",
+        "bytes": 22768
       },
       {
         "path": "WasmGemmGnaf/Wasm/Binary.lean",
-        "sha256": "69011e0cb0d17b5b501333f9a044972f0772f3249a3aac85037e942a9a0c89f4",
-        "bytes": 124861
+        "sha256": "3583855b4d83f7107a8a19e26d893e88952d4365995ac6d6bf8610bac52ef1f1",
+        "bytes": 125050
       },
       {
         "path": "WasmGemmGnaf/Wasm/Config.lean",
-        "sha256": "4074c51224b2f07eb92eef91c7d2ed24a64ae95c476281821d0f20b89ded43ec",
-        "bytes": 13282
+        "sha256": "b5b12a9a22a18de3383bab825c17e40dec14a569039a13ca4a163b67f3785755",
+        "bytes": 13315
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/BinaryGrammar.lean",
@@ -508,23 +533,28 @@
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/BinaryGrammar/Expressions.lean",
-        "sha256": "79de0ac434668929360dd9d354f98f48e1c0669ea9af5c82086ac1c6f36a17ee",
-        "bytes": 5978
+        "sha256": "2e463b98dc78b14b74efa0def2a7c82167765084713c2fd0e90cc2754f11ff15",
+        "bytes": 6545
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/BinaryGrammar/Instructions.lean",
-        "sha256": "032c89bcd84b9c0753735a8ad4fb9cd31a786da44f30c218d2c453546e8587ea",
-        "bytes": 39014
+        "sha256": "b2982f98a0b5c01b4e5cbc50e4e0dfc6aba6dfba45e80247d9bbb8bfcb960ba2",
+        "bytes": 39069
+      },
+      {
+        "path": "WasmGemmGnaf/Wasm/Core/BinaryGrammar/InstructionsAmended.lean",
+        "sha256": "afe27f0b69c215e611b0e2998e8c7581485b2adfbb4ea2d1d9a07743b77141d5",
+        "bytes": 8109
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/BinaryGrammar/Modules.lean",
-        "sha256": "e6142cc9185ec846c4496905a8b5f75b8cc9d1e9fca779bc97446403307788d1",
-        "bytes": 20730
+        "sha256": "668a4c40b82b3fc840bfcae0cced9c9975122b699d84029611a916c9928e7ed8",
+        "bytes": 21019
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/BinaryGrammar/Types.lean",
-        "sha256": "1cf21163839e0a3cfdda597c3d28031f9edb049a3b44657fef8139da669fe5e0",
-        "bytes": 10366
+        "sha256": "e01b135d4193f2e2d816525c5402ee0b5a6243836d99a54bed8a7398d8af22a3",
+        "bytes": 10416
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/BinaryGrammar/Values.lean",
@@ -532,9 +562,24 @@
         "bytes": 13925
       },
       {
+        "path": "WasmGemmGnaf/Wasm/Core/BinaryGrammar/ValuesAmended.lean",
+        "sha256": "f102975df399800d497f17778ae831ca5770e940bd202f4cbdc2f726198ec0ae",
+        "bytes": 4121
+      },
+      {
         "path": "WasmGemmGnaf/Wasm/Core/BinaryGrammar/Vector.lean",
-        "sha256": "90374acc8af7b2e42c5c2d7dcedf6837af3c73c2a91239ec8df8cf855ab45798",
-        "bytes": 46716
+        "sha256": "35a2bf450335d085d1c4bac2d5e4ee7a1a16192179ff8e98a018cf53b626806c",
+        "bytes": 46863
+      },
+      {
+        "path": "WasmGemmGnaf/Wasm/Core/BinaryWellFormed.lean",
+        "sha256": "f699e7ec0a7fe82473dd294a7c47e93eab83c4709cd1aa36736ce5a38d01aa10",
+        "bytes": 37046
+      },
+      {
+        "path": "WasmGemmGnaf/Wasm/Core/ConcreteNumerics.lean",
+        "sha256": "f66d591cd314634af23afa3146b6418e954d83abca64c62c42985ca259dd1e41",
+        "bytes": 49626
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/Context.lean",
@@ -543,28 +588,28 @@
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/Decode.lean",
-        "sha256": "f83c9cd6c2a5137ef615896f50f69a636625afff1bee36916ee59c7b3fd52162",
-        "bytes": 8837
+        "sha256": "663f28fd54d3f271d7db3574210790a55338f259a1a354b8dd9d4eb2a7f11428",
+        "bytes": 10030
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/DecodeInstrComplete.lean",
-        "sha256": "9b477aef67d3cc0d1f660e3baa6f367746fc2ef5b11a1b9cd59cd8055529afa7",
-        "bytes": 100845
+        "sha256": "99829778e5d45cf45be1a65cadff74231957e9c256027dd243d04f73d15babfb",
+        "bytes": 113926
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/DecodeInstructions.lean",
-        "sha256": "021bba3b9ec9f7cb9b635b0d86597aa50f52f0c08062d841c392fb4c5d4977a8",
-        "bytes": 124609
+        "sha256": "197dd4ca4e71f32cb6cbca5c10f9e7e5b2a925d27c4a639203e6249d5a9db289",
+        "bytes": 148416
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/DecodeModules.lean",
-        "sha256": "087b675e44a272677f8b9a6f8496e21d8963d2cdc44ef0883b7fdec4d4240dbf",
-        "bytes": 49209
+        "sha256": "b5115c4f40da8225e84b5b2b754d66d5158cfeb59576290b219f23e90d9dd332",
+        "bytes": 50435
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/DecodeModulesComplete.lean",
-        "sha256": "f512ef23d60aad5983a54770dcf0276a7f9ae6093a59997572cfdd9160ad7ec7",
-        "bytes": 69949
+        "sha256": "75966e8530ef6be8b93cce486bdd6be85b2a563be1adc91981969e592753653b",
+        "bytes": 70587
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/DecodeParser.lean",
@@ -572,9 +617,14 @@
         "bytes": 22613
       },
       {
+        "path": "WasmGemmGnaf/Wasm/Core/DecodeParserAmended.lean",
+        "sha256": "123e48fc311cd136b54768092d409c803cb215f78696e84cdfaa364fdbb705cf",
+        "bytes": 5538
+      },
+      {
         "path": "WasmGemmGnaf/Wasm/Core/DecodeTypes.lean",
-        "sha256": "0eff956a4bf2b80ebcd8acc4775db50808c2bd8bf7d90bf1d93d5c19a09cab3e",
-        "bytes": 47122
+        "sha256": "2e2d96a9922a97017d178e20a5d8a533222f750e784df225e9f07179d4038e14",
+        "bytes": 49290
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/DecodeUtf8.lean",
@@ -582,9 +632,29 @@
         "bytes": 26400
       },
       {
+        "path": "WasmGemmGnaf/Wasm/Core/Encode.lean",
+        "sha256": "c1693cf527914bde7ed064603286b127e8632692b94a6d2139d085fff63c5ecd",
+        "bytes": 197939
+      },
+      {
+        "path": "WasmGemmGnaf/Wasm/Core/EncodeComplete.lean",
+        "sha256": "d5143fdfbc0d27e6c21993377aaa7f0ad22a914214c915a3a5c2af5193709093",
+        "bytes": 103800
+      },
+      {
+        "path": "WasmGemmGnaf/Wasm/Core/EncodeSound.lean",
+        "sha256": "c24e85459ea804472165e3f3439a96ac96dcba06384418820be102e2ae4f6ae5",
+        "bytes": 5690
+      },
+      {
+        "path": "WasmGemmGnaf/Wasm/Core/EventExecution.lean",
+        "sha256": "3f1f83be0700adda931037436693717468771688f62886b4ceb9e899d6906242",
+        "bytes": 22289
+      },
+      {
         "path": "WasmGemmGnaf/Wasm/Core/Execution.lean",
-        "sha256": "7492d6a35cb4bf38d50d82090b675fd904273130db6433187cde91f5bc140e5f",
-        "bytes": 117049
+        "sha256": "cadf1b2e20fe0aea5536bb395089b3be3ca58d46f08a99723192848599a647b3",
+        "bytes": 122825
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/Free.lean",
@@ -592,9 +662,19 @@
         "bytes": 16837
       },
       {
+        "path": "WasmGemmGnaf/Wasm/Core/FreeAmended.lean",
+        "sha256": "fdba9f47c3da3bb9071249e55018c71dd25dbaff06f1907d08fe891b6b708f52",
+        "bytes": 8589
+      },
+      {
+        "path": "WasmGemmGnaf/Wasm/Core/HarnessExecution.lean",
+        "sha256": "9c14ee67807aec9bc9b7cb0c235c4c808ed8613990eed5c79129ae8cc3f8ea62",
+        "bytes": 36724
+      },
+      {
         "path": "WasmGemmGnaf/Wasm/Core/Instantiation.lean",
-        "sha256": "b3e6c7a34d4216a6078ef4ac3d8654985f65fac3daf9616847ea67cea0e3e1c9",
-        "bytes": 16275
+        "sha256": "4ff01d8540606eff92a919136f80a9985ad34529e5b1fcdb4994c802caaa11b2",
+        "bytes": 18686
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/Instructions.lean",
@@ -618,13 +698,13 @@
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/Profile.lean",
-        "sha256": "ca8613daef4b3dba5dae02fda17048dd8202d36cc977b6b89fdf57964abc4be2",
-        "bytes": 44016
+        "sha256": "faea91362e64e2ca88c0afad7401561c915489639afcde7d4b06405b29b7d731",
+        "bytes": 44488
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/ProfileAmendment.lean",
-        "sha256": "d672ced67afdad3a4d77dfb3ea29553bd3ae0e9b90c2205202efe2e1f7580ee2",
-        "bytes": 11114
+        "sha256": "423ec0b6050d02e436856aa227a72ccc30193fd71c85a2ef50b111a29ae1da7e",
+        "bytes": 3342
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/ProfileBinary.lean",
@@ -633,13 +713,48 @@
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/Runtime.lean",
-        "sha256": "aecbc2aaecca660ed40bf7c5915dfeb2551cd77a5ff8c7dbfeedc482d99dcb90",
-        "bytes": 28259
+        "sha256": "ccd789a5c7063eae31daa6e6858a54e12ef58d78a112049958fdfa75a02c1abd",
+        "bytes": 33626
+      },
+      {
+        "path": "WasmGemmGnaf/Wasm/Core/RuntimeDecision.lean",
+        "sha256": "bbc3c56fb9fda300c750faccfd587e7daa507a2255e6809a5554e0ed77d69c65",
+        "bytes": 18092
+      },
+      {
+        "path": "WasmGemmGnaf/Wasm/Core/RuntimeTypeOrigin.lean",
+        "sha256": "e9fd1be4b75ad25308808076e2ba8d80b5bfea3dda27fa444dac2d6e9c862002",
+        "bytes": 4467
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/Subst.lean",
-        "sha256": "03a61dd9ba5116ffaba0df5a09f589050c7460b60ddf895591a258ba56fb4901",
-        "bytes": 15115
+        "sha256": "7bb5f6b427879cef513187c9a6228ff32427404945430d28e85dd02278983b13",
+        "bytes": 20093
+      },
+      {
+        "path": "WasmGemmGnaf/Wasm/Core/Subtype.lean",
+        "sha256": "2c3928c996b3ae58362a509fa8e6f641d0ac9ad0cd784e9617aa49bbd4a59181",
+        "bytes": 57409
+      },
+      {
+        "path": "WasmGemmGnaf/Wasm/Core/SubtypeComplete.lean",
+        "sha256": "b87e4256bfd38479bafa9234af79d604d2223f59e35b10f7513dfe9c9f4aba40",
+        "bytes": 7806
+      },
+      {
+        "path": "WasmGemmGnaf/Wasm/Core/SubtypeSound.lean",
+        "sha256": "85efdf370e8b8ee41b9efb36b9b3d24209affe726af43c6edfe362117237a330",
+        "bytes": 42962
+      },
+      {
+        "path": "WasmGemmGnaf/Wasm/Core/Successors.lean",
+        "sha256": "6f527811736c321ba626b7bb5f8126c74e726c90aca64b41c8069292f3c6cf7b",
+        "bytes": 107606
+      },
+      {
+        "path": "WasmGemmGnaf/Wasm/Core/TypeGraphOrigin.lean",
+        "sha256": "52c4fc5b77db2542e2ce92939e2ce4158ec4eb43f96e01b807114bf70be4ce30",
+        "bytes": 17833
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/Types.lean",
@@ -648,33 +763,38 @@
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/Validate.lean",
-        "sha256": "d41efaee3a5e2553fdcd19630231ed68d6e0fd6082f4976fa3d68eab4dd51914",
-        "bytes": 30421
+        "sha256": "5aef88a8adcadf8dd86ed4483782c9d46a8b9c8b8120c41967bdeb5fd3ccf847",
+        "bytes": 35134
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/ValidateComplete.lean",
-        "sha256": "be3827d4a1959183f85787cab42625dbe90ce37f4dc452e1e4ff615d9798ca36",
-        "bytes": 54739
+        "sha256": "f437ed977ed1c34af1c02bbe980c4f88133675efa89934bfcad6b09323cbce28",
+        "bytes": 55283
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/ValidateInstr.lean",
-        "sha256": "eb7457921704413675e50630e2d0fb05f5a0835555f6404d092288be3bf30368",
-        "bytes": 55367
+        "sha256": "ca893e086933a0ca9e75fc2785d5b6d6cf58224d09bdf7328ff0b6149040387c",
+        "bytes": 94396
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/ValidateModule.lean",
-        "sha256": "0e103400357e4c11f6c53b00b5aa37b606fabbf1b04c010d8e28ae35eadd00f8",
-        "bytes": 28539
+        "sha256": "dae803aaa4e0912c31cb91c0b8eed4bfb9455c472ebef8cd88c59b4e69b2281e",
+        "bytes": 34295
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/ValidateSeq.lean",
-        "sha256": "6e215a43a4c627ba8f45ab8795a9e13d9b009b74ea6941556518991edde96ec4",
-        "bytes": 73244
+        "sha256": "a8335f69bdb90a72c63f0f04f76ac8d404930470d3418bf072df7bc1356934c9",
+        "bytes": 201592
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/ValidateStack.lean",
-        "sha256": "001078e5ff38579d4af7c32c413a606187b5f4a1eb36b06b7364f4a5537c34ad",
-        "bytes": 31928
+        "sha256": "036d0c9839c3c514bb0071c49f1a0f317134987456772730d99eb50dcdde67b9",
+        "bytes": 47676
+      },
+      {
+        "path": "WasmGemmGnaf/Wasm/Core/ValidateTypes.lean",
+        "sha256": "3f600374a06879a85b551f815bc42c711311f9385e199643cbe95af212c70e84",
+        "bytes": 25161
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/Validation/Instructions.lean",
@@ -682,19 +802,24 @@
         "bytes": 79101
       },
       {
-        "path": "WasmGemmGnaf/Wasm/Core/Validation/InstructionsAmended.lean",
-        "sha256": "cda84b89efff9877e75812e780a0d7e9eb6823add37395781ea9fc51434f1046",
-        "bytes": 25837
+        "path": "WasmGemmGnaf/Wasm/Core/Validation/InstructionsCombinedAmended.lean",
+        "sha256": "d8a4afc300ca08c17b746e1e5b62b443e87c8dead486d65fdaad1d3448f55612",
+        "bytes": 58472
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/Validation/Modules.lean",
-        "sha256": "963f2d8d495f7f3c5a6cec67496cafb3b3550f581cd17fc0a733d5d1af54e1c2",
-        "bytes": 23563
+        "sha256": "aefe97789a4d9e0588b16c57a6015336e6c1fc85c09a736f5609c5233409c1ae",
+        "bytes": 24194
       },
       {
-        "path": "WasmGemmGnaf/Wasm/Core/Validation/ModulesAmended.lean",
-        "sha256": "30ab8cd5715b2e011a82b78bc5ffa93156f7880de4caa00d3fab19006c44435f",
-        "bytes": 11965
+        "path": "WasmGemmGnaf/Wasm/Core/Validation/ModulesCombinedAmended.lean",
+        "sha256": "cda96f71301adeac23c1e25a54c23dfc41a860fc0c34fbe5ea04965c70efdd57",
+        "bytes": 14415
+      },
+      {
+        "path": "WasmGemmGnaf/Wasm/Core/Validation/SubtypingAmended.lean",
+        "sha256": "9f344654480f2b61243fd4093a1f6c93324c50aa982af2c16b18c1c5c8a8cadf",
+        "bytes": 21890
       },
       {
         "path": "WasmGemmGnaf/Wasm/Core/Validation/Types.lean",
@@ -707,44 +832,54 @@
         "bytes": 14302
       },
       {
+        "path": "WasmGemmGnaf/Wasm/Core/WholeSuccessors.lean",
+        "sha256": "39dad83c6d7f9c4c41cef491bf32879f24cedaa23e4b633cec8bbbd1f8b86456",
+        "bytes": 84875
+      },
+      {
         "path": "WasmGemmGnaf/Wasm/CoreArtifact.lean",
-        "sha256": "b8f9e1d633052b49f8c3e9493c198ea5e7377e07140c8835f791be0528f31801",
-        "bytes": 10886
+        "sha256": "856f57858b12a9040425417826689915455f60621b5a455051319faae6c1097e",
+        "bytes": 13485
+      },
+      {
+        "path": "WasmGemmGnaf/Wasm/CoreBackEnd.lean",
+        "sha256": "8fc8260eaba553eca7ee015082ea530a4fec217bf3e07e5bb9e63079b34c885d",
+        "bytes": 3078
       },
       {
         "path": "WasmGemmGnaf/Wasm/CoreFrontEnd.lean",
-        "sha256": "111c2072ff76029b242122440d75dcc8cff9ca44728ad2bd7cca7e3baa9fb06b",
-        "bytes": 6930
+        "sha256": "6eb321326b08eaaddcc3d702023ebd36fd864237def58740e8a48dd84ced04bb",
+        "bytes": 11074
       },
       {
         "path": "WasmGemmGnaf/Wasm/CoreGap.lean",
-        "sha256": "5128d208fa4097a70ce8ebda4f4c4a517377b69cd958a81088c95bb04d1c90f7",
-        "bytes": 9839
+        "sha256": "72026b69a6fe3407d2d1f43b89d8960976c2890f88cc3dcc45b2a4643005df57",
+        "bytes": 9537
       },
       {
         "path": "WasmGemmGnaf/Wasm/Costed.lean",
-        "sha256": "a36427c0abf8d6b4b2d42f101435aed6413ac99d8fa13c8ba188eef65b4f7f96",
-        "bytes": 92882
+        "sha256": "265c745b539ee493370ea0180ff5f6cda35137aa3e47efd75970736fe8f00f2e",
+        "bytes": 93471
       },
       {
         "path": "WasmGemmGnaf/Wasm/CostedExplore.lean",
-        "sha256": "9d8190b1022e71f46ff3ccb901b8999f29fee2ca79f3686e6c60070fef1a38dd",
-        "bytes": 61918
+        "sha256": "fbed009562c89ce1eec60680e24b2ae4fd9c178df96e499fb191fa7b5eab35a1",
+        "bytes": 62202
       },
       {
         "path": "WasmGemmGnaf/Wasm/Declarative.lean",
-        "sha256": "25d478ffe8ddcebc9b8f4539950eb46f2f4cc32b5fb87fe365e1d0fdafd5d8fe",
-        "bytes": 61967
+        "sha256": "f41d18b7218dab070a72b0f2f2a0d0b2d4d6b9bc91fc53371072fc5766460f86",
+        "bytes": 61842
       },
       {
         "path": "WasmGemmGnaf/Wasm/Erasure.lean",
-        "sha256": "2e342f3fc09578bd1c951e4fed2b28e619453fced1080d22f9d3867a285a76d5",
-        "bytes": 25041
+        "sha256": "b868b805a456c16ff590f1e7209de83f0d9f3e058f74c001a45b1d8712aefc25",
+        "bytes": 25436
       },
       {
         "path": "WasmGemmGnaf/Wasm/Fault.lean",
-        "sha256": "81e619729949164c5ce4d754127a1b4e874edb7f8942fb5f091d5387d7905857",
-        "bytes": 2269
+        "sha256": "dbc738395f0a2cd2fc8889a51cb2fd3ca371f8611b005b06b703dbdf0dbb666c",
+        "bytes": 2319
       },
       {
         "path": "WasmGemmGnaf/Wasm/Feature.lean",
@@ -753,8 +888,8 @@
       },
       {
         "path": "WasmGemmGnaf/Wasm/Fuel.lean",
-        "sha256": "8de447caf07952f205482ba688aa71023e9f8afd4d30173862cf7fa53aa8f6a6",
-        "bytes": 20656
+        "sha256": "754c61c0d07e554f983f9545c3b83d93452d3b7f0ea3125b744dc4c216281d48",
+        "bytes": 21011
       },
       {
         "path": "WasmGemmGnaf/Wasm/Memory.lean",
@@ -768,13 +903,13 @@
       },
       {
         "path": "WasmGemmGnaf/Wasm/Profile.lean",
-        "sha256": "6c05da6890eb70981955973cc5907d6de385f3228e626928dabc2ade9779cb08",
-        "bytes": 77925
+        "sha256": "b6bb74997313c83b5b62326f872e04d124acfa45a370bc650e9a71b2a55a56a7",
+        "bytes": 83166
       },
       {
         "path": "WasmGemmGnaf/Wasm/Revision.lean",
-        "sha256": "2a9a8bccdc69516dc5c882cd755b6211f44288110323d2c490511b728f5db88a",
-        "bytes": 25067
+        "sha256": "14bafde40b2d4ae8bde46a68258d025c3d8ab39fa2c463ec4ecaedbc5d735b54",
+        "bytes": 15212
       },
       {
         "path": "WasmGemmGnaf/Wasm/Run.lean",
@@ -783,28 +918,28 @@
       },
       {
         "path": "WasmGemmGnaf/Wasm/Soundness.lean",
-        "sha256": "acc8183632e1ff6ed5bf306a74e9b5f7cd9085d51e9f664fb10962da8b9391be",
-        "bytes": 45456
+        "sha256": "b2581f3a7a59b449f6befaa05abed5a5d72ca564c612af689ae31f402e192024",
+        "bytes": 45756
       },
       {
         "path": "WasmGemmGnaf/Wasm/Step.lean",
-        "sha256": "9e511bd5341046dcdc33ecd7949bd2b5908e4dbc256bdb9a2187181f86ae019c",
-        "bytes": 33668
+        "sha256": "3f5eaab00a6125c5b482518243504033187ca32dcb1109f1602d19a53e4d641f",
+        "bytes": 33871
       },
       {
         "path": "WasmGemmGnaf/Wasm/Store.lean",
-        "sha256": "6821a1a0cf012421e7d985317860a436adcecc99b2a079c8aa5e0223d7f8b5fc",
-        "bytes": 10420
+        "sha256": "c39898b82f276686ce18024930c637ae7ba2faac5448b0c78abe662b569dfdb6",
+        "bytes": 10600
       },
       {
         "path": "WasmGemmGnaf/Wasm/Syntax.lean",
-        "sha256": "7c29535fa6e41c385c0be3eef07101d3e5212d42a37ba389493b061b35ee6b0b",
-        "bytes": 17343
+        "sha256": "0601a735a0e2ea54879a5ecd515c00da79889eaa889388634600499901271dd9",
+        "bytes": 17388
       },
       {
         "path": "WasmGemmGnaf/Wasm/Table.lean",
-        "sha256": "4c0a37f88ee04b0b1c6fc1534b7e3eb781c2f9bd8de611a545fb5b05e9faba5d",
-        "bytes": 43441
+        "sha256": "3ba26809d7caa0c4f3d17b14334fca256b98e4edf192c2f95f57acb9d42007c2",
+        "bytes": 43534
       },
       {
         "path": "WasmGemmGnaf/Wasm/Types.lean",
@@ -813,8 +948,8 @@
       },
       {
         "path": "WasmGemmGnaf/Wasm/Validate.lean",
-        "sha256": "ddcb0d19da18f6aeaa0e985a057ea9ee1626d92416c107f5def9cedffa185285",
-        "bytes": 43473
+        "sha256": "9cf138c0cceb6189e3f41b9cfee986bdc0abdf1208e05583908561c6f6b268e8",
+        "bytes": 43212
       },
       {
         "path": "WasmGemmGnaf/Wasm/Vector.lean",
@@ -868,8 +1003,8 @@
       },
       {
         "path": "model/claims.json",
-        "sha256": "b8f52cbcc9ac249c02173a32ec3397a13d5086b80044b2a822d3627c2963f869",
-        "bytes": 63614
+        "sha256": "7d5d6468ce63dac7186f1310a231b02d5a6ba681eeae69dc0cdc129be8495d2e",
+        "bytes": 55212
       },
       {
         "path": "model/dependencies.json",
@@ -878,8 +1013,8 @@
       },
       {
         "path": "model/falsifiers.json",
-        "sha256": "646506d72da217115db8b612554e1f000bb863dd37fb10d45c3a57c4a2a7a36a",
-        "bytes": 10447
+        "sha256": "c7afb9a1ccd17f0c3a2a394e5b86a0d06382820c27cc6ec1f9d0cabf66d7c078",
+        "bytes": 18236
       },
       {
         "path": "model/profiles.json",
@@ -893,8 +1028,8 @@
       },
       {
         "path": "model/spec-deviations.json",
-        "sha256": "4d8dab4230a84fdc8220ed2e79793a22429e7e1fd59ca73141e44f189d879e45",
-        "bytes": 55272
+        "sha256": "c28d90d2d9d8a7e8fdfed7c2367e187610795e27d0685ed7fea13acbea15bb9c",
+        "bytes": 65871
       },
       {
         "path": "xtask/Cargo.toml",
@@ -903,8 +1038,8 @@
       },
       {
         "path": "xtask/src/amendment.rs",
-        "sha256": "c96431de64b6693b7d9fc8efe0f8bbbd6a28e616357a9aa5491e5bfecc5567f2",
-        "bytes": 20680
+        "sha256": "b0c13ab557f01f1bffa0f649ff7b22e38b0382f811d320a2864120d72828c520",
+        "bytes": 47228
       },
       {
         "path": "xtask/src/axioms.rs",
@@ -918,8 +1053,8 @@
       },
       {
         "path": "xtask/src/docs.rs",
-        "sha256": "879ea58ba1a0937471c167b7aba83506ff5a0ba230a519fb8a8c5b1b0038ee89",
-        "bytes": 8991
+        "sha256": "c89a70635279b813e1c6321c6b2cb9eb0539a06c83a8de8bdc1351d10ecde223",
+        "bytes": 9180
       },
       {
         "path": "xtask/src/firewall.rs",
@@ -928,13 +1063,13 @@
       },
       {
         "path": "xtask/src/gate.rs",
-        "sha256": "3dda207e7cdbae3d53143ad2f71ec49ed2254937d2f415f450f8965dbfabdf1f",
-        "bytes": 23990
+        "sha256": "2b95821aa1b947f05fbc1b3b0941e15c410c1c2bd052bf73155ee7ad5f501d22",
+        "bytes": 24265
       },
       {
         "path": "xtask/src/independence.rs",
-        "sha256": "a71fc60010aeeec6596b44612da42afa75323cfe70b66faa7f181fd0e2945ed5",
-        "bytes": 13131
+        "sha256": "6cd0c06ed19e1a8c02f8a3201fb18204831474941c284b6b2e013773f774f869",
+        "bytes": 13194
       },
       {
         "path": "xtask/src/json.rs",
@@ -948,8 +1083,8 @@
       },
       {
         "path": "xtask/src/main.rs",
-        "sha256": "bbb3fe8e7afbd5b5f45dfdbdfda6d3d4f9852500dc24c56d2f88401871f4487b",
-        "bytes": 8681
+        "sha256": "00b03fdb13327786dffc9dd74bdb6df0c2d4032a6a77a614d85adbe32729b007",
+        "bytes": 8458
       },
       {
         "path": "xtask/src/manifest.rs",
@@ -958,8 +1093,8 @@
       },
       {
         "path": "xtask/src/mutation.rs",
-        "sha256": "e07f57533876e208049fa035bd87df1299165fb1739c6bfd9baf23cf19bae1ba",
-        "bytes": 52891
+        "sha256": "0816ce46062c68ef84b24870274396f6ec2dff457cfa131be5c973f120235907",
+        "bytes": 81180
       },
       {
         "path": "xtask/src/releasepath.rs",
@@ -978,8 +1113,8 @@
       },
       {
         "path": "xtask/src/root.rs",
-        "sha256": "0b14381e21989e1ed199ccc5106c91f8b6f32b42380e07ffa6abf0d85513d6b9",
-        "bytes": 3988
+        "sha256": "776692c3269bd4349827cd872eacff5d19339aaa35956b4056bb3f25eaf1c189",
+        "bytes": 4047
       },
       {
         "path": "xtask/src/scan.rs",
@@ -988,8 +1123,8 @@
       },
       {
         "path": "xtask/src/schema.rs",
-        "sha256": "1f5cded6e986496500b24905bf11312aecf6302df6107efba1c4ae27a3232e45",
-        "bytes": 20617
+        "sha256": "37d51757686b8e1eb1ca76c31987eda03d505288c9c61999a5dbeb8c0407f98d",
+        "bytes": 23270
       },
       {
         "path": "xtask/src/sha1.rs",
@@ -1003,8 +1138,8 @@
       },
       {
         "path": "xtask/src/signature.rs",
-        "sha256": "22f7da43a7badfbcb038e0136c40bd83686e139f228ce051806249e1b6cc3de3",
-        "bytes": 31210
+        "sha256": "8b146ce26d82b1872ac39d17cabedfe69654cb46f0f27725094d13a0fd75d012",
+        "bytes": 32725
       },
       {
         "path": "xtask/src/spec.rs",
@@ -1018,11 +1153,11 @@
       }
     ]
   },
-  "sourceManifestCoreIdentity": "caad895df30e3dc3d2e5e1ccc8a08722647b2c184e6f31a717312e27771ad0ca",
+  "sourceManifestCoreIdentity": "50ced17a7ed0d9f1c2bb695514730d46402f1f2d8003a06c908a973e22ce103c",
   "generatedProofInputBody": {
     "schemaVersion": 1,
     "stage": "GeneratedProofInputBody",
-    "sourceManifestCoreIdentity": "caad895df30e3dc3d2e5e1ccc8a08722647b2c184e6f31a717312e27771ad0ca",
+    "sourceManifestCoreIdentity": "50ced17a7ed0d9f1c2bb695514730d46402f1f2d8003a06c908a973e22ce103c",
     "excludes": [
       "its own JSON encoding",
       "every later output"
@@ -1030,30 +1165,30 @@
     "generatedLeanSources": [
       {
         "path": "WasmGemmGnaf.lean",
-        "sha256": "b89a0dda517f2f53ad45ab50e0d0902b2af07706dab0d3b8c783e2d23feb5d3b",
-        "bytes": 5884
+        "sha256": "c4fb8c2416c9917d2f4c40f0d6651b6de9133d22e4b6789e82859987c53468ee",
+        "bytes": 7152
       }
     ],
     "note": "Artifact/Bytes.lean is NOT present: no artifact has been emitted, because emission requires WS-001 and BI-002. SPEC 13 Phase F step 4 is therefore not reached."
   },
-  "generatedProofInputIdentity": "017f792afa79c22b6ae987185d49d095833232398039c4fd20c48701d86ffb29",
+  "generatedProofInputIdentity": "56260a6e577e8700c3f89b2884f3a7fcc7b6d54a64b699f25587156a75a4bfdb",
   "preFinalEnvironmentBody": {
     "schemaVersion": 1,
     "stage": "PreFinalEnvironmentBody",
-    "generatedProofInputIdentity": "017f792afa79c22b6ae987185d49d095833232398039c4fd20c48701d86ffb29",
+    "generatedProofInputIdentity": "56260a6e577e8700c3f89b2884f3a7fcc7b6d54a64b699f25587156a75a4bfdb",
     "leanToolchain": "leanprover/lean4:v4.30.0",
     "leanCommit": "d024af099ca4bf2c86f649261ebf59565dc8c622",
     "dependencies": [],
     "compiledEnvironmentDigest": null,
     "note": "compiledEnvironmentDigest is null: SPEC 13 Phase F step 5 records the checked final declaration-environment digest, which is only meaningful once the final theorem is on the path. GO-001 is outstanding."
   },
-  "preFinalEnvironmentIdentity": "f8cc99f4f92c6e5061b51832b7b4108da9c175ae6e76fce21f338f6721839785",
+  "preFinalEnvironmentIdentity": "f223bae61d31981047e077c73a0fedb2fc11966f510386faed1490a9c2350135",
   "outputManifestBody": {
     "schemaVersion": 1,
     "stage": "OutputManifestBody",
-    "sourceManifestCoreIdentity": "caad895df30e3dc3d2e5e1ccc8a08722647b2c184e6f31a717312e27771ad0ca",
-    "generatedProofInputIdentity": "017f792afa79c22b6ae987185d49d095833232398039c4fd20c48701d86ffb29",
-    "preFinalEnvironmentIdentity": "f8cc99f4f92c6e5061b51832b7b4108da9c175ae6e76fce21f338f6721839785",
+    "sourceManifestCoreIdentity": "50ced17a7ed0d9f1c2bb695514730d46402f1f2d8003a06c908a973e22ce103c",
+    "generatedProofInputIdentity": "56260a6e577e8700c3f89b2884f3a7fcc7b6d54a64b699f25587156a75a4bfdb",
+    "preFinalEnvironmentIdentity": "f223bae61d31981047e077c73a0fedb2fc11966f510386faed1490a9c2350135",
     "excludes": [
       "MANIFEST.json itself"
     ],
@@ -1061,12 +1196,12 @@
     "atlasSeal": null,
     "proofRegistry": {
       "path": "model/claims.json",
-      "sha256": "b8f52cbcc9ac249c02173a32ec3397a13d5086b80044b2a822d3627c2963f869"
+      "sha256": "7d5d6468ce63dac7186f1310a231b02d5a6ba681eeae69dc0cdc129be8495d2e"
     },
     "generatedDocumentation": [
       {
         "path": "CONFORMANCE.md",
-        "sha256": "422b267e09d284703e87801b4e9315a108aa723832cd30fc5af3ba99f5947ff1"
+        "sha256": "7bfd75045e0afe2df91faf4d38d399ce0e83e6883af45a5ea1d2e0ad1cbed28d"
       }
     ],
     "reproducibilityPlan": {

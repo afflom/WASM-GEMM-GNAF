@@ -22,11 +22,13 @@
   productions are ordinary non-recursive relations; only `Binstr` is recursive,
   and that knot is tied in `BinaryGrammar/Expressions.lean`.
 -/
-import WasmGemmGnaf.Wasm.Core.BinaryGrammar.Values
+import WasmGemmGnaf.Wasm.Core.BinaryGrammar.ValuesAmended
 
 set_option autoImplicit false
 
 namespace WasmGemmGnaf.Wasm.Core.Binary
+
+variable [authority : BinaryAuthority]
 
 /-! ## Value types -/
 
@@ -84,7 +86,7 @@ production be well-typed. -/
 inductive Bheaptype : Bytes → HeapType → Prop where
   | abs (bs : Bytes) (ht : HeapType) : Babsheaptype bs ht → Bheaptype bs ht
   | idx (bs : Bytes) (i : Int) (x : TypeIdx) :
-      Bs33 bs i → 0 ≤ i → (x.val : Int) = i → Bheaptype bs (.use (.idx x))
+      Bs33For bs i → 0 ≤ i → (x.val : Int) = i → Bheaptype bs (.use (.idx x))
 
 /-- `grammar Breftype : reftype`. -/
 inductive Breftype : Bytes → RefType → Prop where

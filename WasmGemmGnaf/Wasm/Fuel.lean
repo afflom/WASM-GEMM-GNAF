@@ -11,6 +11,12 @@
       cannot satisfy a smaller all-branch step sublevel.  Completeness is
       relative to an explicit bound ... No general halting oracle is permitted.
 
+  Scope disclosure: this file explores the legacy `Wasm.Subset` machine
+  (`Config`, `Event`, and `successors`), not the public amended-Core execution
+  semantics required by SPEC §7.4.  The theorem names below are proved for that
+  legacy carrier and therefore do not discharge the corresponding public
+  release obligations.
+
   `exploreTree` recurses over *every* element of `successors`, so a
   configuration with two permitted `memory.grow` outcomes contributes both
   subtrees.  The three required theorems are proved:
@@ -30,7 +36,7 @@
 
   Deviation from the SPEC signature, disclosed: SPEC's `complete` constructor
   carries a `NonemptyCanonicalList`, and its `nonterminalPrefix` constructor
-  carries only a trace.  Here `complete` carries a plain list (the released
+  carries only a trace.  Here `complete` carries a plain list (the legacy subset
   machine admits stuck configurations, for which the observation list of a
   subtree is genuinely empty) and `nonterminalPrefix` additionally carries the
   observations found so far together with their coverage proof.  Without the
@@ -469,13 +475,13 @@ theorem nonterminalPrefix_sound {bound : Nat} {initial : Config}
 
 /-- Explore every permitted branch of a module invocation, reporting an
 initialization fault when the module cannot be instantiated. -/
-def exploreModule (bound : Nat) (m : Module) (raw : RawInvocation) :
+def exploreModule (bound : Nat) (m : Subset.Module) (raw : RawInvocation) :
     Except InstantiationFault (Σ' initial : Config, ExecutionTreeResult bound initial) :=
   match initialConfig m raw with
   | .error f => .error f
   | .ok initial => .ok ⟨initial, exploreAll bound initial⟩
 
-theorem exploreModule_error_iff {bound : Nat} {m : Module} {raw : RawInvocation}
+theorem exploreModule_error_iff {bound : Nat} {m : Subset.Module} {raw : RawInvocation}
     {f : InstantiationFault} :
     exploreModule bound m raw = .error f ↔ initialConfig m raw = .error f := by
   unfold exploreModule
@@ -484,7 +490,7 @@ theorem exploreModule_error_iff {bound : Nat} {m : Module} {raw : RawInvocation}
   | ok initial => simp
 
 /-- An invalid module is rejected before any reduction is explored. -/
-theorem exploreModule_invalid {bound : Nat} {m : Module} {raw : RawInvocation}
+theorem exploreModule_invalid {bound : Nat} {m : Subset.Module} {raw : RawInvocation}
     (h : validate m = false) :
     exploreModule bound m raw = .error .invalidModule :=
   exploreModule_error_iff.mpr (initialConfig_invalid h)

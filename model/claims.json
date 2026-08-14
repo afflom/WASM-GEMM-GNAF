@@ -102,7 +102,7 @@
       "status": "outstanding",
       "obligation": "O-6",
       "releaseApplicable": true,
-      "note": "Absent, not stubbed. SPEC 19 forbids axiomatizing or sorry-ing an undischarged obligation. PARTIAL, and the claim stays open: the front end is mechanized and migrated -- Wasm.decode is the pinned Core 3.0 decoder and Wasm.decode_sound / Wasm.decode_complete are stated over Wasm.Core.Binary.Bmodule with xtask independence passing -- but progress, preservation and the all-branch bounded explorer are still stated over the i32 subset model, and Wasm/Core/ has no configuration typing judgment and no successor enumerator."
+      "note": "Absent, not stubbed. SPEC 19 forbids axiomatizing or sorry-ing an undischarged obligation. PARTIAL, and the claim stays open: the front end is mechanized and migrated -- `Wasm.decode` is the recursively amended Core 3.0 decoder and `Wasm.decode_sound` / `Wasm.decode_complete` are stated over `Wasm.Core.Binary.BmoduleA` with the public representable carrier and independence audit -- but progress, preservation and the all-branch bounded explorer are still stated over the i32 subset model. Core currently has only the pure-step successor enumerator, not the concrete event-labelled whole-machine implementation required here."
     },
     {
       "id": "UV-001",
@@ -145,7 +145,7 @@
     {
       "id": "AT-001",
       "level": "formalProof",
-      "statement": "The Atlas seal's universal-cover check is blind to the byte universe: it is determined by the recorded searchPartitions, candidateFacts identities, and partitionCoverRoot alone, so no proposition quantified over ByteArray follows from it.",
+      "statement": "Two Atlas states/cores with equal recorded searchPartitions, candidateFacts key identities, and partitionCoverRoot produce the same universalCoverCompleteCheck result.",
       "leanDeclaration": "WasmGemmGnaf.Atlas.universalCoverCompleteCheck_scope_blind",
       "sourceModule": "WasmGemmGnaf/Atlas/CoverageScope.lean",
       "axioms": [
@@ -156,7 +156,7 @@
       "specSection": "12.1",
       "status": "discharged",
       "releaseApplicable": true,
-      "note": "Hardening lemma. Makes machine-checked the fact that Atlas.seal_implies_universal_coverage (SPEC 15) does NOT follow from the seal check, which is why that declaration is absent rather than derived.",
+      "note": "Hardening evidence that the bookkeeping check is insensitive to data outside those recorded fields. The theorem does not itself establish a meta-level non-derivability result; Atlas.seal_implies_universal_coverage remains open and must require genuine coverage evidence.",
       "axiomNote": "Classical.choice is permitted by SPEC 4 as a Lean core logical axiom. SPEC 4's restriction is that Classical.choice SHALL NOT produce executable witnesses; this is a Prop-level congruence theorem, not an executable witness, so the restriction is not triggered."
     },
     {
@@ -173,7 +173,7 @@
     {
       "id": "LB-002",
       "level": "formalProof",
-      "statement": "Charged-operation lower bound for bilinear 3x3 matrix-multiplication schemes: T >= r + 18, uniformly in the multiplication count r, attained exactly by the naive algorithm at r=27, T=45.",
+      "statement": "Every modeled bilinear 3x3 scheme satisfying ChargedOps and OutputsAreRankThree has total charged operations T >= r + 18.",
       "leanDeclaration": "WasmGemmGnaf.Universal.BilinearScheme.chargedOps_lower_bound",
       "sourceModule": "WasmGemmGnaf/Universal/BilinearLowerBound.lean",
       "axioms": [
@@ -184,12 +184,12 @@
       "status": "discharged",
       "releaseApplicable": true,
       "scope": "BILINEAR SCHEMES ONLY, not all WebAssembly byte modules.",
-      "note": "Partial progress toward LB-001, NOT its discharge. Establishes that the open interval 19 <= R(<3,3,3>) <= 23 does not gate the release theorem: the bound is uniform in r, so it holds under every resolution of that problem. Because the objective charges multiplications and additions both at weight one, a low-rank scheme pays for every combining addition (Laderman: 23 mults + 98 adds = 121 charged ops vs naive 45)."
+      "note": "Partial progress toward LB-001, NOT its discharge. The bound accounts for both multiplications and additions and is uniform in r. Equality is witnessed only at the naive rank-27 point; the theorem does not prove naive minimality across lower-rank schemes or show that resolving the open tensor-rank interval cannot affect the release optimum."
     },
     {
       "id": "GO-002",
       "level": "formalProof",
-      "statement": "GlobalOptimal is stated at full strength: its competitor quantifier ranges over all of ByteArray, and it equals GlobalOptimalOver with the maximal scope.",
+      "statement": "The current legacy-carrier GlobalOptimal has an unrestricted outer ByteArray quantifier and equals GlobalOptimalOver at that maximal byte scope.",
       "leanDeclaration": "WasmGemmGnaf.Universal.globalOptimal_iff_over_all",
       "sourceModule": "WasmGemmGnaf/Universal/Sublevel.lean",
       "axioms": [
@@ -199,13 +199,13 @@
       ],
       "specSection": "1",
       "status": "discharged",
-      "releaseApplicable": true,
-      "note": "Makes SPEC 1's rule -- 'a theorem scoped only to such a subset SHALL have a different name' -- visible in the types. GlobalOptimalOver carries an explicit scope parameter and is provably weaker when the scope shrinks, so a scope-restricted result can never pass as the release theorem."
+      "releaseApplicable": false,
+      "note": "This proves only the outer byte-scope fact for the current predicate. Its ProfileValid and SystemEvaluation still use Wasm.Subset.Module rather than the public amended-Core carrier, so it receives no release credit. GlobalOptimalOver carries an explicit byte-scope parameter and is provably weaker when that scope shrinks."
     },
     {
       "id": "GO-003",
       "level": "formalProof",
-      "statement": "The competitor universe of GlobalOptimal is inhabited and both universal clauses fire: the released bytes themselves satisfy the competitor premises, so the statement cannot be satisfied vacuously.",
+      "statement": "Any proof of the current legacy-carrier GlobalOptimal implies its released bytes satisfy that carrier's competitor premises and both universal clauses fire on them.",
       "leanDeclaration": "WasmGemmGnaf.Universal.globalOptimal_lower_bound_fires",
       "sourceModule": "WasmGemmGnaf/Universal/Sublevel.lean",
       "axioms": [
@@ -215,13 +215,13 @@
       ],
       "specSection": "1",
       "status": "discharged",
-      "releaseApplicable": true,
-      "note": "Anti-vacuity. A GlobalOptimal proof over an empty competitor universe would be worthless; this rules it out."
+      "releaseApplicable": false,
+      "note": "Conditional anti-vacuity for the current Wasm.Subset-based GlobalOptimal definition. It does not inhabit the public amended-Core competitor universe or produce a release-scoped GlobalOptimal proof."
     },
     {
       "id": "UV-002",
       "level": "formalProof",
-      "statement": "SPEC 10.3(1): byte strings within a module-size bound are finitely enumerated, and every competitor whose score lies in a sublevel has its bytes in that enumeration.",
+      "statement": "Within the current legacy SystemEvaluation carrier, byte strings inside a module-size bound are finitely enumerated and every evaluated byte string whose score lies in a sublevel occurs in that enumeration.",
       "leanDeclaration": "WasmGemmGnaf.Universal.sublevel_bytes_enumerated",
       "sourceModule": "WasmGemmGnaf/Universal/Sublevel.lean",
       "axioms": [
@@ -231,24 +231,21 @@
       ],
       "specSection": "10.3",
       "status": "discharged",
-      "releaseApplicable": true,
-      "note": "Discharges the finiteness half of SPEC 10.3. Does NOT discharge UV-001: enumerability is not coverage, and the enumeration is physically unrunnable (256^u exceeds the holographic bound at u>51 bytes)."
+      "releaseApplicable": false,
+      "note": "This is a carrier finiteness lemma, not public release credit while SystemEvaluation still contains Wasm.Subset.Module. It does not discharge UV-001: enumerability is not coverage, and the enumeration is physically unrunnable (256^u exceeds the holographic bound at u>51 bytes)."
     },
     {
       "id": "UV-006",
-      "level": "formalProof",
-      "statement": "SPEC 10.3: possible_winner_within_sublevel -- an evaluated competitor whose score does not exceed the baseline's lies within the objective's declared resource bound for that sublevel, and its module byte count is within that bound's module-size coordinate.",
-      "leanDeclaration": "WasmGemmGnaf.Universal.possible_winner_within_sublevel",
+      "level": "open",
+      "statement": "SPEC 10.3: possible_winner_within_sublevel for an evaluated public amended-Core competitor under the released profile, problem, objective, and SystemEvaluation carrier.",
+      "leanDeclaration": null,
       "sourceModule": "WasmGemmGnaf/Universal/Sublevel.lean",
-      "axioms": [
-        "propext",
-        "Quot.sound"
-      ],
       "specSection": "10.3",
-      "status": "discharged",
+      "status": "outstanding",
+      "obligation": "O-6",
       "releaseApplicable": true,
-      "scopeLimitation": "This CONFINES a competitor given an evaluation of it. It does not produce that evaluation (system_evaluation_rel_complete, outstanding), does not claim every competitor has one, and does not claim the sublevel has been searched (universal_sublevel_coverage, outstanding). Only the score hypothesis is used: Universal.withinSublevel_of_score_le proves the same conclusion without SPEC's five other premises, which is stated so that carrying them verbatim cannot be mistaken for needing them. The bound is the objective's OWN boundOfScore field, so nothing here invents a bound; for Cost.canonicalObjective that field is uniformBounds, making the sublevel genuinely finite in every one of the 36 charged coordinates.",
-      "note": "The first of SPEC 10.3's six numbered obligations, and the only one this repository discharges. It is what makes the search for a winner a search over a bounded carrier rather than over all of ByteArray -- contrapositively, a module outside the sublevel cannot beat the baseline. It is NOT progress on UV-001: bounding the carrier and covering it are different propositions, and the gap between them is the attained universal lower bound of UOR-GNAF 19.3."
+      "scopeLimitation": "The existing theorem with this name unfolds through the legacy Wasm.Subset ProfileValid, SystemEvaluation, and Decider carriers. Its score-bound argument is valid inside that model, but it is not the SPEC 10.3 proposition over the public amended-Core release carrier while WS-003 remains open.",
+      "note": "No formal release credit. Closure requires migrating the competitor and evaluation carriers to the public amended Core model and then proving the exact SPEC 10.3 statement there. This remains distinct from system_evaluation_rel_complete and universal_sublevel_coverage, which must also be proved on that carrier."
     },
     {
       "id": "UV-005",
@@ -270,19 +267,19 @@
     {
       "id": "CM-002",
       "level": "formalProof",
-      "statement": "Decode faults and instantiation faults are disjoint: no machine fault is both.",
+      "statement": "The legacy subset DecodeFault and InstantiateFault constructors are disjoint.",
       "leanDeclaration": "WasmGemmGnaf.Wasm.Fault.decoding_ne_instantiation",
       "sourceModule": "WasmGemmGnaf/Wasm/Fault.lean",
       "axioms": [],
       "specSection": "7.1",
       "status": "discharged",
-      "releaseApplicable": true,
-      "note": "Added when two modules were found declaring clashing `Fault` types; prevents a decode failure being reported as an instantiation failure."
+      "releaseApplicable": false,
+      "note": "Added when two legacy modules were found declaring clashing Fault types. The public amended decoder uses CoreDecodeFault, so this theorem is retained only as subset-layer hygiene."
     },
     {
       "id": "LB-003",
       "level": "formalProof",
-      "statement": "Full-domain aggregation lower bound: if every raw invocation costs at least k on a charged coordinate, the summed coordinate is at least k times the domain size; and any coordinate lower bound transfers to the score.",
+      "statement": "For a finite input type, if every input contributes at least k to a natural-valued cost function, the full sum is at least k times the carrier cardinality.",
       "leanDeclaration": "WasmGemmGnaf.Universal.sum_ge_card_mul",
       "sourceModule": "WasmGemmGnaf/Universal/LowerBound.lean",
       "axioms": [
@@ -292,35 +289,31 @@
       "specSection": "9.2",
       "status": "discharged",
       "releaseApplicable": true,
-      "scope": "ALL competitors (not restricted to bilinear schemes).",
-      "note": "Universal in scope but NOT tight, so it does not discharge LB-001. See LB-004."
+      "scope": "An arbitrary finite carrier and natural-valued function; no public WebAssembly competitor/evaluator instantiation is supplied.",
+      "note": "Generic aggregation infrastructure only. It does not provide the per-competitor premise, public evaluation carrier, or attained floor required by LB-001."
     },
     {
       "id": "LB-004",
       "level": "formalProof",
-      "statement": "The attainment gap: a lower bound L strictly below the released score S does NOT establish minimality; and conversely an attained bound (S = L) does.",
+      "statement": "A scalar lower bound L strictly below a released score S does not by itself imply every score above L is also at least S.",
       "leanDeclaration": "WasmGemmGnaf.Universal.lower_bound_below_released_is_not_optimality",
       "sourceModule": "WasmGemmGnaf/Universal/LowerBound.lean",
       "axioms": [],
       "specSection": "10.3",
       "status": "discharged",
       "releaseApplicable": true,
-      "note": "Isolates the missing piece of GO-001 in Lean. Paired with attained_lower_bound_is_optimal (UOR-GNAF Theorem 11.1 in scalar form), this proves the INFERENCE from an attained bound to optimality is available; what is missing is an attained bound, not the reasoning step. This is why LB-002 and LB-003, though genuinely proved, do not close GO-001."
+      "note": "This row credits only the negative scalar implication named above. A separate companion theorem proves the elementary attained-bound inequality, but neither theorem supplies a public all-competitor lower bound or released attainment."
     },
     {
       "id": "BI-001",
-      "level": "formalProof",
-      "statement": "GNAF.compile emits a module that passes the released profile validator for every checked plan.",
-      "leanDeclaration": "WasmGemmGnaf.GNAF.compile_validates",
-      "sourceModule": "WasmGemmGnaf/GNAF/Compile.lean",
-      "axioms": [
-        "propext",
-        "Quot.sound"
-      ],
+      "level": "open",
+      "statement": "GNAF.compile emits a public representable Wasm.Module that passes the combined amended Core 3.0 validator for every CheckedPlan.",
+      "leanDeclaration": null,
       "specSection": "11.4",
-      "status": "discharged",
+      "status": "outstanding",
+      "obligation": "O-6",
       "releaseApplicable": true,
-      "note": "Emitted module passes release validation, not merely 'is well-formed'."
+      "note": "The former compile_validates theorem targets only Wasm.Subset.Module and its legacy validator. It does not establish validation of the released public Core carrier, so it cannot discharge this claim."
     },
     {
       "id": "BI-002",
@@ -331,19 +324,19 @@
       "status": "outstanding",
       "obligation": "O-6",
       "releaseApplicable": true,
-      "scopeLimitation": "The compiler targets the i32-only executable subset accepted by Wasm/Validate.lean. Of the four required arithmetic modes, only `modular` with a u32 accumulator compiles. `checked`, `strictFloat` and `exactDyadicRoundOnce` all require an accumulator wider than i32 or a checked-overflow test i32 cannot perform, and are compiled to `unreachable` (trap) rather than to code computing something different.",
-      "note": "Honest by construction -- the artifact traps instead of lying, and Plan.inReleasedSubset is the decidable predicate excluding those nodes. But it means SPEC 13 Phase B ('construct an input-total scalar GNAF GEMM plan') is NOT achievable with the current compiler/target, so no correct release artifact can be emitted. This is a larger gap in O-6 than the module count suggests."
+      "scopeLimitation": "The current compiler still targets Wasm.Subset.Module and an unbounded-Nat plan machine whose address, word, floating-point, and exact-dyadic behavior is not the released Core execution relation. It has no exact CheckedPlan proof package for the required < 2^32 layout, local/index, literal, dynamic-address, and resource bounds; unsupported arithmetic modes still compile to unreachable.",
+      "note": "Closure requires a direct Core compiler for every SPEC 8.2 arithmetic contract, with no clamp, wraparound, or unreachable fallback; a public representability witness; and kernel-checked validation, execution refinement, resource, and exact charged-cost theorems."
     },
     {
       "id": "BI-003",
       "level": "formalProof",
-      "statement": "Plan.inReleasedSubset is inhabited by an actual GEMM plan: gemmWitness classifies the raw ABI header, dispatches on layout class, runs the blocked traversal and i/j loop nest, accumulates the k reduction under the modular-u32 contract, STORES the product into the declared C region, sets the status word and publishes C; it type checks, compiles, validates, and its compilation contains no unreachable.",
+      "statement": "The concrete gemmWitness plan satisfies Plan.inReleasedSubset = true.",
       "leanDeclaration": "WasmGemmGnaf.GNAF.gemmWitness_inReleasedSubset",
       "specSection": "11.4",
       "status": "discharged",
       "obligation": "O-6",
       "releaseApplicable": true,
-      "note": "DISCHARGED, and now WITNESSED BY A WRITE. gemmWitness is a concrete 1x1x1 modular-u32 GEMM plan: classifies the raw ABI header, dispatches on layout class, runs the blocked traversal and i/j loop nest, accumulates the k reduction, STORES the accumulator into C via Plan.storeReg, sets status success and publishes C. Proved in-subset, typed, compiled, validated, unreachable-free; the accumulator is exactly (A*B) mod 2^32 (gemmWitness_eval_acc); gemmWitness_writes_C reads the C region back little-endian at the stored width and gets alpha*A*B + beta*C mod 2^32 for the alpha and beta this descriptor declares; gemmWitness_eval_mem_outside is the frame; gemmWitness_eval_out publishes the whole four-cell result; gemmWitness_eval_status is status 0 (success).",
+      "note": "This row credits only gemmWitness_inReleasedSubset. The source contains separate typing, compilation, evaluation, write, frame, output, status, and unreachable-free lemmas, but they receive no additional bundled claim credit here.",
       "axioms": [],
       "scopeLimitation": "The witness is a 1x1x1 modular-u32 kernel with concrete operands, which is what SPEC 8.3 asks of an anti-vacuity witness. Three limits: (1) gemmWitness_writes_C is the alpha=1, beta=0 instance -- those are the literals the witness header declares (gemmWitnessAlpha_eq, gemmWitnessBeta_eq) and the plan carries no scaling node, so the general alpha/beta form is NOT proved; (2) it is a statement about Plan.eval, not about the emitted Wasm -- that link is compile_refines, omitted under BI-002/O-6; (3) the witness cell image still has overlapping declared regions (A, B, C element lengths of 4 bytes over one-cell elements, and C's four cells run into the declared status-detail record); Machine.classify checks header literals, kind/mode tags and extent only, so no region disjointness is claimed. SPEC 8.3 anti-vacuity witnesses for every scalar-kind x mode x transpose x layout-class combination remain outstanding under BI-002.",
       "sourceModule": "WasmGemmGnaf/GNAF/CompileCorrect.lean"
@@ -351,7 +344,7 @@
     {
       "id": "AT-003",
       "level": "formalProof",
-      "statement": "The Atlas semantic closure is the LEAST closed set containing its input, equals the derivation closure, and satisfies the UOR-GNAF Theorem 11.3 merge law.",
+      "statement": "Atlas.semanticClosure is contained in every semantically closed body containing its seed body.",
       "leanDeclaration": "WasmGemmGnaf.Atlas.semantic_closure_least",
       "sourceModule": "WasmGemmGnaf/Atlas/SemanticClosure.lean",
       "axioms": [
@@ -361,12 +354,12 @@
       "specSection": "12.1",
       "status": "discharged",
       "releaseApplicable": true,
-      "note": "semantic_closure_eq_derivable discharges the UOR-GNAF section 18 non-claim 'that a fixed point is the least derivation closure'. Termination via the explicit residual_lt measure."
+      "note": "This row credits only the least-closed-superset theorem named above. Equality with a derivation closure and merge laws are separate declarations and are not bundled into this claim row."
     },
     {
       "id": "AT-004",
       "level": "formalProof",
-      "statement": "Incremental Atlas accumulation equals full rebuild; empty delta is a fixed point; compatible deltas commute.",
+      "statement": "For a coherent Atlas state body whose scope is unscoped, incremental accumulation equals full rebuild.",
       "leanDeclaration": "WasmGemmGnaf.Atlas.incremental_eq_full_rebuild",
       "sourceModule": "WasmGemmGnaf/Atlas/Rebuild.lean",
       "axioms": [
@@ -376,8 +369,9 @@
       ],
       "specSection": "12.5",
       "status": "discharged",
-      "releaseApplicable": true,
-      "note": "Budget conservation is a proof field discharged at every construction site, never assumed."
+      "releaseApplicable": false,
+      "note": "Budget conservation is a proof field discharged at every construction site, never assumed.",
+      "scopeLimitation": "The theorem requires both Atlas.Coherent state.body and state.body.scope = Atlas.Scope.unscoped. SPEC's amended scoped required-name proposition remains outstanding and is not credited by this row."
     },
     {
       "id": "CM-003",
@@ -388,12 +382,12 @@
       "specSection": "4",
       "status": "verified",
       "releaseApplicable": true,
-      "note": "116 source files. Stage 2's Artifact/Bytes.lean entry and stage 2's compiledEnvironmentDigest are null because no artifact is emitted and the final theorem is not on the path -- recorded as null rather than fabricated."
+      "note": "The source count is recomputed by the manifest generator rather than copied into this row. Stage 2's compiledEnvironmentDigest remains null while the final theorem is absent -- recorded as null rather than fabricated."
     },
     {
       "id": "GO-004",
       "level": "formalProof",
-      "statement": "GlobalOptimal is ATTAINABLE: if the admissible set is nonempty and the decider answers on admissible bytes, some byte sequence satisfies GlobalOptimal in full -- all three extensional conjuncts, the evaluation existential with Correct and Feasible, the universal lower-bound clause over all of ByteArray, and the canonical tie-break clause.",
+      "statement": "For the current legacy-subset Setting/SystemEvaluation carrier, if the admissible set is nonempty and the decider answers on admissible bytes, a generic finite-argmin theorem yields some byte sequence satisfying that carrier's GlobalOptimal predicate.",
       "leanDeclaration": "WasmGemmGnaf.Universal.exists_globalOptimal_of_nonempty",
       "sourceModule": "WasmGemmGnaf/Universal/Argmin.lean",
       "axioms": [
@@ -403,8 +397,8 @@
       ],
       "specSection": "13",
       "status": "discharged",
-      "releaseApplicable": true,
-      "note": "SPEC 13 Phase D. The optimality HALF of the release theorem is now discharged. Because the artifact is defined as the selection, the lower bound falls out of the argmin construction rather than needing an analytic certificate: scores are naturals so a nonempty admissible set has a least score; minimizers satisfy moduleBytes <= score by coordinate_le_score hence are bounded-length and finite; a finite nonempty set under the total order CanonicalBytesLE has a canonical-least element. What remains is an EXHIBITION problem, not a lower-bound problem. Correct and Feasible were NOT assumed: correct_of_admissible and feasible_of_admissible are proved from the three extensional predicates, because every recorded CostedExecutionObservation carries a FiniteExecution proof and both branch costs are pinned to Cost.traceCost by costExact. GO-004 carries one hypothesis, UV-003. AUDIT NOTE: Release.decider and Release.evaluateClassically, and every result stated against them, have been DELETED (see UV-003, reopened). Universal.exists_globalOptimal_of_nonempty itself is decider-agnostic and stands; nothing instantiates it, and this repository now states no GlobalOptimal result at the release scope at all.",
+      "releaseApplicable": false,
+      "note": "Generic finite-argmin infrastructure only. The proof constructs a canonical least admissible byte string under explicit DeciderAnswersAdmissible and nonemptiness hypotheses, but its ProfileValid/SystemEvaluation definitions still use Wasm.Subset.Module. The public amended-Core carrier, evaluator soundness/completeness, coverage or attained lower bound, selection, and byte identification remain open. Release.decider and Release.evaluateClassically are deleted, nothing instantiates this theorem at release scope, and no release-scoped GlobalOptimal result is declared.",
       "hypotheses": [
         "UV-003 (DeciderAnswersAdmissible)",
         "GO-006 (nonemptiness)"
@@ -412,19 +406,15 @@
     },
     {
       "id": "GO-005",
-      "level": "formalProof",
-      "statement": "SystemEvaluation is a subsingleton: every field is pinned by decodeEq, initialEq, treeComplete, resourceExact and costExact.",
-      "leanDeclaration": "WasmGemmGnaf.Universal.systemEvaluation_subsingleton",
+      "level": "open",
+      "statement": "Universal.system_evaluation_rel_functional holds for two evaluations of the same bytes under the public amended-Core release carrier and exact released evaluator relation.",
+      "leanDeclaration": null,
       "sourceModule": "WasmGemmGnaf/Universal/Argmin.lean",
-      "axioms": [
-        "propext",
-        "Classical.choice",
-        "Quot.sound"
-      ],
       "specSection": "10.1",
-      "status": "discharged",
+      "status": "outstanding",
+      "obligation": "O-6",
       "releaseApplicable": true,
-      "note": "LOAD-BEARING. GlobalOptimal's lower-bound clause is a CONJUNCTION over every inhabitant of the evaluation type, so it is satisfiable only because that type has a unique inhabitant. Without this lemma the release theorem would be unsatisfiable for reasons unrelated to the lower bound."
+      "note": "The existing systemEvaluation_subsingleton and system_evaluation_rel_functional declarations unfold through Wasm.Subset.Module and the legacy subset evaluation relation. They do not discharge SPEC 10.1 for the public amended-Core release carrier while WS-003 is open. Closure requires rebuilding evaluation uniqueness and relation functionality after that carrier migration."
     },
     {
       "id": "GO-006",
@@ -439,7 +429,7 @@
         "BI-002",
         "WS-001"
       ],
-      "note": "The antecedent of GO-004. This is SPEC 13 Phase B. Blocked by the compiler/target scope (BI-002). GO-008 is now closed, so the seam is no longer the blocker: two of the four conjuncts hold on the closed literal Release.witnessBytes (Release.witness_profileValid and Theorems.release_systemEvaluation_inhabited). What is still missing is a literal that is BOTH evaluated AND semantically correct: witnessModule's gemm returns the constant 0, and for Artifact.baselineBytes SemanticCorrect is GNAF.compile_refines (BI-002/O-6) with no evaluation."
+      "note": "The antecedent of GO-004. This is SPEC 13 Phase B and is blocked by the direct public-Core compiler/refinement work (BI-002/BI-010) and the exact public execution/cost harness (WS-001/CO-006). The former legacy subset witness/evaluation cones were deleted: no current byte literal is simultaneously public-Core profile valid, semantically correct, resource feasible, and equipped with the released SystemEvaluation."
     },
     {
       "id": "GO-007",
@@ -450,18 +440,18 @@
       "status": "outstanding",
       "obligation": "O-5",
       "releaseApplicable": true,
-      "note": "GO-004 produces an EXISTENTIAL by classical reasoning; it names no literal. Naming one requires running the selection over the admissible set, which is the step that is physically infeasible. This is now the precise residue of O-5: not that a lower bound is unprovable, but that the winner cannot be exhibited. A noncomputable Release.artifactBytes would make the theorem provable and leave no committed artifact, which SPEC 11.4 forbids."
+      "note": "GO-004 produces only a legacy-carrier existential by classical reasoning and names no literal. Exact exhibition is one additional obligation, not the sole residue of O-5: the public carrier/evaluator and universal coverage or attained lower bound also remain open. A noncomputable Release.artifactBytes would leave no committed artifact, which SPEC 11.4 forbids."
     },
     {
       "id": "GM-002",
       "level": "formalProof",
-      "statement": "SPEC 8.4 reference obligations: reference_total, valid_reference_nonempty, deterministic_mode_unique, reference_memory_safe, and the SPEC 8.3 anti-vacuity witness theorems.",
+      "statement": "For every valid raw invocation, Gemm.reference returns a reference result.",
       "leanDeclaration": "WasmGemmGnaf.Gemm.reference_total",
       "specSection": "8.4",
       "status": "discharged",
       "obligation": "O-6",
       "releaseApplicable": true,
-      "note": "DISCHARGED. All six SPEC 8.4 obligations proved: reference_total, valid_reference_nonempty, deterministic_mode_unique, reference_memory_safe, plus the SPEC 8.3 anti-vacuity theorems mandatory_family_nonzero_witnesses and observation_covers_status_and_full_c. The anti-vacuity pair matters most: without them every downstream correctness claim could be vacuous.",
+      "note": "This row credits only reference_total. Other reference and anti-vacuity declarations may be useful supporting lemmas, but they require their own exact claim rows before receiving separate formal-proof credit.",
       "sourceModule": "WasmGemmGnaf/Gemm/Reference.lean",
       "axioms": [
         "propext",
@@ -488,7 +478,7 @@
     {
       "id": "BI-005",
       "level": "formalProof",
-      "statement": "The anti-vacuity GEMM witness WRITES its result: after evaluation the declared C region of gemmWitness holds alpha*A*B + beta*C modulo 2^32 for the alpha and beta its descriptor declares, read back little-endian at the stored width, with every cell outside C unchanged.",
+      "statement": "After Plan evaluation, reading four bytes at gemmWitness's declared C base yields its declared alpha*A*B + beta*C value modulo 2^32.",
       "leanDeclaration": "WasmGemmGnaf.GNAF.gemmWitness_writes_C",
       "specSection": "8.3",
       "status": "discharged",
@@ -498,7 +488,7 @@
         "BI-004"
       ],
       "releaseApplicable": true,
-      "note": "DISCHARGED. gemmWitness now ends its kernel with Plan.storeReg into C. gemmWitness_writes_C: leWord (eval).mem gemmWitnessC.base 4 = (gemmWitnessAlpha * (a*b) + gemmWitnessBeta * c) % 2^32, where gemmWitnessAlpha and gemmWitnessBeta are read out of the witness header's own alpha/beta fields and equal 1 and 0 (gemmWitnessAlpha_eq, gemmWitnessBeta_eq). Supporting: gemmWitness_eval_mem_outside (frame), gemmWitness_eval_out (buildOutput publishes the whole four-cell result), gemmWitness_eval_status (status 0 success), gemmWitness_typed, gemmWitness_compiles, gemmWitness_no_unreachable. This is the first link of SPEC 13 Phase B: an in-subset plan that genuinely computes a GEMM rather than one that merely type checks.",
+      "note": "This row credits exactly gemmWitness_writes_C. Separate frame, output, status, typing, compilation, and unreachable-free declarations are supporting lemmas but are not bundled into this row. The result is Plan.eval evidence over the legacy subset compiler, not emitted-Wasm refinement.",
       "axioms": [
         "propext",
         "Quot.sound"
@@ -528,52 +518,40 @@
     },
     {
       "id": "GO-008",
-      "level": "formalProof",
-      "statement": "AMENDED: Release.Seam is inhabited by a NON-DEGENERATE seam -- its CostedMachine is the actual all-branch costed explorer and is proved to complete with a NONEMPTY frontier on a real profile-valid module, and its Semantics is a proved LOWER BOUND on the SPEC 7.5 charge model (exact on the branch and trap rules, under-charging the rules a plain Wasm.Event cannot determine).",
-      "leanDeclaration": "WasmGemmGnaf.Release.systemEvaluation_inhabited",
+      "level": "open",
+      "statement": "Universal.SystemEvaluationRel is inhabited for an emitted, semantically correct public Core GEMM module under the exact released costed harness.",
+      "leanDeclaration": null,
       "sourceModule": "WasmGemmGnaf/Artifact/Release.lean",
       "specSection": "10.1",
-      "status": "discharged",
+      "status": "outstanding",
       "obligation": "O-6",
       "releaseApplicable": true,
       "dependsOn": [
         "WS-001"
       ],
-      "note": "DISCHARGED. Release.seam is a CLOSED term (every field a definition, none a parameter). Non-degeneracy proved: seam_costEvent_not_zero (the .branch charge is nonzero and equals dispatchCharge exactly; every event charges >= 1 rule step), seam_validationSteps_pos, and seam_machine_completes at every raw invocation. systemEvaluation_inhabited then gives exists bytes, Nonempty (SystemEvaluation ...), so the nonemptiness antecedent is satisfiable at this seam and the release theorems are no longer implications with an untestable antecedent.",
-      "axioms": [
-        "propext",
-        "Classical.choice",
-        "Quot.sound"
-      ]
+      "note": "The former systemEvaluation_inhabited theorem uses the legacy Wasm.Subset seam and an under-charging event projection. It is not a witness for the public Core carrier or SPEC 7.5 and therefore cannot discharge this release claim."
     },
     {
       "id": "CO-006",
-      "level": "formalProof",
-      "statement": "The release cost table contains a row for every pinned Core rule identifier, with exact scalarOps, vectorLaneOps and byte/page/element counts per rule (SPEC 7.5).",
-      "leanDeclaration": "WasmGemmGnaf.Wasm.canonicalCostTable_exact_cover",
+      "level": "open",
+      "statement": "The released cost table contains exactly one row for every enabled amended Core 3.0 execution and harness event, with exact SPEC 7.5 contributions.",
+      "leanDeclaration": null,
       "sourceModule": "WasmGemmGnaf/Wasm/Costed.lean",
       "specSection": "7.5",
-      "status": "discharged",
+      "status": "outstanding",
       "obligation": "O-6",
       "releaseApplicable": true,
-      "note": "DISCHARGED. canonicalCostTableUnits.ruleRows = RuleId.all.map RuleId.row, by rfl with NO axioms: exactly one row per each of the 34 RuleIds. Duplicate freedom is canonicalCostTable_ruleRows_nodup, total coverage is canonicalCostTable_covers_every_rule, and canonicalCostTable_charges_exactly proves the table charges exactly what the SPEC 7.5 contribution law charges. initializationRows likewise covers the 9 harness events. The two static functions Universal.Semantics needs -- Wasm.validationCost and Wasm.instantiatedStaticBytes -- now exist.",
-      "axioms": []
+      "note": "canonicalCostTable_exact_cover covers only the legacy subset RuleId enumeration. It does not cover the amended Core StepA/ReadRule/harness event universe and receives no release credit."
     },
     {
       "id": "WS-002",
-      "level": "formalProof",
-      "statement": "The costed all-branch explorer completes whenever the plain explorer does with a nonempty observation list, returning a canonically-ordered nonempty frontier with coverage.",
-      "leanDeclaration": "WasmGemmGnaf.Wasm.exploreAllCosted_complete_of_nonempty",
-      "sourceModule": "WasmGemmGnaf/Wasm/CostedExplore.lean",
-      "axioms": [
-        "propext",
-        "Classical.choice",
-        "Quot.sound"
-      ],
+      "level": "open",
+      "statement": "The public amended Core costed explorer is sound and complete for every bounded branch and returns a canonical nonempty maximal frontier when complete.",
+      "leanDeclaration": null,
       "specSection": "10.1",
-      "status": "discharged",
+      "status": "outstanding",
       "releaseApplicable": true,
-      "note": "NON-DEGENERATE BY CONSTRUCTION: exploreAllCosted matches on the SAME scrutinee as exploreAll ((prefixes (bound+1) [] initial).head?), so the two correspond constructor for constructor rather than failing unconditionally. exploreAllCosted_erases proves erasure yields exactly exploreAll's result (SPEC 7.5). This supplies the CostedMachine half of GO-008; what remains there is constructing Release.seam and proving seam_machine_completes on a real module."
+      "note": "exploreAllCosted_complete_of_nonempty is proved only for the legacy subset machine. The release theorem requires the public Core harness, exact Core events, and the amended successor relation."
     },
     {
       "id": "BI-006",
@@ -588,7 +566,7 @@
       "dependsOn": [
         "WS-001"
       ],
-      "note": "Named by the seam work as the exact reason the costed machine could NOT be discharged on the real GEMM baseline: it needs a termination argument for GNAF.bodyCode's compiled loops, which the repository does not have and which no amount of `decide` supplies at that fuel. Release.witnessModule is the smallest GNAF.moduleOf output (correct shape, correct ABI, body `i32.const 0`) and is used ONLY to witness that the costed machine completes. Its own doc states it computes no product. UPDATE (BI-006 revisit): the PLAN-level half is now closed -- Plan.loopReg clamps at loopRegMaxTrips and GNAF.gemmKernel_stepBound_le_maxSteps proves the kernel's static Plan.stepBound (792281624699921518248014643209, about 2^99) is inside 2^320, and GNAF.gemmKernel_steps_le_maxSteps bounds every GNAF evaluation. That says NOTHING about Wasm reduction length: compile_resources bounds emitted code SIZE, not execution. Release section 5.13 now carries the real kernel (Release.gemmKernelModule, gemmKernel_profileValid on a closed literal) and proves the entire machine and evaluation chain -- gemmKernel_machine_completes_of, gemmKernelSystemEvaluationOf -- from exactly two named, unproved propositions: Release.GemmKernelReducesBounded (the termination half of the omitted compile_refines) and Release.GemmKernelReachesTerminal (which is Wasm.validation_progress, OUTSTANDING under O-6). BI-006 stays open because those two are Wasm-execution facts and neither is proved."
+      "note": "The PLAN-level bound is closed: Plan.loopReg clamps at loopRegMaxTrips, GNAF.gemmKernel_stepBound_le_maxSteps places the static Plan.stepBound inside 2^320, and GNAF.gemmKernel_steps_le_maxSteps bounds Plan evaluation. This says nothing about amended Core reduction length: the current compiler still returns Wasm.Subset.Module, compile_resources bounds emitted code size rather than execution, and no public-Core compiled byte/SystemEvaluation witness exists. BI-006 remains open until direct Core compilation, refinement, typed progress, and exact whole-machine execution establish the released bound."
     },
     {
       "id": "GO-009",
@@ -603,22 +581,21 @@
         "BI-006",
         "BI-002"
       ],
-      "note": "The residue of GO-006, stated exactly. Two modules exist and neither is both: Release.witnessModule is evaluable but returns `i32.const 0` and computes no product, so SemanticCorrect is FALSE for it -- which means Release.globalOptimal_of_witness_semantics, though correctly stated and honestly annotated ('conjuncts (b) and (c) are the caller's, and this repository supplies neither'), is a conditional whose antecedent is unsatisfiable at witnessBytes. Artifact.baselineBytes is a real GEMM module with baseline_profileValid proved, but is not known to be evaluable (BI-006). Closing GO-006 needs one module with both properties."
+      "note": "The residue of GO-006, stated exactly. The former legacy subset witness and baseline byte cones were removed because they used the wrong decoder, module, event, and cost carriers. No current public-Core emitted module is both semantically correct for the release GEMM problem and equipped with the exact released SystemEvaluation."
     },
     {
       "id": "BI-007",
       "level": "formalProof",
       "statement": "The GNAF plan language can express input-dependent computation: reading a descriptor field from memory into a register, and looping a number of times determined by that register.",
-      "leanDeclaration": "WasmGemmGnaf.GNAF.gemmKernel_writes_C",
-      "sourceModule": "WasmGemmGnaf/GNAF/CompileCorrect.lean",
+      "leanDeclaration": "WasmGemmGnaf.GNAF.loopReg_trips_from_memory",
+      "sourceModule": "WasmGemmGnaf/GNAF/Semantics.lean",
       "specSection": "3",
       "status": "discharged",
       "obligation": "O-6",
       "releaseApplicable": true,
       "note": "DISCHARGED. Plan.loadReg (memory->register, dual to storeReg, sharing its addressing) and Plan.loopReg (extent read once from a register) threaded through all six GNAF files. loopReg_trips_from_memory proves a loadReg followed by a loopReg runs the body exactly as many times as the MEMORY WORD says -- the statement the fixed-extent fragment cannot make. gemmKernel_writes_C is universally quantified over M N K i j. The same plan is proved correct at three different shapes (1x1x1, 2x2x2, 1x3x2 rectangular with k != n), which is the evidence the fixed-extent limitation is gone. A GNAF IndexMap has plan-constant coefficients, so addresses are computed into a register by scalarOp and read through IndexMap.idB -- address arithmetic is data, exactly as the extents are.",
       "axioms": [
-        "propext",
-        "Quot.sound"
+        "propext"
       ],
       "scopeLimitation": "Three limits, all stated in the Lean doc comments. (1) THE TRIP COUNT IS CLAMPED. Plan.eval runs a loopReg min(reg extentReg, loopRegMaxTrips) times, with loopRegMaxTrips = 4294967295. A clamp is forced: SPEC 11.2 requires the static bound Plan.steps_le_stepBound, and no fixed natural number bounds an unclamped register-driven loop, so an unclamped constructor would have made that theorem false. The constant is the released i32 ceiling, which is also maxRawExtent, so the clamp is unreachable for any configuration the released ABI can present and for any register value the compiled i32 locals can represent; loopReg_zero, loopReg_succ, loopReg_eq_loopNest and loopReg_trips_from_memory therefore carry the hypothesis n <= loopRegMaxTrips. (2) THE STATIC COST OF A loopReg IS WORST CASE: its charge is the body charge iterated loopRegMaxTrips times, since the plan text no longer knows the trip count. The certified cost of a plan using loopReg is sound but enormous, and no tighter cost claim is made. (3) EXPRESSIVENESS ONLY. This entry closes the language defect; the plan that USES it is BI-008 (GNAF.gemmKernel, an input-dependent GEMM whose i/j/k trip counts are the header's m/n/k, proved correct for arbitrary m,n,k under the bounds stated there, and exhibited on three different shapes). gemmWitness remains the fixed 1x1x1 kernel of BI-003/BI-005 and is unchanged. Everything in both entries is proved of Plan.eval, not of the emitted Wasm (compile_refines remains omitted under BI-002/O-6)."
     },
@@ -662,7 +639,7 @@
       "specSection": "15",
       "status": "verified",
       "releaseApplicable": true,
-      "note": "ADDED after external audit showed the claims registry materially understated the proof surface: 10 'outstanding' rows against 36 outstanding SPEC 15 declarations. `just required` parses SPEC 15 and queries the compiled environment: 58 required, 22 discharged, 36 outstanding. Gate steps 4, 5, 8 and 9 now test declaration presence instead of reading model/claims.json."
+      "note": "ADDED after external audit showed the claims registry materially understated the proof surface. `just required` parses the live SPEC 15 inventory and queries the compiled environment; its declaration count and discharged/outstanding totals are printed live and are not copied into this row. Gate steps 4, 5, 8 and 9 test declaration presence instead of reading model/claims.json."
     },
     {
       "id": "WS-003",
@@ -677,61 +654,59 @@
       "dependsOn": [
         "WS-001"
       ],
-      "note": "Raised by external audit. `def wasmProfile := Wasm.unitWitnessProfile`, and the cost table is Wasm.canonicalCostTableUnits rather than SPEC 7.5's Release.wasmCostTableBody. The file discloses both, and wasmProfile_body : wasmProfile.body = wasmProfileBody holds by rfl, but the SEMANTICS backing the profile is the i32 subset. So the syntactic 'for all ByteArray' in GlobalOptimal does not yet range over the authority-required Core 3.0 competitor universe. UPDATE (release-path migration tranche): two things changed and neither of them closes this. (1) Release.wasmProfile is no longer SPELLED as somebody else's non-vacuity witness -- it now names its own body, and Release.wasmProfile_eq_unitWitnessProfile states the identity by rfl so the rename is disclosed rather than mistaken for a strengthening. (2) The released profile now has a Core 3.0 module and BYTES to be applied to: WS-005. What is UNCHANGED is the thing this claim is about -- Universal.ProfileValid still decodes with Wasm.Subset.decode, so the competitor universe is still the subset one, and the cost table still has no vendored conformance map behind it. Migrating Universal.ProfileValid onto Wasm.decode is blocked on the Core execution layer: Universal.SystemEvaluation, Universal.StartsCostedInvocation and Universal.Setting.machine all name Wasm.Module, and Wasm/Core/ has no Config, no Store, no successors and no initialGemmInvocationCosted. Moving ProfileValid alone would leave the release conjunction naming two different modules for the same bytes, which is worse than the disclosed gap."
+      "note": "Raised by external audit. `def wasmProfile := Wasm.unitWitnessProfile`, and the cost table is Wasm.canonicalCostTableUnits rather than SPEC 7.5's Release.wasmCostTableBody. The file discloses both, and wasmProfile_body : wasmProfile.body = wasmProfileBody holds by rfl, but the SEMANTICS backing the profile is the i32 subset. So the syntactic 'for all ByteArray' in GlobalOptimal does not yet range over the authority-required Core 3.0 competitor universe. UPDATE (Core release-spine work): the public representable carrier and amended decoder are now Core 3.0, and the Core runtime/execution relations have a single finite authority selector with explicit amended endpoints. This still does not close the claim: Universal.ProfileValid and Universal.SystemEvaluation remain on `Wasm.Subset`, the Core numerics provider is not yet concrete, event-labelled configurations and exact whole-machine successors/progress remain incomplete, and the cost table still has no completed vendored conformance path. ProfileValid cannot be moved alone, because that would leave one release conjunction naming two different modules for the same bytes."
     },
     {
       "id": "WS-004",
-      "level": "formalProof",
-      "statement": "SPEC 15 Wasm.profile_matches_pinned_revision, at the meaning SPEC 7.1 gives the name: the concrete model and conformance map are identity-bound to the VENDORED revision, and every enabled vendored rule has exactly one mapped Lean declaration.",
-      "leanDeclaration": "WasmGemmGnaf.Wasm.profile_matches_pinned_revision",
-      "sourceModule": "WasmGemmGnaf/Wasm/Adequacy.lean",
-      "axioms": [
-        "propext",
-        "Classical.choice",
-        "Quot.sound"
-      ],
+      "level": "open",
+      "statement": "Wasm.profile_matches_pinned_revision binds every enabled vendored Core 3.0 rule exactly once to the released amended decoder, validator, runtime, execution, and harness declarations.",
+      "leanDeclaration": null,
       "specSection": "7.1",
-      "status": "discharged",
+      "status": "outstanding",
       "releaseApplicable": true,
-      "note": "Two conjuncts, exactly as SPEC 7.1 defines the name. (1) IDENTITY BINDING TO THE VENDORED REVISION: every lawful Wasm.Profile, core3AdequacyMap and Wasm.core3VendoredTree carry one commit; the map carries the vendored tree record whose manifestSha256 is the SHA-256 of vendor/wasm-spec/SHA256SUMS, itself the list of digests of all forty vendored files; and RevisionBody.identity and VendoredTreeBody.identity are both injective (structural canonical identity from prefix-free encoding -- no collision-resistance assumption anywhere), so a different revision, or a single different vendored byte, gives a different identity. (2) EXACTLY ONE MAPPED DECLARATION PER ENABLED RULE: one fully qualified Lean name, one map row and one vendored anchor per enabled identifier; no declaration shared by two identifiers; nothing at all for a rejected one. Re-indexed as WasmGemmGnaf.Theorems.profile_matches_pinned_revision.",
-      "axiomNote": "Classical.choice is permitted by SPEC 4 as a Lean core logical axiom; SPEC 4's restriction is that it SHALL NOT produce executable witnesses. It enters through Lean core's String.ofList_toList, used by Wasm.string_append_left_cancel to cancel the `WasmGemmGnaf.Wasm.` namespace prefix when qualifying a mapped declaration name. This is a Prop-level theorem, not an executable witness, so the restriction is not triggered.",
-      "boundaryNote": "Lean does not read vendor/wasm-spec/. The content binding rests on the literals core3VendorManifestSha256, core3VendoredTree.fileCount and core3RevisionCommit; CM-006 is the tooling claim that recomputes them from CONTENT. What is NOT established, and why WS-001/O-6 stay open: the enumeration cites 73 distinct vendored anchors of the 835 rule-shaped labels the vendored tree defines, so PinnedCoreRuleId is a declared SUBSET of the pinned rule set and is not proved to be all of it; and 320 unexpanded SpecTec ${rule: ...} references remain in the vendored sources, whose .watsup bodies are not vendored, so the anchor check tests rule IDENTITY and never rule CONTENT. SPEC 7.1 places the transcription on the authority side of the boundary; this theorem claims nothing on the far side of it."
+      "note": "The existing Adequacy enumeration explicitly maps nearly every row to the legacy subset and covers only a hand-written subset of vendored rules. Its totality theorem therefore does not discharge the public Core adequacy obligation."
     },
     {
       "id": "CM-006",
       "level": "buildEvidence",
-      "statement": "The Lean literals Wasm.profile_matches_pinned_revision stands on are recomputed from the vendored CONTENT: the digest of vendor/wasm-spec/SHA256SUMS, the per-file digests of all forty vendored files, the file count, the pinned commit, and every vendored rule anchor the conformance map cites.",
+      "statement": "The Lean literals Wasm.profile_matches_pinned_revision stands on are recomputed from the vendored CONTENT: the digest of vendor/wasm-spec/SHA256SUMS, the per-file digests of all 374 vendored files, the file count, the pinned commit, and every vendored rule anchor the conformance map cites.",
       "leanDeclaration": null,
       "sourceModule": "xtask/src/vendor.rs",
       "specSection": "5",
       "status": "verified",
       "releaseApplicable": true,
-      "dependsOn": [
-        "WS-004"
-      ],
       "note": "SPEC 5.1 boundary: xtask CHECKS whether the kernel discharged an obligation, it never DECIDES one. Lean cannot read the tree, so a drifted literal would still elaborate; `xtask vendor` (release gate step 1, `just vendor`) is what stops it reaching a green gate. It also checks the gap-3 direction the kernel cannot: every anchor Wasm.PinnedCoreRuleId.vendorAnchor? cites must be a label the vendored .rst sources actually DEFINE, so an invented rule identifier fails the gate. 73 of 73 cited anchors found. Falsifier M13 plants a flipped digest, an appended line and a deleted entry on a COPY of the vendored tree and requires the real checker to reject each, with the unmutated copy as control."
     },
     {
-      "id": "UV-004",
-      "level": "formalProof",
-      "statement": "Constructive duplicate-free enumeration of every lawful raw invocation, with a global choice-free Fintype instance, the classifier-driven valid-input enumeration, and an executable input enumerator with completeness.",
-      "leanDeclaration": "WasmGemmGnaf.Gemm.raw_input_finite",
-      "sourceModule": "WasmGemmGnaf/Universal/EnumerateInputs.lean",
-      "axioms": [
-        "propext",
-        "Quot.sound"
-      ],
-      "specSection": "15",
-      "status": "discharged",
+      "id": "CM-007",
+      "level": "open",
+      "statement": "Implement and enforce the complete SPEC 17.2 per-claim row schema, canonical proposition and scope identities, direct dependency graph, checker/falsifier linkage, cycle checks, and at least one planted defect per proof family.",
+      "leanDeclaration": null,
+      "sourceModule": "xtask/src/required.rs",
+      "specSection": "17.2",
+      "status": "outstanding",
+      "obligation": "O-6",
       "releaseApplicable": true,
-      "note": "Closes three SPEC 15 declarations: Gemm.raw_input_finite, Gemm.valid_input_finite, Universal.input_enumerator_complete. the SPEC 15 inventory 22 -> 25 of 58, verified independently. raw_input_finite and input_enumerator_complete are CHOICE-FREE ([propext, Quot.sound]); the instance is global with no hypothesis. Achieving that required reproving List.nodup_range, because the toolchain's goes through List.range_eq_range' and depends on Classical.choice. valid_input_finite DOES carry Classical.choice, inherited from Gemm.classify/refValid in committed code (omega discharges Iff/And/Or classically); no enumeration of the VALID carrier can be choice-free while the classifier is not. Recorded rather than glossed."
+      "note": "The current registry checker enforces nonempty/unique IDs, non-orphan dependencies, and a declaration field on formalProof rows. It does not yet enforce the full per-row schema or all-family falsifier coverage, so `just claims` must not be described as complete SPEC 17.2 conformance. M2-M4 cover only the implemented subset."
+    },
+    {
+      "id": "UV-004",
+      "level": "open",
+      "statement": "Provide a constructive duplicate-free enumeration of every lawful raw invocation, a global choice-free Fintype instance, the classifier-driven valid-input enumeration, and an executable input enumerator with completeness.",
+      "leanDeclaration": null,
+      "sourceModule": "WasmGemmGnaf/Universal/EnumerateInputs.lean",
+      "specSection": "15",
+      "status": "outstanding",
+      "obligation": "O-3",
+      "releaseApplicable": true,
+      "note": "Declarations named Gemm.raw_input_finite, Gemm.valid_input_finite, and Universal.input_enumerator_complete exist, but the compiled axiom audit reaches Classical.choice. SPEC §4 forbids choice from producing these executable enumeration witnesses, so all three exact-bound required names remain uncredited and this claim is not discharged. Closure requires removing that dependency and re-auditing the compiled declarations."
     },
     {
       "id": "WS-005",
       "level": "formalProof",
-      "statement": "The released module has PINNED Core 3.0 BYTES: a 53-byte literal that the complete Core 3.0 decoder accepts, returning exactly Wasm.Core.releaseBaselineModule, which is valid under Release.wasmProfile -- well typed in the amended Core 3.0 judgment and admitted by the profile's own feature matrix, limits, closed import policy and exported ABI.",
+      "statement": "A 53-byte Core 3.0 ABI-shape witness is accepted by the amended decoder as Wasm.Core.releaseBaselineModule and admitted by Release.wasmProfile.",
       "leanDeclaration": "WasmGemmGnaf.Release.coreArtifact_validUnder",
-      "sourceModule": "WasmGemmGnaf/Wasm/CoreArtifact.lean",
+      "sourceModule": "WasmGemmGnaf/Artifact/Release.lean",
       "axioms": [
         "propext",
         "Classical.choice",
@@ -739,12 +714,41 @@
       ],
       "specSection": "7.2",
       "status": "discharged",
-      "releaseApplicable": true,
-      "dependsOn": [
-        "WS-004"
+      "releaseApplicable": false,
+      "note": "This is decoder/profile anti-vacuity only. It is not selected, computes no GEMM, and must be removed from the release cone once the emitted compiled GEMM supplies the same non-vacuity evidence.",
+      "scopeLimitation": "THREE limits, all stated in the Lean doc comments. (1) The 53-byte literal is not emitted by the compiler and is not the selected release artifact; selection remains open. (2) Wasm.Core.releaseBaselineModule computes no GEMM: its body is `local.get 0`; it witnesses only the released ABI shape. (3) the current Universal.ProfileValid release cone is not yet migrated to this public Core carrier, so this anti-vacuity theorem is explicitly non-release-applicable and WS-003 stays open."
+    },
+    {
+      "id": "WS-006",
+      "level": "formalProof",
+      "statement": "Artifact.emit computationally encodes every representable public amended-Core Wasm.Module, and the public amended decoder returns that same module from the emitted bytes.",
+      "leanDeclaration": "WasmGemmGnaf.Artifact.decode_emit",
+      "sourceModule": "WasmGemmGnaf/Artifact/Emit.lean",
+      "axioms": [
+        "propext",
+        "Classical.choice",
+        "Quot.sound"
       ],
-      "note": "The release path is byte indexed and until now nothing on the Core 3.0 side had bytes at all: Wasm/Core/Profile.lean built releaseBaselineModule as abstract syntax and proved it admitted, but no byte string was shown to BE that module under the pinned decoder. Wasm.Core.decode_releaseArtifactBytes is that equation, by kernel computation on a hand-written literal; there is no encoder anywhere in its import graph, and Wasm.Core.releaseArtifactBytes_declarative reaches the pinned grammar Bmodule through Wasm.decode_sound, which xtask independence checks. Anti-vacuity runs in both directions: Wasm.Core.decode_mutatedArtifactBytes shows the decoder still accepts the same literal with the `gemm` export renamed to `gemn`, and Wasm.Core.mutatedArtifactModule_not_admitted shows the released profile then REJECTS it, so admission is doing work rather than passing everything the decoder returns.",
-      "scopeLimitation": "THREE limits, all stated in the Lean doc comments. (1) These are NOT the bytes the release path selects: Release.artifactBytes does not exist, selection is open (GO-004), and Artifact.baselineBytes is the subset codec's output -- `#eval Wasm.decode Artifact.baselineBytes` reports .error Fault.opcode, recorded as a MEASUREMENT in Artifact/Baseline.lean because the kernel does not reduce Wasm.Subset.encode. (2) Wasm.Core.releaseBaselineModule computes no GEMM: its body is `local.get 0`. It is the released ABI SHAPE. (3) Universal.ProfileValid does NOT range over these bytes; Release.coreArtifact_profileValid_spec_reading states SPEC 10.1's own reading, whose decoder is Wasm.decode, and discharges it on this artifact, and it is explicitly not offered as a discharge of Universal.ProfileValid. WS-003 stays open."
+      "specSection": "11.4",
+      "status": "discharged",
+      "releaseApplicable": false,
+      "note": "This is the canonical chosen-output round trip for the public representable carrier, backed by BmoduleA encoder completeness and decoder completeness. It proves neither byte uniqueness nor equality with a selected or committed release artifact, and it constructs no GEMM implementation or SystemEvaluation. Falsifier M22 replaces the emitter with empty bytes on a copy and requires the actual decode_emit proof to stop elaborating."
+    },
+    {
+      "id": "WS-007",
+      "level": "formalProof",
+      "statement": "For every representable public amended-Core Wasm.Module, decoding the computational Wasm.encode output returns that same module.",
+      "leanDeclaration": "WasmGemmGnaf.Wasm.encode_decode_roundtrip",
+      "sourceModule": "WasmGemmGnaf/Wasm/CoreBackEnd.lean",
+      "axioms": [
+        "propext",
+        "Classical.choice",
+        "Quot.sound"
+      ],
+      "specSection": "7.3",
+      "status": "discharged",
+      "releaseApplicable": true,
+      "note": "This closes only the public amended-Core encoder round trip. It proves no byte uniqueness, selected-artifact identity, validation iff, execution theorem, GEMM compiler refinement, or SystemEvaluation. M22 mutates the public encoder and the artifact emitter independently and requires both real round-trip proofs to fail."
     },
     {
       "id": "BI-009",
@@ -759,15 +763,12 @@
       "specSection": "11.4",
       "status": "discharged",
       "releaseApplicable": true,
-      "dependsOn": [
-        "WS-001"
-      ],
       "note": "A negative result, priced so the next migration step does not discover it by finding a proof that stops closing. GNAF.constI n = Wasm.Instr.i32Const (Int.ofNat n) and Wasm.Instr.i32Const : Int -> Instr, so the release path's i32 literal is UNBOUNDED; 2-syntax.values.spectec fixes syntax iN(N) = uN(N), so a Core 3.0 i32 literal is a u32 (GNAF.no_core_i32_lit_two_pow_32). The gap is reachable from the compiler and not merely present in the type: GNAF.bodyCode appends loadAt e.statusAddr to EVERY compiled body (GNAF.compile_body_mem_statusAddr), CompileEnv.pages is clamped to the hard page limit but the ADDRESSES are not, and GNAF.gapChecked -- the plan `nop`, typed by HasType.nop at an interface declaring 2^30 memory cells -- compiles to a body containing i32.const (2^32) (GNAF.compile_gapChecked_emits_two_pow_32). This is the instruction-level counterpart of Wasm/CoreGap.lean's module-level no_typeidx_preserving_map and no_name_preserving_map, stated about the compiler's own output."
     },
     {
       "id": "BI-010",
       "level": "open",
-      "statement": "GNAF.compile emits Wasm.Core.Module: CompileEnv carries a < 2^32 bound on its layout, envOf establishes it from the plan's interface, and every address lemma and correctness theorem of GNAF/CompileCorrect.lean is re-proved over the pinned Core 3.0 instruction typing.",
+      "statement": "GNAF.compile emits the public representable Wasm.Module: CheckedPlan supplies the exact < 2^32 layout facts, CompileEnv carries them without wrapping or clamping addresses, and every address, refinement, resource, and cost theorem is re-proved over the combined amended Core 3.0 validation and execution semantics.",
       "leanDeclaration": null,
       "sourceModule": "WasmGemmGnaf/GNAF/Compile.lean",
       "specSection": "11.4",
@@ -778,27 +779,15 @@
         "BI-009",
         "WS-001"
       ],
-      "note": "The obligation BI-009 prices. Two halves, and the second is the expensive one. (a) REPRESENTABILITY: Sig.mem, Sig.scratch and Sig.tables are unbounded Nats and CompileEnv.statusAddr scales them, so envOf cannot manufacture the bound -- either CompileEnv gains a proof field and GNAF.compile gains a hypothesis, or the layout is clamped and every address lemma changes. Clamping by wrapping modulo 2^32 is NOT available: a wrapped address can land inside the declared memory and then the access succeeds at the wrong place, which is a semantic change and not a representation change. (b) TYPING: GNAF.compile_validates is proved against Wasm/Validate.lean's checker; the Core counterpart needs Wasm.Core.validate to accept the emitted body, which needs Core instruction-typing lemmas for every emitted combinator (countLoop, dispatchOn, classifyCode, layoutCode, ...). Wasm/CoreArtifact.lean shows the released ABI SHAPE is expressible and admitted, so the obstruction is the compiler's numeric representation and its proof layer, not the target syntax."
+      "note": "The obligation BI-009 prices. Sig.mem, Sig.scratch and Sig.tables are unbounded Nats and CompileEnv.statusAddr scales them, so `envOf` cannot manufacture a bound from typing alone. The compile-ready `CheckedPlan` carrier must therefore decide and retain the exact layout inequalities, and normalization and every concrete checked plan must preserve them. Clamping or modulo wrapping is forbidden: a wrapped address can land inside declared memory and succeed at the wrong location. The compiler must then construct Core instructions directly, prove the combined amended validator accepts every emitted combinator, obtain a BmoduleA witness through the canonical encoder, and re-prove execution refinement and exact resource/cost results over the same concrete Core machine. The existing subset compiler and its `unreachable` fallbacks are not a release solution and must not survive as a second semantic path."
     }
   ],
   "refutedFramings": [
-    {
-      "framing": "Closure requires the exact tensor rank of <3,3,3> (open, 19<=R<=23).",
-      "verdict": "REFUTED",
-      "confidence": "high",
-      "reason": "Multiplications and additions are both charged at weight one, so rank is not the binding quantity. Laderman's 23-mult 3x3 scheme costs 23+98=121 charged ops vs naive 45. Truth value invariant across [19,23]."
-    },
     {
       "framing": "Closure requires exact minimal-program-size lower bounds, an open circuit-complexity problem.",
       "verdict": "REFUTED",
       "confidence": "medium",
       "reason": "Weight-one module bytes creates a minimal-total-cost obligation, not a minimal-program-size one; asymptotic circuit lower bounds are the wrong authority."
-    },
-    {
-      "framing": "SPEC 10.3's 'finite and exactly enumerable' is false at release scale.",
-      "verdict": "REFUTED",
-      "confidence": "high",
-      "reason": "As literally written it is provable with no computation: a subset of a finite type is finite. The magnitudes are irrelevant to a finiteness claim."
     }
   ]
 }

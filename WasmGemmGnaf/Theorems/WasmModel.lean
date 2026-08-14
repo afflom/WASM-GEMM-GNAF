@@ -8,49 +8,44 @@
   required-name list can be checked against the *statements* in one place
   instead of trusting that a re-exported name still says what it used to say.
 
-  ## SPEC §15 declarations discharged here
+  ## Exact public-Core SPEC §15 declarations indexed here
 
-  | SPEC §15 name                     | discharged by                             |
-  |-----------------------------------|-------------------------------------------|
-  | `Wasm.mem_successors_iff_step`    | `Theorems.mem_successors_iff_step`        |
-  | `Wasm.bounded_tree_covers_every_branch` | `Theorems.bounded_tree_covers_every_branch` |
-  | `Wasm.costed_erase_iff_plain_run` | `Theorems.costed_erase_iff_plain_run`     |
-  | `Wasm.decode_sound`               | `Theorems.decode_sound`                   |
-  | `Wasm.decode_complete`            | `Theorems.decode_complete`                |
-  | `Wasm.validate_iff_declarative`   | `Theorems.validate_iff_declarative`       |
-  | `Wasm.profile_matches_pinned_revision` | `Theorems.profile_matches_pinned_revision` |
-  | `Wasm.validation_progress`        | `Theorems.validation_progress`            |
+  * `Wasm.decode_sound`
+  * `Wasm.decode_complete`
 
-  `Wasm.costed_erase_iff_plain_run` is discharged in the amended form recorded
-  as `DEV-001` in `model/spec-deviations.json`: the literal SPEC §7.5
-  biconditional is false for an arbitrary cost labelling, so the right-hand side
-  carries the side condition `CostedLabelling`, and the unconditional intent is
-  discharged separately by `Theorems.costed_run_iff_plain_run`.
+  Both are stated over the public representable `Wasm.Module`, the amended
+  decoder, and `Wasm.Core.Binary.BmoduleA`.  The newly required exact public
+  `Wasm.encode_decode_roundtrip` is proved in `Wasm/CoreBackEnd.lean`; it is not
+  re-indexed by this module.
 
-  ## Additional proved results indexed here (not on the §15 list)
+  The other declarations in this file are proved facts about the legacy
+  `Wasm.Subset` validator, execution relation, fuel explorer, costed semantics,
+  or adequacy map.  They remain useful internal results, but their names do not
+  make them public amended-Core SPEC §15 discharges.  In particular, the
+  required public-Core validator biconditional, progress theorem, successor and
+  bounded-explorer results, costed erasure/initialization results, and authority
+  map over every amended rule remain outstanding.  `just required` is the live
+  compiled ledger.
 
-  `encode_decode_roundtrip`, `decode_is_encode`, `decode_error_or_encode`,
-  `validate_bool_iff`, `successors_nodup`, `fault_decoding_ne_instantiation`
+  The §15 list also retains `validate_bool_iff` as an explicitly weak legacy
+  subset name.  Its theorem below has exactly that scope; it is not the public
+  amended-Core validator biconditional.
+
+  ## Additional proved results indexed here
+
+  `subset_encode_decode_roundtrip`, `subset_decode_is_encode`,
+  `subset_decode_error_or_encode`, `successors_nodup`,
+  `fault_decoding_ne_instantiation`
   (with the two injectivity halves), `costed_run_iff_plain_run`,
   `wasm_cost_table_total`, `terminal_iff_halt_trap_or_throw`,
   `validation_preservation`, `initialConfig_configWellTyped`,
   `initialConfig_instantiates`.
 
-  `validation_preservation` is SPEC §7.3's name carrying the invariant
-  hypothesis `hwelltyped` that SPEC's literal signature omits; without it the
-  statement is false.  It is not on the §15 required list.
+  `validation_preservation` carries the invariant hypothesis `hwelltyped`, but
+  it too is a theorem about the legacy subset machine rather than public Core.
 
-  ## SPEC §15 Wasm declarations that remain OUTSTANDING
-
-  None.
-
-  `Wasm.runFuel_sound` and `Wasm.runFuel_complete_with_bound` exist at their
-  §15 names in `WasmGemmGnaf/Wasm/Fuel.lean`, and
-  `Wasm.costed_initialization_erase` exists at its §15 name in
-  `WasmGemmGnaf/Wasm/CostedExplore.lean` (with `Wasm.initialGemmInvocation`, the
-  plain initialization entry point it erases to, the converse
-  `costed_initialization_of_erase`, and the failure half
-  `costed_initialization_erase_error`).  None of the three is re-indexed here.
+  Same-named subset results elsewhere in `WasmGemmGnaf/Wasm/` remain scoped to
+  that legacy machine and receive no release credit.
 -/
 import WasmGemmGnaf.Wasm.Binary
 import WasmGemmGnaf.Wasm.CoreFrontEnd
@@ -70,19 +65,20 @@ namespace WasmGemmGnaf.Theorems
 /-! ## The SUBSET codec: decode/encode round trip
 
 These three are about `Wasm.Subset`, the codec of `Wasm/Binary.lean`.  They are
-NOT the SPEC §15 front-end theorems: `Artifact/Emit.lean` and the competitor
-universe of `Universal/` are built on this codec, so its properties are still
-load-bearing, but they say nothing about the pinned Core 3.0 format. -/
+not the SPEC §15 public front-end theorems.  The release predicates under
+`Universal/` have not yet migrated off this codec, but `Artifact/Emit.lean` now
+uses the public amended-Core encoder.  These results say nothing about that
+public format. -/
 
 /-- **Round trip.**  Decoding an encoded module returns exactly that module. -/
-theorem subset_encode_decode_roundtrip (m : Wasm.Module) :
+theorem subset_encode_decode_roundtrip (m : Wasm.Subset.Module) :
     Wasm.Subset.decode (Wasm.Subset.encode m) = .ok m :=
   Wasm.Subset.encode_decode_roundtrip m
 
 /-- **Subset decoder soundness.**  A byte string that decodes at all is the
 encoding of the module it decodes to, so a malformed input never yields a wrong
 module. -/
-theorem subset_decode_is_encode {b : ByteArray} {m : Wasm.Module}
+theorem subset_decode_is_encode {b : ByteArray} {m : Wasm.Subset.Module}
     (h : Wasm.Subset.decode b = .ok m) : b = Wasm.Subset.encode m :=
   Wasm.Subset.decode_is_encode h
 
@@ -90,27 +86,28 @@ theorem subset_decode_is_encode {b : ByteArray} {m : Wasm.Module}
 fault or produces the unique module whose encoding it is. -/
 theorem subset_decode_error_or_encode (b : ByteArray) :
     (∃ f : Wasm.DecodeFault, Wasm.Subset.decode b = .error f) ∨
-    (∃ m : Wasm.Module, Wasm.Subset.decode b = .ok m ∧ b = Wasm.Subset.encode m) :=
+    (∃ m : Wasm.Subset.Module, Wasm.Subset.decode b = .ok m ∧ b = Wasm.Subset.encode m) :=
   Wasm.Subset.decode_error_or_encode b
 
-/-! ## Binary format: the pinned Core 3.0 grammar
+/-! ## Binary format: the amended Core 3.0 grammar
 
 `Wasm.decode` is the Core 3.0 decoder of `Wasm/Core/Decode.lean` and
-`Wasm.DeclarativeBinaryRelation` is the pinned binary grammar
-`Wasm.Core.Binary.Bmodule`; see `Wasm/CoreFrontEnd.lean` for why the names
-moved. -/
+`Wasm.DeclarativeBinaryRelation` projects the public representable carrier to
+its Core AST and applies the amended binary grammar
+`Wasm.Core.Binary.BmoduleA`;
+see `Wasm/CoreFrontEnd.lean` for why the names moved. -/
 
 /-- **SPEC §15, `Wasm.decode_sound`.**  Everything the executable Core 3.0
-decoder accepts is derivable in `Wasm.DeclarativeBinaryRelation`, the pinned
-binary grammar transcribed in `Wasm/Core/BinaryGrammar/`. -/
-theorem decode_sound {b : ByteArray} {m : Wasm.Core.Module}
+decoder accepts is derivable in `Wasm.DeclarativeBinaryRelation`, the amended
+binary grammar with the registered authority repairs propagated through it. -/
+theorem decode_sound {b : ByteArray} {m : Wasm.Module}
     (h : Wasm.decode b = .ok m) : Wasm.DeclarativeBinaryRelation b m :=
   Wasm.decode_sound h
 
 /-- **SPEC §15, `Wasm.decode_complete`.**  Everything derivable in
 `Wasm.DeclarativeBinaryRelation` the executable Core 3.0 decoder accepts,
 returning exactly the module the derivation synthesized. -/
-theorem decode_complete {b : ByteArray} {m : Wasm.Core.Module}
+theorem decode_complete {b : ByteArray} {m : Wasm.Module}
     (h : Wasm.DeclarativeBinaryRelation b m) : Wasm.decode b = .ok m :=
   Wasm.decode_complete h
 
@@ -118,20 +115,20 @@ theorem decode_complete {b : ByteArray} {m : Wasm.Core.Module}
 
 /-- The executable validator decides the declarative validity judgment of this
 repository's Wasm subset. -/
-theorem validate_bool_iff (m : Wasm.Module) :
+theorem validate_bool_iff (m : Wasm.Subset.Module) :
     Wasm.validate m = true ↔ Wasm.DeclarativelyValid m :=
   Wasm.validate_bool_iff m
 
-/-- **SPEC §15, `Wasm.validate_iff_declarative`.**  The same proposition as
-`validate_bool_iff`, under the name SPEC §15 requires. -/
-theorem validate_iff_declarative (m : Wasm.Module) :
+/-- The legacy subset validation equivalence.  Its proposition is not the
+public amended-Core `Wasm.validate_iff_declarative` obligation. -/
+theorem validate_iff_declarative (m : Wasm.Subset.Module) :
     Wasm.validate m = true ↔ Wasm.DeclarativelyValid m :=
   Wasm.validate_iff_declarative m
 
 /-! ## Reduction: the executable successor enumeration is the relation -/
 
-/-- **SPEC §15, `Wasm.mem_successors_iff_step`.**  The executable successor
-enumeration is exactly the reduction relation — the anti-cheat property. -/
+/-- On the legacy subset machine, executable successor enumeration is exactly
+the reduction relation.  The public amended-Core obligation remains open. -/
 theorem mem_successors_iff_step (c : Wasm.Config) (e : Wasm.Event) (c' : Wasm.Config) :
     (e, c') ∈ Wasm.successors c ↔ Wasm.Step c e c' :=
   Wasm.mem_successors_iff_step c e c'
@@ -143,7 +140,7 @@ theorem successors_nodup (c : Wasm.Config) : (Wasm.successors c).Nodup :=
 
 /-! ## The bounded explorer covers every maximal branch -/
 
-/-- **SPEC §15, `Wasm.bounded_tree_covers_every_branch`.**  When
+/-- On the legacy subset machine, when
 `Wasm.exploreAll` answers `complete`, the observations it carries contain
 *every* finite execution of the initial configuration — with no hypothesis on
 the trace length.  This is strictly stronger than
@@ -162,8 +159,8 @@ theorem bounded_tree_covers_every_branch {bound : Nat} {initial : Wasm.Config}
 
 /-! ## Progress and preservation for the modelled machine -/
 
-/-- **SPEC §15, `Wasm.validation_progress`.**  A well-typed configuration of a
-valid module has halted, trapped, thrown, or can still take a step.
+/-- A well-typed configuration of a valid legacy subset module has halted,
+trapped, thrown, or can still take a step.  This is not public-Core progress.
 
 `Wasm.ConfigWellTyped` is the syntactic typing invariant of
 `WasmGemmGnaf/Wasm/Soundness.lean`, stated in the declarative judgment of
@@ -174,7 +171,7 @@ reduction (`validation_preservation`) and established by `Wasm.initialConfig`
 one restriction the modelled `Wasm.Step` forces — a branch to a function's
 implicit outermost label has no reduction rule, so the invariant admits only
 frame-local branches — is stated in that file's header. -/
-theorem validation_progress {module : Wasm.Module} {config : Wasm.Config}
+theorem validation_progress {module : Wasm.Subset.Module} {config : Wasm.Config}
     (hvalid : Wasm.DeclarativelyValid module)
     (hconfig : Wasm.ConfigInstantiates module config)
     (hwelltyped : Wasm.ConfigWellTyped config) :
@@ -184,9 +181,8 @@ theorem validation_progress {module : Wasm.Module} {config : Wasm.Config}
     (Wasm.successors config).Nonempty :=
   Wasm.validation_progress hvalid hconfig hwelltyped
 
-/-- **SPEC §7.1.**  A configuration is terminal exactly when it has halted,
-trapped, or thrown, so the first three disjuncts of `validation_progress` really
-are "the machine has stopped" and the fourth really is "it has not". -/
+/-- On the legacy subset machine, a configuration is terminal exactly when it
+has halted, trapped, or thrown. -/
 theorem terminal_iff_halt_trap_or_throw (config : Wasm.Config) :
     config.IsTerminal ↔
       ((∃ outcome, Wasm.Halt config outcome) ∨
@@ -194,11 +190,9 @@ theorem terminal_iff_halt_trap_or_throw (config : Wasm.Config) :
         (∃ exceptionValue, Wasm.Thrown config exceptionValue)) :=
   Wasm.isTerminal_iff_halt_trapped_thrown config
 
-/-- **SPEC §7.3, `Wasm.validation_preservation`**, with the invariant hypothesis
-SPEC's literal signature omits.  Without `hwelltyped` the statement is false, so
-this is the honest reading rather than the literal one; it is not on the SPEC
-§15 required list. -/
-theorem validation_preservation {module : Wasm.Module} {config : Wasm.Config}
+/-- The legacy subset preservation result, with the invariant hypothesis
+`hwelltyped`.  It does not establish preservation for the public Core machine. -/
+theorem validation_preservation {module : Wasm.Subset.Module} {config : Wasm.Config}
     {event : Wasm.Event} {next : Wasm.Config}
     (hvalid : Wasm.DeclarativelyValid module)
     (hstep : Wasm.Step config event next)
@@ -209,14 +203,14 @@ theorem validation_preservation {module : Wasm.Module} {config : Wasm.Config}
 
 /-- **The invariant is reachable, not empty.**  The configuration the machine
 starts in is well typed. -/
-theorem initialConfig_configWellTyped {m : Wasm.Module} {raw : Wasm.RawInvocation}
+theorem initialConfig_configWellTyped {m : Wasm.Subset.Module} {raw : Wasm.RawInvocation}
     {c : Wasm.Config} (h : Wasm.initialConfig m raw = .ok c)
     (hstart : Wasm.StartFrameLocal m) : Wasm.ConfigWellTyped c :=
   Wasm.initialConfig_configWellTyped h hstart
 
 /-- The configuration the machine starts in instantiates the module it was built
 from. -/
-theorem initialConfig_instantiates {m : Wasm.Module} {raw : Wasm.RawInvocation}
+theorem initialConfig_instantiates {m : Wasm.Subset.Module} {raw : Wasm.RawInvocation}
     {c : Wasm.Config} (h : Wasm.initialConfig m raw = .ok c)
     (hlocal : Wasm.GemmFrameLocal m) : Wasm.ConfigInstantiates m c :=
   Wasm.initialConfig_instantiates h hlocal
@@ -242,12 +236,12 @@ theorem fault_instantiation_injective {a b : Wasm.InstantiationFault}
 
 /-! ## Cost erasure -/
 
-/-- **SPEC §15, `Wasm.costed_erase_iff_plain_run`** in the `DEV-001` amended
-form.  A costed run of `costedTrace` holds exactly when the ordinary run of
+/-- The `DEV-001` amended erasure law for the legacy subset machine.  A costed
+run of `costedTrace` holds exactly when the ordinary run of
 `eraseCosts costedTrace` holds *and* `costedTrace` is a labelling the machine
 produces.  The side condition is necessary: without it the backward direction is
 false, because `costedTrace` is universally quantified. -/
-theorem costed_erase_iff_plain_run {P : Wasm.Profile} {module : Wasm.Module}
+theorem costed_erase_iff_plain_run {P : Wasm.Profile} {module : Wasm.Subset.Module}
     {invocation : Wasm.RawInvocation} {costedTrace : List Wasm.CostedEvent}
     {observation : Wasm.ExecutionObservation} :
     Wasm.CostedRun P module invocation costedTrace observation ↔
@@ -255,10 +249,10 @@ theorem costed_erase_iff_plain_run {P : Wasm.Profile} {module : Wasm.Module}
         Wasm.CostedLabelling module invocation costedTrace) :=
   Wasm.costed_erase_iff_plain_run
 
-/-- **Cost instrumentation is transparent**, with no side condition.  This is
-the unconditional content SPEC §7.5 intends: an observation is reachable by a
-costed run exactly when it is reachable by the ordinary run of its own trace. -/
-theorem costed_run_iff_plain_run {P : Wasm.Profile} {module : Wasm.Module}
+/-- Cost instrumentation is transparent on the legacy subset machine, with no
+side condition: an observation is reachable by a costed run exactly when it is
+reachable by the ordinary run of its own trace. -/
+theorem costed_run_iff_plain_run {P : Wasm.Profile} {module : Wasm.Subset.Module}
     {invocation : Wasm.RawInvocation} {observation : Wasm.ExecutionObservation} :
     (∃ costedTrace : List Wasm.CostedEvent,
         Wasm.CostedRun P module invocation costedTrace observation) ↔
@@ -267,9 +261,8 @@ theorem costed_run_iff_plain_run {P : Wasm.Profile} {module : Wasm.Module}
 
 /-! ## Cost-table totality -/
 
-/-- **SPEC §7.5, cost-table totality and exclusivity.**  Every costed event has
-exactly one contribution: totality fails if a rule is left uncosted, exclusivity
-fails if a rule is costed twice. -/
+/-- Every legacy subset costed event has exactly one contribution.  This does
+not establish exact coverage of the amended Core event universe. -/
 theorem wasm_cost_table_total (t : Wasm.CostTableBody) (event : Wasm.CostedEvent) :
     ∃ contribution : Cost.DynamicVector,
       Wasm.EventContribution t event contribution ∧
@@ -277,16 +270,15 @@ theorem wasm_cost_table_total (t : Wasm.CostTableBody) (event : Wasm.CostedEvent
           Wasm.EventContribution t event other → other = contribution :=
   Wasm.wasm_cost_table_total t event
 
-/-! ## The pinned revision and the conformance map -/
+/-! ## The legacy adequacy map's pinned revision identity -/
 
-/-- **SPEC §15, `Wasm.profile_matches_pinned_revision`.**  Exactly the
-conjunction SPEC §7.1 defines the name to mean: the concrete model and map are
-identity-bound to the *vendored* revision, and every enabled vendored rule has
-exactly one mapped Lean declaration.
+/-- The current adequacy map is identity-bound to the *vendored* revision, and
+every rule identifier enabled by that legacy map has exactly one mapped Lean
+declaration.
 
 The first conjunct binds the profile, the conformance map and the vendored tree
 record of `Wasm/Revision.lean` to one commit, carries the digest of
-`vendor/wasm-spec/SHA256SUMS` — the digest of digests over all forty vendored
+`vendor/wasm-spec/SHA256SUMS` — the digest of digests over all 374 vendored
 files — and supplies the injectivity of both canonical identities, so a
 different revision, or a single different vendored byte, gives a different
 identity.  Lean does not read the tree: `xtask vendor` recomputes that digest
@@ -298,9 +290,11 @@ exactly one fully qualified Lean declaration name, exactly one row in the map an
 exactly one vendored anchor; distinct enabled identifiers never share a
 declaration; and a rejected identifier has no declaration, no anchor and no row.
 
-It does **not** claim that Lean derives the vendored rule bodies from bytes.
-SPEC §7.1 calls that the disclosed authority boundary; the header of
-`Wasm/Adequacy.lean` states what remains open on the far side of it. -/
+It does **not** bind every enabled amended Core decoder, validator, runtime,
+execution, and harness rule required by the public release profile.  Therefore
+it does not discharge SPEC §15's public
+`Wasm.profile_matches_pinned_revision`; `WS-004` remains open.  It also does not
+claim that Lean derives vendored rule bodies from bytes. -/
 theorem profile_matches_pinned_revision (profile : Wasm.Profile) :
     (profile.body.revisionCommit = Wasm.core3AdequacyMap.revisionCommit ∧
       Wasm.core3AdequacyMap.revisionCommit = Wasm.core3Revision.commit ∧

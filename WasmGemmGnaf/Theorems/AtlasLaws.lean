@@ -6,21 +6,18 @@
   SPEC §15's required-name list is checkable against full statements in one
   place.
 
-  ## SPEC §15 declarations discharged here
+  ## Exact SPEC §15 declaration indexed here
 
-  | SPEC §15 name                     | discharged by                          |
-  |-----------------------------------|----------------------------------------|
-  | `Atlas.semantic_closure_least`    | `Theorems.semantic_closure_least`      |
-  | `Atlas.incremental_eq_full_rebuild` | `Theorems.incremental_eq_full_rebuild` |
+  * `Atlas.semantic_closure_least`
 
-  `Atlas.incremental_eq_full_rebuild` is discharged with the extra hypothesis
-  `state.body.scope = Scope.unscoped`.  That hypothesis is not decoration:
-  `semanticRebuildBody` takes only the declaration base as input and cannot
-  reproduce a scope the declarations do not name, so the literal SPEC statement
-  is false without it.  The unrestricted content is discharged by
-  `Theorems.incremental_eq_full_rebuild_scoped`, which is a *scoped* equation
-  with no side condition, and strengthened past canonicalisation by
-  `Theorems.incremental_eq_full_rebuild_exact`.
+  `Theorems.incremental_eq_full_rebuild` is a proved legacy literal form with
+  the additional hypothesis `state.body.scope = Scope.unscoped`; it is weaker
+  than the proposition required after `AMD-003`.  The amended proposition is
+  proved by `Theorems.incremental_eq_full_rebuild_scoped`, and the stronger
+  pre-canonicalisation equation by
+  `Theorems.incremental_eq_full_rebuild_exact`, but neither has the required
+  declaration name.  Therefore `Atlas.incremental_eq_full_rebuild` remains
+  outstanding in the compiled signature ledger.
 
   ## Additional proved results indexed here (not on the §15 list)
 
@@ -48,6 +45,9 @@
 
   ## SPEC §15 Atlas declarations that remain OUTSTANDING
 
+  * `Atlas.incremental_eq_full_rebuild` — the amended proposition is proved
+    under `Atlas.incremental_eq_full_rebuild_scoped`, but the required name
+    still carries the weaker unscoped form.
   * `Atlas.attention_no_optimum_relevant_false_negative` — `Atlas/Attention.lean`
     proves determinism, monotonicity, index-determination and blindness to
     optimizer state, but no theorem says attention never misses an
@@ -57,10 +57,9 @@
     underivable from the recorded cover check; see
     `universalCoverCompleteCheck_scope_blind` below.  Blocking obligation:
     `O-5`.
-  * `Atlas.lifecycle_prefix_conservation`, `Atlas.lifecycle_native_bound`,
-    `Atlas.lifecycle_incremental_semantics_eq_full_rebuild`,
-    `Atlas.lifecycle_full_rebuild_comparator_exact` — `Atlas/Lifecycle.lean`
-    does not exist.  Blocking obligation: `O-6`.
+  * `Atlas.lifecycle_incremental_semantics_eq_full_rebuild` remains open.  The
+    other three lifecycle names are proved in `Atlas/Lifecycle.lean` and are not
+    re-indexed here.
 
   `Atlas.invalidation_complete` exists at its §15 name in
   `WasmGemmGnaf/Atlas/Dependency.lean` and is not re-indexed here.
@@ -126,14 +125,16 @@ theorem closure_merge_law {J : Type}
 
 /-! ## SPEC §12.5: incremental update equals full rebuild -/
 
-/-- **SPEC §15, `Atlas.incremental_eq_full_rebuild`**, literal form.
+/-- The legacy literal form named `Atlas.incremental_eq_full_rebuild`.
 
 On a coherent, unscoped state, a completed incremental update produces exactly
 the canonical form of the full rebuild from the accumulated declaration base.
 
 The `hscope` hypothesis is required for truth, not for convenience:
 `semanticRebuildBody` receives only the declaration base and therefore cannot
-reproduce a scope the declarations do not name. -/
+reproduce a scope the declarations do not name.  Because the amended SPEC
+proposition instead rebuilds through `semanticRebuildBodyWith` at the state's
+scope, this theorem does not discharge the required name. -/
 theorem incremental_eq_full_rebuild {budget : BuildBudget}
     {state : UnsealedState} {delta : Delta} {successor : UnsealedState}
     (hcoherent : Coherent state.body)

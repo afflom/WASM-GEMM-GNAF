@@ -33,23 +33,29 @@ type Falsifier = fn(&Path) -> Result<bool>;
 pub fn run(root: &Path) -> Result<Outcome> {
     println!("mutation suite (SPEC 18)\n");
 
-    let falsifiers: [(&str, Falsifier); 16] = [
+    let falsifiers: [(&str, Falsifier); 22] = [
         ("M1 mutated authority bytes rejected by digest recomputation", m1),
         ("M2 duplicate claim id rejected", m2),
         ("M3 orphan claim dependency rejected", m3),
         ("M4 formalProof claim without a Lean declaration rejected", m4),
         ("M5 planted sorry caught by forbidden-construct scan", m5),
-        ("M6 release gate refuses to pass with GO-001 outstanding", m6),
-        ("M7 seal cover check not citable as universal coverage", m7),
-        ("M8 root module elaborates directly, not via stale olean", m8),
+        ("M6 release gate step 9 rejects an absent final theorem", m6),
+        ("M7 Atlas scope-blindness proof rejects a missing dependency", m7),
+        ("M8 root checker rejects source drift despite a stale olean", m8),
         ("M9 conclusion-dependent import rejected by firewall", m9),
-        ("M10 manifest stages acyclic and not self-bound", m10),
+        ("M10 manifest checker rejects a backward stage-identity binding", m10),
         ("M11 weakened GlobalOptimal breaks the Iff.rfl schema binding and the schema audit", m11),
         ("M12 choice-tainted required declaration reported TAINTED, not discharged", m12),
         ("M13 mutated vendored SHA256SUMS breaks the pinned-revision binding", m13),
         ("M14 fabricated Core coverage marker rejected by the extracted checklist", m14),
         ("M15 required name carrying `Nat := 0` rejected by the signature binding", m15),
         ("M16 circular reflection theorem rejected by the independence check", m16),
+        ("M17 amendment-set identity drift rejected by the authority binding", m17),
+        ("M18 malformed opcode-275 shape rejected by the AMD-012 binding", m18),
+        ("M19 missing supertype validity rejected by the AMD-013 binding", m19),
+        ("M20 wrapped Core type-group indices rejected by validator soundness", m20),
+        ("M21 overlapping lane-store successors retained by exact enumeration", m21),
+        ("M22 broken public encoders rejected by both round-trip proofs", m22),
     ];
 
     let mut failed: Vec<&str> = Vec::new();
@@ -264,46 +270,139 @@ fn m5(_root: &Path) -> Result<bool> {
 }
 
 // ---------------------------------------------------------------------------
-// M6: the release gate must not pass while GO-001 is outstanding.
+// M6: release-gate step 9 must reject an environment response in which the
+//     final theorem is absent, and accept the exact declaration when present.
+//     This attacks the actual step-9 predicate and remains valid after closure.
 // ---------------------------------------------------------------------------
 fn m6(_root: &Path) -> Result<bool> {
-    // `--no-mutation` prevents the gate from re-entering this suite.
-    let gate = run_command(Command::new(self_exe()?).args(["gate", "--no-mutation"]))?;
-    Ok(!gate.ok)
+    let absent = "'WasmGemmGnaf.Artifact.some_other_theorem' : True\n";
+    let present = format!("'{}' : True\n", crate::gate::RELEASE_THEOREM);
+    Ok(!crate::gate::release_theorem_declared(absent)
+        && crate::gate::release_theorem_declared(&present))
 }
 
 // ---------------------------------------------------------------------------
-// M7: the seal's cover check must not be citable as universal coverage.
-//     AT-002 (Atlas.seal_implies_universal_coverage) must stay absent, and
-//     AT-001 must remain proved -- it is what makes the absence principled
-//     rather than lazy.
+// M7: the real Atlas scope-blindness theorem must retain every dependency its
+//     proof uses. The control is an exact copy of CoverageScope.lean; the mutant
+//     replaces its search-partition equality with an unrelated equality while
+//     retaining the real statement conclusion and proof.
 // ---------------------------------------------------------------------------
-fn m7(_root: &Path) -> Result<bool> {
-    let claims = claims()?;
-    let by = |id: &str| claims.iter().find(|c| field(c, "id") == id);
+fn m7(root: &Path) -> Result<bool> {
+    const COVERAGE_SCOPE: &str = "WasmGemmGnaf/Atlas/CoverageScope.lean";
+    const REQUIRED_HYPOTHESIS: &str =
+        "(hp : s₁.body.searchPartitions = s₂.body.searchPartitions)";
+    const UNRELATED_HYPOTHESIS: &str =
+        "(hp : s₁.body.declarationBase = s₂.body.declarationBase)";
 
-    let forged_absent = by("AT-002").is_some_and(|c| {
-        c.get("leanDeclaration").and_then(Value::as_str).is_none() && field(c, "status") == "outstanding"
-    });
-    let blindness_proved = by("AT-001").is_some_and(|c| {
-        field(c, "level") == "formalProof"
-            && c.get("leanDeclaration").and_then(Value::as_str).is_some()
-    });
-    Ok(forged_absent && blindness_proved)
-}
+    let source_path = root.join(COVERAGE_SCOPE);
+    let source = fs::read_to_string(&source_path).map_err(|e| {
+        SpecError::io(
+            CLAUSE,
+            "cannot read the Atlas coverage-scope theorem",
+            &source_path,
+            e,
+        )
+    })?;
+    if source.matches(REQUIRED_HYPOTHESIS).count() != 1 {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "M7 expected exactly one search-partition hypothesis in {COVERAGE_SCOPE}"
+            ),
+        ));
+    }
 
-// ---------------------------------------------------------------------------
-// M8: a stale .olean must not be able to mask a broken root module.
-//     Regression guard for the clashing-`Fault` defect, where `lake build`
-//     reported success while `lean WasmGemmGnaf.lean` failed on import.
-// ---------------------------------------------------------------------------
-fn m8(root: &Path) -> Result<bool> {
-    let elaborated = run_command(
-        Command::new("lean")
-            .arg("WasmGemmGnaf.lean")
-            .env("LEAN_PATH", root.join(".lake/build/lib/lean")),
+    let tmp = TempDir::new("m7")?;
+    let control_result = probe_source(
+        CLAUSE,
+        root,
+        &tmp.path().join("M7Control.lean"),
+        &source,
     )?;
-    Ok(elaborated.ok && elaborated.stdout.trim().is_empty())
+    if !control_result.success {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the UNMUTATED CoverageScope copy does not elaborate, so M7 would prove \
+                 nothing: {}",
+                first_line(&control_result.combined())
+            ),
+        ));
+    }
+
+    let mutant = source.replacen(REQUIRED_HYPOTHESIS, UNRELATED_HYPOTHESIS, 1);
+    let mutant_result = probe_source(
+        CLAUSE,
+        root,
+        &tmp.path().join("M7Mutant.lean"),
+        &mutant,
+    )?;
+    Ok(control_result.success && !mutant_result.success)
+}
+
+// ---------------------------------------------------------------------------
+// M8: the real root checker must reject an owned Lean source added after the
+//     root was generated, even if a stale compiled root object is present.
+//     Both control and mutant live in a disposable repository copy.
+// ---------------------------------------------------------------------------
+fn m8(_root: &Path) -> Result<bool> {
+    let tmp = TempDir::new("m8")?;
+    let planted = tmp.path().join("repo");
+    let layer = planted.join("WasmGemmGnaf/Foundation");
+    fs::create_dir_all(&layer)
+        .map_err(|e| SpecError::io(CLAUSE, "cannot create the M8 layer at", &layer, e))?;
+    write(&planted.join("lakefile.lean"), "-- M8 repository marker\n")?;
+    write(&planted.join("SPEC.md"), "# M8 repository marker\n")?;
+    write(
+        &layer.join("Control.lean"),
+        "set_option autoImplicit false\n\ntheorem m8Control : True := trivial\n",
+    )?;
+
+    let generated = run_command(
+        Command::new(self_exe()?)
+            .args(["sources", "root"])
+            .current_dir(&planted),
+    )?;
+    if !generated.ok {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the real root generator rejected M8's control: {}",
+                first_line(&format!("{}\n{}", generated.stdout, generated.stderr))
+            ),
+        ));
+    }
+    let control = run_command(
+        Command::new(self_exe()?)
+            .args(["sources", "root", "--check"])
+            .current_dir(&planted),
+    )?;
+    if !control.ok {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the UNMUTATED root copy already fails its check: {}",
+                first_line(&format!("{}\n{}", control.stdout, control.stderr))
+            ),
+        ));
+    }
+
+    let olean = planted.join(".lake/build/lib/lean/WasmGemmGnaf.olean");
+    fs::create_dir_all(olean.parent().expect("M8 olean has a parent")).map_err(|e| {
+        SpecError::io(CLAUSE, "cannot create the M8 stale-object directory at", &olean, e)
+    })?;
+    write(&olean, "stale compiled root -- intentionally not a valid olean\n")?;
+    write(
+        &layer.join("Planted.lean"),
+        "set_option autoImplicit false\n\ntheorem m8Planted : True := trivial\n",
+    )?;
+
+    let mutant = run_command(
+        Command::new(self_exe()?)
+            .args(["sources", "root", "--check"])
+            .current_dir(&planted),
+    )?;
+    Ok(!mutant.ok && mutant.stdout.contains("STALE"))
 }
 
 // ---------------------------------------------------------------------------
@@ -333,41 +432,118 @@ fn m9(_root: &Path) -> Result<bool> {
 }
 
 // ---------------------------------------------------------------------------
-// M10: no manifest stage may contain its own identity, and no two stages may
-//      hash each other (SPEC 4 acyclicity).
+// M10: the real manifest checker must reject a backward identity binding. It
+//      first creates and accepts a fresh manifest in a disposable minimal repo,
+//      then binds the source-core identity field to the later generated-input
+//      identity and asks the same production checker again.
 // ---------------------------------------------------------------------------
-fn m10(_root: &Path) -> Result<bool> {
-    let manifest = read_json("MANIFEST.json")?;
-    let id = |key: &str| -> Result<String> {
-        manifest
-            .get(key)
-            .and_then(Value::as_str)
-            .map(String::from)
-            .ok_or_else(|| SpecError::new("4", format!("MANIFEST.json has no `{key}`")))
-    };
-    let body = |key: &str| -> Result<String> {
-        manifest
-            .get(key)
-            .map(Value::to_json)
-            .ok_or_else(|| SpecError::new("4", format!("MANIFEST.json has no `{key}`")))
-    };
+fn m10(root: &Path) -> Result<bool> {
+    let tmp = TempDir::new("m10")?;
+    let planted = tmp.path().join("repo");
+    let model = planted.join("model");
+    fs::create_dir_all(&model)
+        .map_err(|e| SpecError::io(CLAUSE, "cannot create the M10 model at", &model, e))?;
+    write(&planted.join("lakefile.lean"), "-- M10 repository marker\n")?;
+    write(&planted.join("SPEC.md"), "# M10 source input\n")?;
+    let toolchain_path = root.join("lean-toolchain");
+    let toolchain = fs::read_to_string(&toolchain_path).map_err(|e| {
+        SpecError::io(
+            CLAUSE,
+            "cannot read the M10 toolchain control",
+            &toolchain_path,
+            e,
+        )
+    })?;
+    write(&planted.join("lean-toolchain"), &toolchain)?;
+    write(&model.join("claims.json"), "{}\n")?;
+    write(&model.join("reproducibility-plan.json"), "{}\n")?;
 
-    let core_id = id("sourceManifestCoreIdentity")?;
-    let gpi_id = id("generatedProofInputIdentity")?;
-    let pfe_id = id("preFinalEnvironmentIdentity")?;
-    let core = body("sourceManifestCore")?;
-    let gpi = body("generatedProofInputBody")?;
-    let pfe = body("preFinalEnvironmentBody")?;
+    let generated = run_command(
+        Command::new(self_exe()?)
+            .arg("manifest")
+            .current_dir(&planted),
+    )?;
+    if !generated.ok {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the real manifest generator rejected M10's control: {}",
+                first_line(&format!("{}\n{}", generated.stdout, generated.stderr))
+            ),
+        ));
+    }
+    let control = run_command(
+        Command::new(self_exe()?)
+            .args(["manifest", "--check"])
+            .current_dir(&planted),
+    )?;
+    if !control.ok {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the UNMUTATED manifest copy already fails its check: {}",
+                first_line(&format!("{}\n{}", control.stdout, control.stderr))
+            ),
+        ));
+    }
 
-    // no body contains its own identity
-    let self_free = !core.contains(&core_id) && !gpi.contains(&gpi_id) && !pfe.contains(&pfe_id);
-    // no backward reference: the source core must not mention later identities
-    let forward_only =
-        !core.contains(&gpi_id) && !core.contains(&pfe_id) && !gpi.contains(&pfe_id);
-    // MANIFEST.json is not in its own preimage
-    let no_self_file = !core.contains("MANIFEST.json");
+    let manifest_path = planted.join("MANIFEST.json");
+    let manifest_text = fs::read_to_string(&manifest_path)
+        .map_err(|e| SpecError::io(CLAUSE, "cannot read the M10 manifest", &manifest_path, e))?;
+    let manifest = json::parse(CLAUSE, &manifest_text)?;
+    let core_id = manifest
+        .get("sourceManifestCoreIdentity")
+        .and_then(Value::as_str)
+        .ok_or_else(|| SpecError::new(CLAUSE, "M10 control has no source-core identity"))?;
+    let later_id = manifest
+        .get("generatedProofInputIdentity")
+        .and_then(Value::as_str)
+        .ok_or_else(|| SpecError::new(CLAUSE, "M10 control has no generated-input identity"))?;
+    let pre_final_id = manifest
+        .get("preFinalEnvironmentIdentity")
+        .and_then(Value::as_str)
+        .ok_or_else(|| SpecError::new(CLAUSE, "M10 control has no pre-final identity"))?;
+    let core_body = manifest
+        .get("sourceManifestCore")
+        .map(Value::to_json)
+        .ok_or_else(|| SpecError::new(CLAUSE, "M10 control has no source-core body"))?;
+    let generated_body = manifest
+        .get("generatedProofInputBody")
+        .map(Value::to_json)
+        .ok_or_else(|| SpecError::new(CLAUSE, "M10 control has no generated-input body"))?;
+    let pre_final_body = manifest
+        .get("preFinalEnvironmentBody")
+        .map(Value::to_json)
+        .ok_or_else(|| SpecError::new(CLAUSE, "M10 control has no pre-final body"))?;
+    if core_body.contains(core_id)
+        || generated_body.contains(later_id)
+        || pre_final_body.contains(pre_final_id)
+        || core_body.contains(later_id)
+        || core_body.contains(pre_final_id)
+        || generated_body.contains(pre_final_id)
+    {
+        return Err(SpecError::new(
+            CLAUSE,
+            "the production M10 control is already cyclic or backward-bound",
+        ));
+    }
+    let anchor = format!("  \"sourceManifestCoreIdentity\": \"{core_id}\",");
+    let replacement = format!("  \"sourceManifestCoreIdentity\": \"{later_id}\",");
+    let mutant_text = manifest_text.replacen(&anchor, &replacement, 1);
+    if mutant_text == manifest_text {
+        return Err(SpecError::new(
+            CLAUSE,
+            "could not plant M10's backward stage-identity binding",
+        ));
+    }
+    write(&manifest_path, &mutant_text)?;
 
-    Ok(self_free && forward_only && no_self_file)
+    let mutant = run_command(
+        Command::new(self_exe()?)
+            .args(["manifest", "--check"])
+            .current_dir(&planted),
+    )?;
+    Ok(!mutant.ok && mutant.stdout.contains("sourceManifestCoreIdentity differs"))
 }
 
 // ---------------------------------------------------------------------------
@@ -432,7 +608,7 @@ fn m11(root: &Path) -> Result<bool> {
     let required = schema::scope_critical_definitions()?;
     let real = fs::read_to_string(Path::new(SCHEMA_BINDINGS))
         .map_err(|e| SpecError::io(CLAUSE, "cannot read", Path::new(SCHEMA_BINDINGS), e))?;
-    if !schema::audit(&required, &schema::parse(&real)).is_empty() {
+    if !schema::audit(&required, &schema::parse(&real), &schema::parse_gaps(&real)).is_empty() {
         return Err(SpecError::new(
             CLAUSE,
             "the REAL bindings are already unbound, so M11's second half would pass \
@@ -441,7 +617,11 @@ fn m11(root: &Path) -> Result<bool> {
     }
 
     let deleted = real.replace("-- authority-binding: GlobalOptimal\n", "");
-    let names_unbound = schema::audit(&required, &schema::parse(&deleted));
+    let names_unbound = schema::audit(
+        &required,
+        &schema::parse(&deleted),
+        &schema::parse_gaps(&deleted),
+    );
 
     let paraphrased = real.replacen(
         "              Foundation.CanonicalBytesLE releasedBytes competitorBytes)) :=\n  Iff.rfl",
@@ -449,9 +629,15 @@ fn m11(root: &Path) -> Result<bool> {
          simp [GlobalOptimal]",
         1,
     );
-    let rejects_tactic = schema::audit(&required, &schema::parse(&paraphrased));
+    let rejects_tactic = schema::audit(
+        &required,
+        &schema::parse(&paraphrased),
+        &schema::parse_gaps(&paraphrased),
+    );
 
-    Ok(names_unbound.iter().any(|f| f.starts_with("GlobalOptimal -- NO BINDING"))
+    Ok(names_unbound
+        .iter()
+        .any(|f| f.starts_with("GlobalOptimal -- NO BINDING OR GAP"))
         && rejects_tactic
             .iter()
             .any(|f| f.contains("not by definitional reduction")))
@@ -817,8 +1003,8 @@ fn m14(_root: &Path) -> Result<bool> {
 // Two halves, as `M11` has:
 //
 //   * the ELABORATOR half. A signature binding stating SPEC section 7.3's
-//     `validation_progress` and closed by `:= @<planted Nat>` must FAIL to
-//     elaborate, with the same binding closed by `:= @Wasm.validation_progress`
+//     `decode_sound` and closed by `:= @<planted Nat>` must FAIL to
+//     elaborate, with the same binding closed by `:= @Wasm.decode_sound`
 //     as the control. Without the control a typo would make the mutant fail for
 //     an unrelated reason and this falsifier would report PASS having tested
 //     nothing.
@@ -826,8 +1012,9 @@ fn m14(_root: &Path) -> Result<bool> {
 //   * the WIRING half. The elaborator is only consulted if something asks it, so
 //     on a COPY of the binding source the marker is deleted, the `:= @Name` is
 //     replaced by a tactic, the marker is repointed at a name SPEC does not
-//     require, and the SPEC quotation is made stale -- and `signature::audit`
-//     plus `required::apply_signatures` must reject each one.
+//     require, the SPEC quotation is made stale, and an exact theorem-shaped
+//     prose decoy is placed before the drifted fenced theorem -- and
+//     `signature::audit` plus `required::apply_signatures` must reject each one.
 //
 // Every mutation is applied to a COPY; `WasmGemmGnaf/` is never written.
 // ---------------------------------------------------------------------------
@@ -844,7 +1031,7 @@ fn m15(root: &Path) -> Result<bool> {
         CLAUSE,
         root,
         &tmp.path().join("M15Control.lean"),
-        &signature_binding("@WasmGemmGnaf.Wasm.validation_progress", ""),
+        &signature_binding("@WasmGemmGnaf.Wasm.decode_sound", ""),
     )?;
     if !control.success {
         return Err(SpecError::new(
@@ -862,9 +1049,9 @@ fn m15(root: &Path) -> Result<bool> {
         root,
         &tmp.path().join("M15Mutant.lean"),
         &signature_binding(
-            "@WasmGemmGnaf.Wasm.m15_planted_validation_progress",
+            "@WasmGemmGnaf.Wasm.m15_planted_decode_sound",
             "namespace WasmGemmGnaf.Wasm\n\
-             def m15_planted_validation_progress : Nat := 0\n\
+             def m15_planted_decode_sound : Nat := 0\n\
              end WasmGemmGnaf.Wasm\n\n",
         ),
     )?;
@@ -895,8 +1082,8 @@ fn m15(root: &Path) -> Result<bool> {
         ));
     }
 
-    const MARKER: &str = "-- spec-signature: Wasm.validation_progress\n";
-    const CLOSURE: &str = "  @Wasm.validation_progress\n";
+    const MARKER: &str = "-- spec-signature: Wasm.decode_sound\n";
+    const CLOSURE: &str = "  @Wasm.decode_sound\n";
 
     // (a) the binding deleted: the name is credited by the environment and bound
     //     by nothing, which is the state the audit found the repository in.
@@ -906,26 +1093,26 @@ fn m15(root: &Path) -> Result<bool> {
     }
     let bindings = crate::signature::parse(&deleted);
     let exact = crate::signature::exact_names(&bindings);
-    let rejects_deleted = !exact.contains(&"Wasm.validation_progress".to_string());
+    let rejects_deleted = !exact.contains(&"Wasm.decode_sound".to_string());
 
     // and the inventory must actually DEMOTE it, not merely notice.
     let mut demoted = crate::required::classify(
         &required,
         &required::flatten(&format!(
-            "'WasmGemmGnaf.Wasm.validation_progress' does not depend on any axioms"
+            "'WasmGemmGnaf.Wasm.decode_sound' does not depend on any axioms"
         )),
     );
     let credited_before = demoted.discharged;
     crate::required::apply_signatures(&mut demoted, &exact);
     let rejects_in_inventory = credited_before == 1
         && demoted.discharged == 0
-        && demoted.unsigned == vec!["Wasm.validation_progress".to_string()];
+        && demoted.unsigned == vec!["Wasm.decode_sound".to_string()];
 
     // (b) closed by a tactic. `by exact @Name` proves the same proposition today
     //     and accepts anything tomorrow; only `:= @Name` is definitional.
-    let tactic = real.replacen(CLOSURE, "  by exact @Wasm.validation_progress\n", 1);
+    let tactic = real.replacen(CLOSURE, "  by exact @Wasm.decode_sound\n", 1);
     if tactic == real {
-        return Err(SpecError::new(CLAUSE, "could not replace the validation_progress closure"));
+        return Err(SpecError::new(CLAUSE, "could not replace the decode_sound closure"));
     }
     let rejects_tactic = crate::signature::audit(
         &required,
@@ -951,12 +1138,12 @@ fn m15(root: &Path) -> Result<bool> {
     //     amending SPEC must break the binding rather than leave a stale
     //     quotation looking normative.
     let amended_spec = spec.replacen(
-        "  (Wasm.successors config).Nonempty",
-        "  (Wasm.successors config).Nonempty ∨ True",
+        "  Wasm.DeclarativeBinaryRelation bytes module",
+        "  Wasm.DeclarativeBinaryRelation bytes module ∨ True",
         1,
     );
     if amended_spec == spec {
-        return Err(SpecError::new(CLAUSE, "could not amend the SPEC 7.3 progress block"));
+        return Err(SpecError::new(CLAUSE, "could not amend the SPEC 7.3 decode block"));
     }
     let rejects_stale_quote = crate::signature::audit(
         &required,
@@ -967,15 +1154,32 @@ fn m15(root: &Path) -> Result<bool> {
     .iter()
     .any(|f| f.contains("does not quote it verbatim"));
 
+    // (e) the ORIGINAL theorem text as ordinary prose before the amended fenced
+    //     statement. A parser that searches all of SPEC.md accepts the decoy and
+    //     misses the real drift; only a parser restricted to Lean fences rejects
+    //     this attack.
+    let original_block = crate::signature::spec_block(&spec, "Wasm.decode_sound")
+        .ok_or_else(|| SpecError::new(CLAUSE, "SPEC has no fenced decode_sound theorem"))?;
+    let prose_decoy_spec = format!("{original_block}\n\n{amended_spec}");
+    let rejects_prose_decoy = crate::signature::audit(
+        &required,
+        &crate::signature::parse(&real),
+        &deviations,
+        &prose_decoy_spec,
+    )
+    .iter()
+    .any(|f| f.contains("does not quote it verbatim"));
+
     Ok(rejects_nat
         && rejects_deleted
         && rejects_in_inventory
         && rejects_tactic
         && rejects_invented
-        && rejects_stale_quote)
+        && rejects_stale_quote
+        && rejects_prose_decoy)
 }
 
-/// A standalone signature binding of SPEC section 7.3's `validation_progress`,
+/// A standalone signature binding of SPEC section 7.3's `decode_sound`,
 /// closed by `closure`.
 ///
 /// The proposition is SPEC's, written out rather than referenced, so the planted
@@ -993,14 +1197,9 @@ fn signature_binding(closure: &str, preamble: &str) -> String {
          namespace M15Planted\n\
          \n\
          theorem planted_signature :\n\
-         \x20   ∀ {{module : Wasm.Module}} {{config : Wasm.Config}},\n\
-         \x20     Wasm.DeclarativelyValid module →\n\
-         \x20     Wasm.ConfigInstantiates module config →\n\
-         \x20     Wasm.ConfigWellTyped config →\n\
-         \x20     (∃ outcome, Wasm.Halt config outcome) ∨\n\
-         \x20     (∃ trap, Wasm.Trapped config trap) ∨\n\
-         \x20     (∃ exceptionValue, Wasm.Thrown config exceptionValue) ∨\n\
-         \x20     (Wasm.successors config).Nonempty :=\n\
+         \x20   ∀ {{bytes : ByteArray}} {{module : Wasm.Module}},\n\
+         \x20     Wasm.decode bytes = .ok module →\n\
+         \x20     Wasm.DeclarativeBinaryRelation bytes module :=\n\
          \x20 {closure}\n\
          \n\
          end M15Planted\n"
@@ -1130,6 +1329,54 @@ mod tests {
             mutant.matches("∀ competitorBytes : ByteArray,").count()
         );
     }
+
+    #[test]
+    fn m17_calls_the_real_amendment_checker_and_rejects_all_four_drifts() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask has a repository parent");
+        assert!(m17(root).expect("M17 runs"));
+    }
+
+    #[test]
+    fn m18_rejects_the_malformed_opcode_275_shape() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask has a repository parent");
+        assert!(m18(root).expect("M18 runs"));
+    }
+
+    #[test]
+    fn m19_rejects_missing_generalized_supertype_validity() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask has a repository parent");
+        assert!(m19(root).expect("M19 runs"));
+    }
+
+    #[test]
+    fn m20_rejects_wrapped_core_type_group_indices() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask has a repository parent");
+        assert!(m20(root).expect("M20 runs"));
+    }
+
+    #[test]
+    fn m21_rejects_lossy_lane_store_successor_branching() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask has a repository parent");
+        assert!(m21(root).expect("M21 runs"));
+    }
+
+    #[test]
+    fn m22_rejects_broken_public_emitter() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask has a repository parent");
+        assert!(m22(root).expect("M22 runs"));
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1137,12 +1384,13 @@ mod tests {
 //      not be credited.
 //
 // This is the falsifier for the rule that four external audits asked for and no
-// gate could enforce: `Wasm.decode_sound`, `Wasm.decode_complete` and
-// `Wasm.validate_iff_declarative` have the right NAMES, SPEC's exact
-// STATEMENTS, and clean axiom closures -- so `signature` binds them and
-// `axioms` passes them -- while `DeclarativelyValid` is literally a conjunction
-// of the executable checker's own booleans and `decode_sound` is proved through
-// `decode_is_encode`. Only the proof term shows it.
+// gate could enforce. Historically, `Wasm.decode_sound`,
+// `Wasm.decode_complete`, and `Wasm.validate_bool_iff` had the right
+// names, matching surface statements, and clean axiom closures while their
+// proof terms exposed circular executable definitions. The public decoder pair
+// is now repaired against independent `BmoduleA`; the legacy subset validator
+// remains circular and uncredited. M16 plants the old defect so the rule cannot
+// silently regress.
 //
 // Both halves are run against the REAL checker, `independence::report_over`,
 // with planted tables. A falsifier that reimplemented the search would test its
@@ -1160,7 +1408,7 @@ fn m16(root: &Path) -> Result<bool> {
     //
     // What this half deliberately does NOT do any more: assert that the real
     // table rejects one particular set of names. It used to assert exactly
-    // `[decode_complete, decode_sound, validate_iff_declarative]`, which made
+    // `[decode_complete, decode_sound, validate_bool_iff]`, which made
     // the falsifier a snapshot of the defect rather than a test of the rule --
     // REPAIRING a circularity turned M16 red, which is precisely backwards.
     // `Wasm.decode_sound` and `Wasm.decode_complete` were repaired by being
@@ -1171,8 +1419,8 @@ fn m16(root: &Path) -> Result<bool> {
 
     // PLANTED CIRCULARITY. Each entry forbids a name the compiled environment
     // really does print for the declaration named: the proof term of
-    // `Wasm.decode_sound` cites `Wasm.Core.decode_sound`, and the definition of
-    // `Wasm.DeclarativeBinaryRelation` cites `Wasm.Core.Binary.Bmodule`. Both
+    // `Wasm.decode_sound` cites `Wasm.Core.decode_soundA`, and the definition of
+    // `Wasm.DeclarativeBinaryRelation` cites `Wasm.Core.Binary.BmoduleA`. Both
     // must be found, one through the `proof term` path and one through the
     // `definition` path, so a checker that inspected only one of the two would
     // fail this half.
@@ -1180,13 +1428,13 @@ fn m16(root: &Path) -> Result<bool> {
         crate::independence::Entry {
             required: "WasmGemmGnaf.Wasm.decode_sound",
             declarative: "WasmGemmGnaf.Wasm.DeclarativeBinaryRelation",
-            forbidden: &["WasmGemmGnaf.Wasm.Core.decode_sound"],
+            forbidden: &["WasmGemmGnaf.Wasm.Core.decode_soundA"],
             why: "planted: the proof term really does cite this name",
         },
         crate::independence::Entry {
             required: "WasmGemmGnaf.Wasm.decode_complete",
             declarative: "WasmGemmGnaf.Wasm.DeclarativeBinaryRelation",
-            forbidden: &["WasmGemmGnaf.Wasm.Core.Binary.Bmodule"],
+            forbidden: &["WasmGemmGnaf.Wasm.Core.Binary.BmoduleA"],
             why: "planted: the declarative definition really does cite this name",
         },
     ];
@@ -1214,4 +1462,530 @@ fn m16(root: &Path) -> Result<bool> {
         && report.circular == vec!["Wasm.decode_sound".to_string()];
 
     Ok(rejects_known && control.is_ok() && demoted)
+}
+
+// ---------------------------------------------------------------------------
+// M17: drift in the canonical authority-amendment set must be rejected.
+//
+// The amendment identity is computed by Lean, but its source digests, textual
+// anchors, declaration names and register links are repository bytes that Lean
+// cannot read.  Each plant below changes one of those bytes in a COPY and calls
+// the REAL `amendment::binding`.  The unmodified copy is the control, so this
+// falsifier cannot pass merely because copying the tree broke the checker.
+// ---------------------------------------------------------------------------
+fn m17(root: &Path) -> Result<bool> {
+    let tmp = TempDir::new("m17")?;
+    let planted = tmp.path().join("repo");
+    copy_tree(&root.join("WasmGemmGnaf"), &planted.join("WasmGemmGnaf"))?;
+    copy_tree(
+        &root.join("vendor/wasm-spec"),
+        &planted.join("vendor/wasm-spec"),
+    )?;
+    fs::create_dir_all(planted.join("model")).map_err(|e| {
+        SpecError::io(
+            CLAUSE,
+            "cannot create M17 model directory at",
+            &planted.join("model"),
+            e,
+        )
+    })?;
+    fs::copy(
+        root.join("model/spec-deviations.json"),
+        planted.join("model/spec-deviations.json"),
+    )
+    .map_err(|e| {
+        SpecError::io(
+            CLAUSE,
+            "cannot copy M17 deviation register from",
+            &root.join("model/spec-deviations.json"),
+            e,
+        )
+    })?;
+
+    let control = crate::amendment::binding(&planted)?;
+    if !control.is_ok() {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the UNMUTATED amendment-tree copy already fails its binding: {}",
+                control.findings.join("; ")
+            ),
+        ));
+    }
+
+    let authority = planted.join("WasmGemmGnaf/Wasm/AuthorityAmendments.lean");
+    let values = planted.join("WasmGemmGnaf/Wasm/Core/BinaryGrammar/ValuesAmended.lean");
+    let register = planted.join("model/spec-deviations.json");
+
+    let digest = mutation_rejected(
+        &planted,
+        &authority,
+        "a83d9b3ea01740f86c966ad256d6b484779ac40722a9568de021514537506bc1",
+        "083d9b3ea01740f86c966ad256d6b484779ac40722a9568de021514537506bc1",
+    )?;
+    let patch = mutation_rejected(
+        &planted,
+        &authority,
+        "beforeAnchor := \"grammar BsN(N)\"",
+        "beforeAnchor := \"grammar BsN_BROKEN(N)\"",
+    )?;
+    let declaration = mutation_rejected(
+        &planted,
+        &values,
+        "inductive BsN' :",
+        "inductive BsN_broken :",
+    )?;
+    let ledger = mutation_rejected(
+        &planted,
+        &register,
+        "\"adoptedIntoSpec\": \"AMD-007\"",
+        "\"adoptedIntoSpec\": \"AMD-X\"",
+    )?;
+
+    Ok(digest && patch && declaration && ledger)
+}
+
+// ---------------------------------------------------------------------------
+// M18: AMD-012 must stay bound to the corrected opcode-275 I8x16 operand
+// shape.  Planting the malformed pinned I16x8 shape in the exact amendment
+// text must be rejected by the real amendment checker.
+// ---------------------------------------------------------------------------
+fn m18(root: &Path) -> Result<bool> {
+    authority_amendment_mutation(
+        root,
+        "m18",
+        "AMD-012",
+        "(I8 X `16) RELAXED_DOT_ADD S\"",
+        "(I16 X `8) RELAXED_DOT_ADD S\"",
+    )
+}
+
+// ---------------------------------------------------------------------------
+// M19: AMD-013 must retain the generalized-supertype `Typeuse_ok` premise.
+// Removing that exact inserted line makes the recorded patch a no-op and must
+// be rejected by the real amendment checker.
+// ---------------------------------------------------------------------------
+fn m19(root: &Path) -> Result<bool> {
+    authority_amendment_mutation(
+        root,
+        "m19",
+        "AMD-013",
+        "\\n-- (Typeuse_ok: C |- typeuse : OK)*",
+        "",
+    )
+}
+
+// ---------------------------------------------------------------------------
+// M20: the full Core type checker must reject a recursive type group whose
+// flattened source indices would wrap modulo 2^32.  The declarative `Type_okA`
+// relation carries the source-faithful `TypeGroupRangeOk` premise; deleting
+// only the executable conjunct must make its real soundness proof fail.
+//
+// Both files are disposable copies elaborated against the repository's
+// compiled dependencies.  The unmodified copy is the control, so a stale or
+// missing dependency cannot make the mutant pass for an unrelated reason.
+// ---------------------------------------------------------------------------
+fn m20(root: &Path) -> Result<bool> {
+    const VALIDATOR: &str = "WasmGemmGnaf/Wasm/Core/ValidateTypes.lean";
+    const GUARD: &str = "  decide (TypeGroupRangeOk C td) &&";
+    const MUTANT: &str = "  true &&";
+
+    let source_path = root.join(VALIDATOR);
+    let source = fs::read_to_string(&source_path)
+        .map_err(|e| SpecError::io(CLAUSE, "cannot read the M20 validator", &source_path, e))?;
+    if source.matches(GUARD).count() != 1 {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "M20 expected exactly one executable type-group range guard in {VALIDATOR}"
+            ),
+        ));
+    }
+
+    let tmp = TempDir::new("m20")?;
+    let control_path = tmp.path().join("M20Control.lean");
+    write(&control_path, &source)?;
+    let lean_path = root.join(".lake/build/lib/lean");
+    let control = run_command(
+        Command::new("lean")
+            .arg(&control_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if !control.ok {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the UNMUTATED ValidateTypes copy does not elaborate, so M20 would prove nothing: {}",
+                first_line(&control.stderr)
+            ),
+        ));
+    }
+
+    let planted = source.replacen(GUARD, MUTANT, 1);
+    let mutant_path = tmp.path().join("M20Mutant.lean");
+    write(&mutant_path, &planted)?;
+    let mutant = run_command(
+        Command::new("lean")
+            .arg(&mutant_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+
+    if mutant.ok {
+        return Ok(false);
+    }
+    let diagnostic = format!("{}\n{}", mutant.stdout, mutant.stderr);
+    if !diagnostic.contains("TypeGroupRangeOk") {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "M20's mutant failed for an unrelated reason: {}",
+                first_line(&diagnostic)
+            ),
+        ));
+    }
+    Ok(true)
+}
+
+// ---------------------------------------------------------------------------
+// M21: lane-store failure and success are not exclusive in the pinned Core
+// relation. The former compares the bit width `sz`, while the latter writes
+// `sz / 8` bytes. The enumerator must therefore append both independently;
+// changing that union back to an if/else drops a real `StepA.vstoreLaneVal`.
+// ---------------------------------------------------------------------------
+fn m21(root: &Path) -> Result<bool> {
+    const SUCCESSORS: &str = "WasmGemmGnaf/Wasm/Core/WholeSuccessors.lean";
+    const UNION: &str = "          failure ++ success";
+    const LOSSY: &str = "          if address.value.val + ao.offset.val + sz.toNat > memory.bytes.length then\n            failure\n          else success";
+
+    let source_path = root.join(SUCCESSORS);
+    let source = fs::read_to_string(&source_path).map_err(|e| {
+        SpecError::io(
+            CLAUSE,
+            "cannot read the M21 whole-machine successor enumerator",
+            &source_path,
+            e,
+        )
+    })?;
+    if source.matches(UNION).count() != 1 {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!("M21 expected exactly one independent lane-store successor union in {SUCCESSORS}"),
+        ));
+    }
+
+    let tmp = TempDir::new("m21")?;
+    let control_path = tmp.path().join("M21Control.lean");
+    write(&control_path, &source)?;
+    let lean_path = root.join(".lake/build/lib/lean");
+    let control = run_command(
+        Command::new("lean")
+            .arg(&control_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if !control.ok {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the UNMUTATED WholeSuccessors copy does not elaborate, so M21 would prove nothing: {}",
+                first_line(&control.stderr)
+            ),
+        ));
+    }
+
+    let planted = source.replacen(UNION, LOSSY, 1);
+    let mutant_path = tmp.path().join("M21Mutant.lean");
+    write(&mutant_path, &planted)?;
+    let mutant = run_command(
+        Command::new("lean")
+            .arg(&mutant_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if mutant.ok {
+        return Ok(false);
+    }
+    let diagnostic = format!("{}\n{}", mutant.stdout, mutant.stderr);
+    if !diagnostic.contains("vstoreLaneVal") {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "M21's mutant failed for an unrelated reason: {}",
+                first_line(&diagnostic)
+            ),
+        ));
+    }
+    Ok(true)
+}
+
+// ---------------------------------------------------------------------------
+// M22: both public encoder boundaries must remain computational. Replacing
+// `Wasm.encode` in CoreBackEnd and `Artifact.emit` in Emit with empty bytes must
+// break their actual round-trip proof files. Each unmodified file is its own
+// control, so neither mutant can pass on a broken build environment.
+// ---------------------------------------------------------------------------
+fn m22(root: &Path) -> Result<bool> {
+    const CORE_BACKEND: &str = "WasmGemmGnaf/Wasm/CoreBackEnd.lean";
+    const CORE_IMPLEMENTATION: &str =
+        "def encode (module : Module) : ByteArray := Core.Binary.encodeA module.core";
+    const CORE_BROKEN: &str =
+        "def encode (_module : Module) : ByteArray := ByteArray.empty";
+    const EMITTER: &str = "WasmGemmGnaf/Artifact/Emit.lean";
+    const IMPLEMENTATION: &str =
+        "def emit (module : Wasm.Module) : ByteArray := Wasm.encode module";
+    const BROKEN: &str =
+        "def emit (_module : Wasm.Module) : ByteArray := ByteArray.empty";
+
+    let core_path = root.join(CORE_BACKEND);
+    let core_source = fs::read_to_string(&core_path)
+        .map_err(|e| SpecError::io(CLAUSE, "cannot read the M22 Core backend", &core_path, e))?;
+    if core_source.matches(CORE_IMPLEMENTATION).count() != 1 {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!("M22 expected exactly one public encoder implementation in {CORE_BACKEND}"),
+        ));
+    }
+
+    let source_path = root.join(EMITTER);
+    let source = fs::read_to_string(&source_path)
+        .map_err(|e| SpecError::io(CLAUSE, "cannot read the M22 emitter", &source_path, e))?;
+    if source.matches(IMPLEMENTATION).count() != 1 {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!("M22 expected exactly one public emitter implementation in {EMITTER}"),
+        ));
+    }
+
+    let tmp = TempDir::new("m22")?;
+    let lean_path = root.join(".lake/build/lib/lean");
+    let core_control_path = tmp.path().join("M22CoreControl.lean");
+    write(&core_control_path, &core_source)?;
+    let core_control = run_command(
+        Command::new("lean")
+            .arg(&core_control_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if !core_control.ok {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the UNMUTATED CoreBackEnd copy does not elaborate, so M22 would prove \
+                 nothing: {}",
+                first_line(&format!("{}\n{}", core_control.stdout, core_control.stderr))
+            ),
+        ));
+    }
+
+    let core_planted = core_source.replacen(CORE_IMPLEMENTATION, CORE_BROKEN, 1);
+    let core_mutant_path = tmp.path().join("M22CoreMutant.lean");
+    write(&core_mutant_path, &core_planted)?;
+    let core_mutant = run_command(
+        Command::new("lean")
+            .arg(&core_mutant_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if core_mutant.ok {
+        return Ok(false);
+    }
+    let core_diagnostic = format!("{}\n{}", core_mutant.stdout, core_mutant.stderr);
+    let rejects_core_source = core_diagnostic.contains("Core.Binary.encodeA")
+        && !core_diagnostic.contains("unknown identifier");
+    if !rejects_core_source {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "M22's Wasm.encode mutant failed outside the round-trip proof chain: {}",
+                first_line(&core_diagnostic)
+            ),
+        ));
+    }
+
+    // Lean recovers from the first failed declaration in a file, so a broken
+    // `toBytes_encode` can leave a synthetic declaration available to the later
+    // theorem. Copy the real final theorem and proof as a second control, then
+    // expose the mutated encoder in its conclusion. This requires the actual
+    // `encode_decode_roundtrip` proof term itself to reject empty bytes.
+    const ROUNDTRIP_HEAD: &str = "theorem encode_decode_roundtrip";
+    let roundtrip_start = core_source.find(ROUNDTRIP_HEAD).ok_or_else(|| {
+        SpecError::new(CLAUSE, "M22 could not find Wasm.encode_decode_roundtrip")
+    })?;
+    let roundtrip_tail = &core_source[roundtrip_start..];
+    let roundtrip_end = roundtrip_tail
+        .find("\n\nend WasmGemmGnaf.Wasm")
+        .ok_or_else(|| SpecError::new(CLAUSE, "M22 could not bound the round-trip theorem"))?;
+    let real_roundtrip = &roundtrip_tail[..roundtrip_end];
+    let copied_roundtrip = real_roundtrip.replacen(
+        ROUNDTRIP_HEAD,
+        "theorem m22_encode_decode_roundtrip",
+        1,
+    );
+    let roundtrip_module = |theorem: &str| {
+        format!(
+            "import WasmGemmGnaf.Wasm.CoreBackEnd\n\n\
+             set_option autoImplicit false\n\n\
+             namespace WasmGemmGnaf.Wasm\n\n\
+             {theorem}\n\n\
+             end WasmGemmGnaf.Wasm\n"
+        )
+    };
+    let roundtrip_control = probe_source(
+        CLAUSE,
+        root,
+        &tmp.path().join("M22RoundtripControl.lean"),
+        &roundtrip_module(&copied_roundtrip),
+    )?;
+    if !roundtrip_control.success {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the copied Wasm.encode_decode_roundtrip control does not elaborate: {}",
+                first_line(&roundtrip_control.combined())
+            ),
+        ));
+    }
+    let empty_roundtrip = copied_roundtrip.replacen(
+        "decode (encode module)",
+        "decode ByteArray.empty",
+        1,
+    );
+    if empty_roundtrip == copied_roundtrip {
+        return Err(SpecError::new(
+            CLAUSE,
+            "M22 could not expose the empty encoder in encode_decode_roundtrip",
+        ));
+    }
+    let roundtrip_mutant = probe_source(
+        CLAUSE,
+        root,
+        &tmp.path().join("M22RoundtripMutant.lean"),
+        &roundtrip_module(&empty_roundtrip),
+    )?;
+    let roundtrip_diagnostic = roundtrip_mutant.combined();
+    let rejects_core_roundtrip = !roundtrip_mutant.success
+        && (roundtrip_diagnostic.contains("Type mismatch")
+            || roundtrip_diagnostic.contains("type mismatch"))
+        && !roundtrip_diagnostic.contains("unknown identifier");
+
+    let control_path = tmp.path().join("M22ArtifactControl.lean");
+    write(&control_path, &source)?;
+    let control = run_command(
+        Command::new("lean")
+            .arg(&control_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if !control.ok {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the UNMUTATED Artifact.Emit copy does not elaborate, so M22 would prove nothing: {}",
+                first_line(&control.stderr)
+            ),
+        ));
+    }
+
+    let planted = source.replacen(IMPLEMENTATION, BROKEN, 1);
+    let mutant_path = tmp.path().join("M22ArtifactMutant.lean");
+    write(&mutant_path, &planted)?;
+    let mutant = run_command(
+        Command::new("lean")
+            .arg(&mutant_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if mutant.ok {
+        return Ok(false);
+    }
+    let diagnostic = format!("{}\n{}", mutant.stdout, mutant.stderr);
+    if !diagnostic.contains("decode_emit")
+        && !diagnostic.contains("encode_decode_roundtrip")
+        && !diagnostic.contains("type mismatch")
+    {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!("M22's mutant failed for an unrelated reason: {}", first_line(&diagnostic)),
+        ));
+    }
+    Ok(rejects_core_source && rejects_core_roundtrip)
+}
+
+fn authority_amendment_mutation(
+    root: &Path,
+    tag: &str,
+    amendment: &str,
+    old: &str,
+    new: &str,
+) -> Result<bool> {
+    let tmp = TempDir::new(tag)?;
+    let planted = tmp.path().join("repo");
+    copy_tree(&root.join("WasmGemmGnaf"), &planted.join("WasmGemmGnaf"))?;
+    copy_tree(
+        &root.join("vendor/wasm-spec"),
+        &planted.join("vendor/wasm-spec"),
+    )?;
+    fs::create_dir_all(planted.join("model")).map_err(|e| {
+        SpecError::io(
+            CLAUSE,
+            "cannot create authority-mutation model directory at",
+            &planted.join("model"),
+            e,
+        )
+    })?;
+    fs::copy(
+        root.join("model/spec-deviations.json"),
+        planted.join("model/spec-deviations.json"),
+    )
+    .map_err(|e| {
+        SpecError::io(
+            CLAUSE,
+            "cannot copy authority-mutation deviation register from",
+            &root.join("model/spec-deviations.json"),
+            e,
+        )
+    })?;
+
+    let control = crate::amendment::binding(&planted)?;
+    if !control.is_ok() {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the UNMUTATED {amendment} copy already fails its binding: {}",
+                control.findings.join("; ")
+            ),
+        ));
+    }
+
+    let authority = planted.join("WasmGemmGnaf/Wasm/AuthorityAmendments.lean");
+    mutation_rejected(&planted, &authority, old, new)
+}
+
+fn mutation_rejected(
+    root: &Path,
+    path: &Path,
+    old: &str,
+    new: &str,
+) -> Result<bool> {
+    let original = fs::read_to_string(path)
+        .map_err(|e| SpecError::io(CLAUSE, "cannot read the mutation control", path, e))?;
+    let planted = original.replacen(old, new, 1);
+    if planted == original {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!("could not plant mutation `{old}` in {}", path.display()),
+        ));
+    }
+    write(path, &planted)?;
+    let result = crate::amendment::binding(root);
+    write(path, &original)?;
+    match result {
+        Ok(binding) => Ok(!binding.is_ok()),
+        Err(err) => Err(SpecError::new(
+            CLAUSE,
+            format!("mutation made the checker error instead of reject: {err}"),
+        )),
+    }
 }

@@ -1,6 +1,6 @@
 /-
-  Wasm/Core/Execution.lean --- the step relation of the pinned WebAssembly
-  Core 3.0 semantics.
+  Wasm/Core/Execution.lean --- the single authority-selected step hierarchy for
+  WebAssembly Core 3.0.
 
   NORMATIVE SOURCE.  Every constructor below transcribes one rule of
 
@@ -23,7 +23,10 @@
   `Step_read`, then `Step`, then `Steps`, then `Eval_expr`.  No rule is dropped or
   merged by the reordering, and none of the four relations is mutually recursive
   with another: `Step` refers to `Step_pure`, `Step_read` and itself, and `Steps`
-  refers to `Step` and itself.
+  refers to `Step` and itself.  The default selector retains the byte-identical
+  pinned transcription for audit compatibility; the explicit erased endpoints
+  below apply AMD-011.  `Core/EventExecution.lean` supplies the sole public,
+  event-labelled `StepA`, `StepsA`, and `Eval_exprA` machine relations.
 
   `-- otherwise`.  SpecTec reads `-- otherwise` as the negation of the premises of
   every preceding rule of the same relation whose conclusion has the same shape.
@@ -40,6 +43,7 @@
   pinned source leaves abstract -- its 74 `hint(builtin)` primitives, of which
   this development calls 61 -- and `Core/Numerics.lean`'s header names them.
 -/
+import WasmGemmGnaf.Wasm.Core.ConcreteNumerics
 import WasmGemmGnaf.Wasm.Core.Runtime
 
 set_option autoImplicit false
@@ -663,15 +667,51 @@ inductive Step_pure (Nm : Numerics) : List AdminInstr → List AdminInstr → Pr
 
 The reductions that read the store or the frame but do not write to them. -/
 
-/-- `relation Step_read: config ~> instr*  hint(name "E")`. -/
-inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminInstr → Prop where
+/-- The exact constructor of a `Step_read` derivation.  Keeping this index on
+the authority transcription itself gives the released event semantics a rule
+identity without introducing a second copy of the 105 semantic rules. -/
+inductive ReadRule where
+  | block | loop | brOnCastSucceed | brOnCastFail | brOnCastFailSucceed
+  | brOnCastFailFail | call | callRefNull | callRefFunc | returnCall
+  | returnCallRefLabel | returnCallRefHandler | returnCallRefFrameNull
+  | returnCallRefFrameAddr | throwRefNull | throwRefInstrs | throwRefLabel
+  | throwRefFrame | throwRefHandlerEmpty | throwRefHandlerCatch
+  | throwRefHandlerCatchRef | throwRefHandlerCatchAll
+  | throwRefHandlerCatchAllRef | throwRefHandlerNext | tryTable | localGet
+  | globalGet | tableGetOob | tableGetVal | tableSize | tableFillOob
+  | tableFillZero | tableFillSucc | tableCopyOob | tableCopyZero | tableCopyLe
+  | tableCopyGt | tableInitOob | tableInitZero | tableInitSucc | loadNumOob
+  | loadNumVal | loadPackOob | loadPackVal | vloadOob | vloadVal
+  | vloadPackOob | vloadPackVal | vloadSplatOob | vloadSplatVal
+  | vloadZeroOob | vloadZeroVal | vloadLaneOob | vloadLaneVal | memorySize
+  | memoryFillOob | memoryFillZero | memoryFillSucc | memoryCopyOob
+  | memoryCopyZero | memoryCopyLe | memoryCopyGt | memoryInitOob
+  | memoryInitZero | memoryInitSucc | refNullIdx | refFunc | refTestTrue
+  | refTestFalse | refCastSucceed | refCastFail | structNewDefault
+  | structGetNull | structGetStruct | arrayNewDefault | arrayNewElemOob
+  | arrayNewElemAlloc | arrayNewDataOob | arrayNewDataNum | arrayGetNull
+  | arrayGetOob | arrayGetArray | arrayLenNull | arrayLenArray | arrayFillNull
+  | arrayFillOob | arrayFillZero | arrayFillSucc | arrayCopyNull1
+  | arrayCopyNull2 | arrayCopyOob1 | arrayCopyOob2 | arrayCopyZero
+  | arrayCopyLe | arrayCopyGt | arrayInitElemNull | arrayInitElemOob1
+  | arrayInitElemOob2 | arrayInitElemZero | arrayInitElemSucc
+  | arrayInitDataNull | arrayInitDataOob1 | arrayInitDataOob2
+  | arrayInitDataZero | arrayInitDataNum
+  deriving DecidableEq, Repr, Inhabited
+
+variable [authority : ExecutionAuthority]
+
+/-- `relation Step_read: config ~> instr*  hint(name "E")`, under the selected
+execution authority. -/
+inductive Step_read (Nm : Numerics) :
+    State → ReadRule → List AdminInstr → List AdminInstr → Prop where
   /-- ``rule Step_read/block: z; val^m (BLOCK bt instr*) ~> (LABEL_ n `{eps} val^m instr*)
       -- if $blocktype_(z, bt) = t_1^m -> t_2^n``. -/
   -- core-exec: Step_read/block
   | block {z : State} {vs : List Val} {bt : BlockType} {body : InstrSeq}
       {t₁ t₂ : List ValType} {m n : Nat} :
       blocktype_ z bt = some (t₁, t₂) → t₁.length = m → t₂.length = n → vs.length = m →
-      Step_read Nm z (vals vs ++ [.plain (.block bt body)])
+      Step_read Nm z .block (vals vs ++ [.plain (.block bt body)])
         [.label n [] (vals vs ++ plains body.toList)]
   /-- ``rule Step_read/loop: z; val^m (LOOP bt instr*)
       ~> (LABEL_ m `{LOOP bt instr*} val^m instr*)
@@ -680,7 +720,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   | loop {z : State} {vs : List Val} {bt : BlockType} {body : InstrSeq}
       {t₁ t₂ : List ValType} {m n : Nat} :
       blocktype_ z bt = some (t₁, t₂) → t₁.length = m → t₂.length = n → vs.length = m →
-      Step_read Nm z (vals vs ++ [.plain (.loop bt body)])
+      Step_read Nm z .loop (vals vs ++ [.plain (.loop bt body)])
         [.label m [.plain (.loop bt body)] (vals vs ++ plains body.toList)]
   /-- `rule Step_read/br_on_cast-succeed:
       s; f; ref (BR_ON_CAST l rt_1 rt_2) ~> ref (BR l)
@@ -689,16 +729,16 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   -- core-exec: Step_read/br_on_cast-succeed
   | brOnCastSucceed {z : State} {r : Ref} {l : LabelIdx} {rt₁ rt₂ rt : RefType} :
       Ref_ok z.store r rt →
-      Reftype_sub Context.empty rt (instRefType z.frame.mod rt₂) →
-      Step_read Nm z [r.toAdmin, .plain (.brOnCast l rt₁ rt₂)]
+      ReftypeSubFor Context.empty rt (instRefType z.frame.mod rt₂) →
+      Step_read Nm z .brOnCastSucceed [r.toAdmin, .plain (.brOnCast l rt₁ rt₂)]
         [r.toAdmin, .plain (.br l)]
   /-- `rule Step_read/br_on_cast-fail:
       s; f; ref (BR_ON_CAST l rt_1 rt_2) ~> ref  -- otherwise`. -/
   -- core-exec: Step_read/br_on_cast-fail
   | brOnCastFail {z : State} {r : Ref} {l : LabelIdx} {rt₁ rt₂ : RefType} :
       (¬ ∃ rt : RefType, Ref_ok z.store r rt ∧
-          Reftype_sub Context.empty rt (instRefType z.frame.mod rt₂)) →
-      Step_read Nm z [r.toAdmin, .plain (.brOnCast l rt₁ rt₂)] [r.toAdmin]
+          ReftypeSubFor Context.empty rt (instRefType z.frame.mod rt₂)) →
+      Step_read Nm z .brOnCastFail [r.toAdmin, .plain (.brOnCast l rt₁ rt₂)] [r.toAdmin]
   /-- `rule Step_read/br_on_cast_fail-succeed:
       s; f; ref (BR_ON_CAST_FAIL l rt_1 rt_2) ~> ref
       -- Ref_ok: s |- ref : rt
@@ -706,15 +746,15 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   -- core-exec: Step_read/br_on_cast_fail-succeed
   | brOnCastFailSucceed {z : State} {r : Ref} {l : LabelIdx} {rt₁ rt₂ rt : RefType} :
       Ref_ok z.store r rt →
-      Reftype_sub Context.empty rt (instRefType z.frame.mod rt₂) →
-      Step_read Nm z [r.toAdmin, .plain (.brOnCastFail l rt₁ rt₂)] [r.toAdmin]
+      ReftypeSubFor Context.empty rt (instRefType z.frame.mod rt₂) →
+      Step_read Nm z .brOnCastFailSucceed [r.toAdmin, .plain (.brOnCastFail l rt₁ rt₂)] [r.toAdmin]
   /-- `rule Step_read/br_on_cast_fail-fail:
       s; f; ref (BR_ON_CAST_FAIL l rt_1 rt_2) ~> ref (BR l)  -- otherwise`. -/
   -- core-exec: Step_read/br_on_cast_fail-fail
   | brOnCastFailFail {z : State} {r : Ref} {l : LabelIdx} {rt₁ rt₂ : RefType} :
       (¬ ∃ rt : RefType, Ref_ok z.store r rt ∧
-          Reftype_sub Context.empty rt (instRefType z.frame.mod rt₂)) →
-      Step_read Nm z [r.toAdmin, .plain (.brOnCastFail l rt₁ rt₂)]
+          ReftypeSubFor Context.empty rt (instRefType z.frame.mod rt₂)) →
+      Step_read Nm z .brOnCastFailFail [r.toAdmin, .plain (.brOnCastFail l rt₁ rt₂)]
         [r.toAdmin, .plain (.br l)]
   /-- `rule Step_read/call:
       z; (CALL x) ~> (REF.FUNC_ADDR a) (CALL_REF $funcinst(z)[a].TYPE)
@@ -722,12 +762,12 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   -- core-exec: Step_read/call
   | call {z : State} {x : FuncIdx} {a : FuncAddr} {fi : FuncInst} :
       (z.moduleinst).funcs[x.val]? = some a → z.funcinst[a]? = some fi →
-      Step_read Nm z [.plain (.call x)]
+      Step_read Nm z .call [.plain (.call x)]
         [.addrref (.funcAddr a), .plain (.callRef (.defd fi.type))]
   /-- `rule Step_read/call_ref-null: z; (REF.NULL ht) (CALL_REF yy) ~> TRAP`. -/
   -- core-exec: Step_read/call_ref-null
   | callRefNull {z : State} {ht : HeapType} {yy : TypeUse} :
-      Step_read Nm z [Ref.toAdmin (.null ht), .plain (.callRef yy)] [.trap]
+      Step_read Nm z .callRefNull [Ref.toAdmin (.null ht), .plain (.callRef yy)] [.trap]
   /-- ``rule Step_read/call_ref-func:
       z; val^n (REF.FUNC_ADDR a) (CALL_REF yy) ~> (FRAME_ m `{f} (LABEL_ m `{eps} instr*))
       -- if $funcinst(z)[a] = fi
@@ -743,7 +783,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       fi.code = .func fn →
       f = { locals := vs.map some ++ fn.locals.map (fun lc => default_ lc.valtype),
             mod := fi.mod } →
-      Step_read Nm z (vals vs ++ [.addrref (.funcAddr a), .plain (.callRef yy)])
+      Step_read Nm z .callRefFunc (vals vs ++ [.addrref (.funcAddr a), .plain (.callRef yy)])
         [.frame m f [.label m [] (plains fn.body.toList)]]
   /-- `rule Step_read/return_call:
       z; (RETURN_CALL x) ~> (REF.FUNC_ADDR a) (RETURN_CALL_REF $funcinst(z)[a].TYPE)
@@ -751,7 +791,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   -- core-exec: Step_read/return_call
   | returnCall {z : State} {x : FuncIdx} {a : FuncAddr} {fi : FuncInst} :
       (z.moduleinst).funcs[x.val]? = some a → z.funcinst[a]? = some fi →
-      Step_read Nm z [.plain (.returnCall x)]
+      Step_read Nm z .returnCall [.plain (.returnCall x)]
         [.addrref (.funcAddr a), .plain (.returnCallRef (.defd fi.type))]
   /-- ``rule Step_read/return_call_ref-label:
       z; (LABEL_ k `{instr'*} val* (RETURN_CALL_REF yy) instr*)
@@ -759,7 +799,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   -- core-exec: Step_read/return_call_ref-label
   | returnCallRefLabel {z : State} {k : Nat} {cont : List AdminInstr} {vs : List Val}
       {yy : TypeUse} {is : List AdminInstr} :
-      Step_read Nm z
+      Step_read Nm z .returnCallRefLabel
         [.label k cont (vals vs ++ [.plain (.returnCallRef yy)] ++ is)]
         (vals vs ++ [.plain (.returnCallRef yy)])
   /-- ``rule Step_read/return_call_ref-handler:
@@ -768,7 +808,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   -- core-exec: Step_read/return_call_ref-handler
   | returnCallRefHandler {z : State} {k : Nat} {cs : List Catch} {vs : List Val}
       {yy : TypeUse} {is : List AdminInstr} :
-      Step_read Nm z
+      Step_read Nm z .returnCallRefHandler
         [.handler k cs (vals vs ++ [.plain (.returnCallRef yy)] ++ is)]
         (vals vs ++ [.plain (.returnCallRef yy)])
   /-- ``rule Step_read/return_call_ref-frame-null:
@@ -776,7 +816,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   -- core-exec: Step_read/return_call_ref-frame-null
   | returnCallRefFrameNull {z : State} {k : Nat} {f : Frame} {vs : List Val}
       {ht : HeapType} {yy : TypeUse} {is : List AdminInstr} :
-      Step_read Nm z
+      Step_read Nm z .returnCallRefFrameNull
         [.frame k f (vals vs ++ [Ref.toAdmin (.null ht), .plain (.returnCallRef yy)] ++ is)]
         [.trap]
   /-- ``rule Step_read/return_call_ref-frame-addr:
@@ -789,39 +829,39 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       {t₁ t₂ : ValTypes} {n m : Nat} :
       z.funcinst[a]? = some fi → Expand fi.type (.func t₁ t₂) →
       t₁.length = n → t₂.length = m → vs.length = n →
-      Step_read Nm z
+      Step_read Nm z .returnCallRefFrameAddr
         [.frame k f (vals vs' ++ vals vs ++
           [.addrref (.funcAddr a), .plain (.returnCallRef yy)] ++ is)]
         (vals vs ++ [.addrref (.funcAddr a), .plain (.callRef yy)])
   /-- `rule Step_read/throw_ref-null: z; (REF.NULL ht) THROW_REF ~> TRAP`. -/
   -- core-exec: Step_read/throw_ref-null
   | throwRefNull {z : State} {ht : HeapType} :
-      Step_read Nm z [Ref.toAdmin (.null ht), .plain .throwRef] [.trap]
+      Step_read Nm z .throwRefNull [Ref.toAdmin (.null ht), .plain .throwRef] [.trap]
   /-- `rule Step_read/throw_ref-instrs:
       z; val* (REF.EXN_ADDR a) THROW_REF instr* ~> (REF.EXN_ADDR a) THROW_REF
       -- if val* =/= eps \/ instr* =/= eps`. -/
   -- core-exec: Step_read/throw_ref-instrs
   | throwRefInstrs {z : State} {vs : List Val} {a : ExnAddr} {is : List AdminInstr} :
       (vs ≠ [] ∨ is ≠ []) →
-      Step_read Nm z (vals vs ++ [.addrref (.exnAddr a), .plain .throwRef] ++ is)
+      Step_read Nm z .throwRefInstrs (vals vs ++ [.addrref (.exnAddr a), .plain .throwRef] ++ is)
         [.addrref (.exnAddr a), .plain .throwRef]
   /-- ``rule Step_read/throw_ref-label:
       z; (LABEL_ n `{instr'*} (REF.EXN_ADDR a) THROW_REF) ~> (REF.EXN_ADDR a) THROW_REF``. -/
   -- core-exec: Step_read/throw_ref-label
   | throwRefLabel {z : State} {n : Nat} {cont : List AdminInstr} {a : ExnAddr} :
-      Step_read Nm z [.label n cont [.addrref (.exnAddr a), .plain .throwRef]]
+      Step_read Nm z .throwRefLabel [.label n cont [.addrref (.exnAddr a), .plain .throwRef]]
         [.addrref (.exnAddr a), .plain .throwRef]
   /-- ``rule Step_read/throw_ref-frame:
       z; (FRAME_ n `{f} (REF.EXN_ADDR a) THROW_REF) ~> (REF.EXN_ADDR a) THROW_REF``. -/
   -- core-exec: Step_read/throw_ref-frame
   | throwRefFrame {z : State} {n : Nat} {f : Frame} {a : ExnAddr} :
-      Step_read Nm z [.frame n f [.addrref (.exnAddr a), .plain .throwRef]]
+      Step_read Nm z .throwRefFrame [.frame n f [.addrref (.exnAddr a), .plain .throwRef]]
         [.addrref (.exnAddr a), .plain .throwRef]
   /-- ``rule Step_read/throw_ref-handler-empty:
       z; (HANDLER_ n `{eps} (REF.EXN_ADDR a) THROW_REF) ~> (REF.EXN_ADDR a) THROW_REF``. -/
   -- core-exec: Step_read/throw_ref-handler-empty
   | throwRefHandlerEmpty {z : State} {n : Nat} {a : ExnAddr} :
-      Step_read Nm z [.handler n [] [.addrref (.exnAddr a), .plain .throwRef]]
+      Step_read Nm z .throwRefHandlerEmpty [.handler n [] [.addrref (.exnAddr a), .plain .throwRef]]
         [.addrref (.exnAddr a), .plain .throwRef]
   /-- ``rule Step_read/throw_ref-handler-catch:
       z; (HANDLER_ n `{(CATCH x l) catch'*} (REF.EXN_ADDR a) THROW_REF) ~> val* (BR l)
@@ -831,7 +871,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   | throwRefHandlerCatch {z : State} {n : Nat} {x : TagIdx} {l : LabelIdx}
       {cs : List Catch} {a : ExnAddr} {ex : ExnInst} {ta : TagAddr} :
       z.exninst[a]? = some ex → z.tagaddr[x.val]? = some ta → ex.tag = ta →
-      Step_read Nm z
+      Step_read Nm z .throwRefHandlerCatch
         [.handler n (.tag x l :: cs) [.addrref (.exnAddr a), .plain .throwRef]]
         (vals ex.fields ++ [.plain (.br l)])
   /-- ``rule Step_read/throw_ref-handler-catch_ref:
@@ -843,7 +883,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   | throwRefHandlerCatchRef {z : State} {n : Nat} {x : TagIdx} {l : LabelIdx}
       {cs : List Catch} {a : ExnAddr} {ex : ExnInst} {ta : TagAddr} :
       z.exninst[a]? = some ex → z.tagaddr[x.val]? = some ta → ex.tag = ta →
-      Step_read Nm z
+      Step_read Nm z .throwRefHandlerCatchRef
         [.handler n (.tagRef x l :: cs) [.addrref (.exnAddr a), .plain .throwRef]]
         (vals ex.fields ++ [.addrref (.exnAddr a), .plain (.br l)])
   /-- ``rule Step_read/throw_ref-handler-catch_all:
@@ -851,7 +891,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   -- core-exec: Step_read/throw_ref-handler-catch_all
   | throwRefHandlerCatchAll {z : State} {n : Nat} {l : LabelIdx} {cs : List Catch}
       {a : ExnAddr} :
-      Step_read Nm z
+      Step_read Nm z .throwRefHandlerCatchAll
         [.handler n (.all l :: cs) [.addrref (.exnAddr a), .plain .throwRef]]
         [.plain (.br l)]
   /-- ``rule Step_read/throw_ref-handler-catch_all_ref:
@@ -860,7 +900,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   -- core-exec: Step_read/throw_ref-handler-catch_all_ref
   | throwRefHandlerCatchAllRef {z : State} {n : Nat} {l : LabelIdx} {cs : List Catch}
       {a : ExnAddr} :
-      Step_read Nm z
+      Step_read Nm z .throwRefHandlerCatchAllRef
         [.handler n (.allRef l :: cs) [.addrref (.exnAddr a), .plain .throwRef]]
         [.addrref (.exnAddr a), .plain (.br l)]
   /-- ``rule Step_read/throw_ref-handler-next:
@@ -870,7 +910,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   | throwRefHandlerNext {z : State} {n : Nat} {c : Catch} {cs : List Catch}
       {a : ExnAddr} :
       ¬ catchMatches z a c →
-      Step_read Nm z
+      Step_read Nm z .throwRefHandlerNext
         [.handler n (c :: cs) [.addrref (.exnAddr a), .plain .throwRef]]
         [.handler n cs [.addrref (.exnAddr a), .plain .throwRef]]
   /-- ``rule Step_read/try_table:
@@ -881,40 +921,40 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   | tryTable {z : State} {vs : List Val} {bt : BlockType} {cs : List_ Catch}
       {body : InstrSeq} {t₁ t₂ : List ValType} {m n : Nat} :
       blocktype_ z bt = some (t₁, t₂) → t₁.length = m → t₂.length = n → vs.length = m →
-      Step_read Nm z (vals vs ++ [.plain (.tryTable bt cs body)])
+      Step_read Nm z .tryTable (vals vs ++ [.plain (.tryTable bt cs body)])
         [.handler n cs.val [.label n [] (vals vs ++ plains body.toList)]]
   /-- `rule Step_read/local.get: z; (LOCAL.GET x) ~> val  -- if $local(z, x) = val`. -/
   -- core-exec: Step_read/local.get
   | localGet {z : State} {x : LocalIdx} {v : Val} :
       z.localOf x = some (some v) →
-      Step_read Nm z [.plain (.localGet x)] [v.toAdmin]
+      Step_read Nm z .localGet [.plain (.localGet x)] [v.toAdmin]
   /-- `rule Step_read/global.get: z; (GLOBAL.GET x) ~> val
       -- if $global(z, x).VALUE = val`. -/
   -- core-exec: Step_read/global.get
   | globalGet {z : State} {x : GlobalIdx} {gi : GlobalInst} :
       z.globalOf x = some gi →
-      Step_read Nm z [.plain (.globalGet x)] [gi.value.toAdmin]
+      Step_read Nm z .globalGet [.plain (.globalGet x)] [gi.value.toAdmin]
   /-- `rule Step_read/table.get-oob: z; (CONST at i) (TABLE.GET x) ~> TRAP
       -- if i >= |$table(z, x).REFS|`. -/
   -- core-exec: Step_read/table.get-oob
   | tableGetOob {z : State} {att : AddrType} {i : AddrLit att} {x : TableIdx}
       {ti : TableInst} :
       z.tableOf x = some ti → i.val ≥ ti.refs.length →
-      Step_read Nm z [constAddr att i, .plain (.tableGet x)] [.trap]
+      Step_read Nm z .tableGetOob [constAddr att i, .plain (.tableGet x)] [.trap]
   /-- `rule Step_read/table.get-val: z; (CONST at i) (TABLE.GET x) ~> $table(z,x).REFS[i]
       -- if i < |$table(z, x).REFS|`. -/
   -- core-exec: Step_read/table.get-val
   | tableGetVal {z : State} {att : AddrType} {i : AddrLit att} {x : TableIdx}
       {ti : TableInst} {r : Ref} :
       z.tableOf x = some ti → ti.refs[i.val]? = some r →
-      Step_read Nm z [constAddr att i, .plain (.tableGet x)] [r.toAdmin]
+      Step_read Nm z .tableGetVal [constAddr att i, .plain (.tableGet x)] [r.toAdmin]
   /-- `rule Step_read/table.size: z; (TABLE.SIZE x) ~> (CONST at n)
       -- if |$table(z, x).REFS| = n  -- if $table(z, x).TYPE = at lim rt`. -/
   -- core-exec: Step_read/table.size
   | tableSize {z : State} {x : TableIdx} {ti : TableInst} {att : AddrType}
       {n : AddrLit att} :
       z.tableOf x = some ti → ti.refs.length = n.val → ti.type.addr = att →
-      Step_read Nm z [.plain (.tableSize x)] [constAddr att n]
+      Step_read Nm z .tableSize [.plain (.tableSize x)] [constAddr att n]
   /-- `rule Step_read/table.fill-oob:
       z; (CONST at i) val (CONST at n) (TABLE.FILL x) ~> TRAP
       -- if $(i + n) > |$table(z, x).REFS|`. -/
@@ -922,7 +962,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   | tableFillOob {z : State} {att : AddrType} {i n : AddrLit att} {v : Val}
       {x : TableIdx} {ti : TableInst} :
       z.tableOf x = some ti → i.val + n.val > ti.refs.length →
-      Step_read Nm z
+      Step_read Nm z .tableFillOob
         [constAddr att i, v.toAdmin, constAddr att n, .plain (.tableFill x)] [.trap]
   /-- `rule Step_read/table.fill-zero:
       z; (CONST at i) val (CONST at n) (TABLE.FILL x) ~> eps
@@ -931,7 +971,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   | tableFillZero {z : State} {att : AddrType} {i n : AddrLit att} {v : Val}
       {x : TableIdx} {ti : TableInst} :
       z.tableOf x = some ti → ¬ (i.val + n.val > ti.refs.length) → n.val = 0 →
-      Step_read Nm z
+      Step_read Nm z .tableFillZero
         [constAddr att i, v.toAdmin, constAddr att n, .plain (.tableFill x)] []
   /-- `rule Step_read/table.fill-succ:
       z; (CONST at i) val (CONST at n) (TABLE.FILL x) ~>
@@ -942,7 +982,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       {x : TableIdx} {ti : TableInst} :
       z.tableOf x = some ti → ¬ (i.val + n.val > ti.refs.length) → n.val ≠ 0 →
       i'.val = i.val + 1 → n.val = n'.val + 1 →
-      Step_read Nm z
+      Step_read Nm z .tableFillSucc
         [constAddr att i, v.toAdmin, constAddr att n, .plain (.tableFill x)]
         [constAddr att i, v.toAdmin, .plain (.tableSet x),
          constAddr att i', v.toAdmin, constAddr att n', .plain (.tableFill x)]
@@ -955,7 +995,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       {ti₁ ti₂ : TableInst} :
       z.tableOf x₁ = some ti₁ → z.tableOf x₂ = some ti₂ →
       (i₁.val + n.val > ti₁.refs.length ∨ i₂.val + n.val > ti₂.refs.length) →
-      Step_read Nm z
+      Step_read Nm z .tableCopyOob
         [constAddr att₁ i₁, constAddr att₂ i₂, constAddr att' n,
          .plain (.tableCopy x₁ x₂)] [.trap]
   /-- `rule Step_read/table.copy-zero:
@@ -967,7 +1007,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       z.tableOf x = some ti₁ → z.tableOf y = some ti₂ →
       ¬ (i₁.val + n.val > ti₁.refs.length ∨ i₂.val + n.val > ti₂.refs.length) →
       n.val = 0 →
-      Step_read Nm z
+      Step_read Nm z .tableCopyZero
         [constAddr att₁ i₁, constAddr att₂ i₂, constAddr att' n,
          .plain (.tableCopy x y)] []
   /-- `rule Step_read/table.copy-le:
@@ -983,7 +1023,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       ¬ (i₁.val + n.val > ti₁.refs.length ∨ i₂.val + n.val > ti₂.refs.length) →
       n.val ≠ 0 → i₁.val ≤ i₂.val →
       i₁'.val = i₁.val + 1 → i₂'.val = i₂.val + 1 → n.val = n'.val + 1 →
-      Step_read Nm z
+      Step_read Nm z .tableCopyLe
         [constAddr att₁ i₁, constAddr att₂ i₂, constAddr att' n,
          .plain (.tableCopy x y)]
         [constAddr att₁ i₁, constAddr att₂ i₂, .plain (.tableGet y), .plain (.tableSet x),
@@ -1002,7 +1042,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       ¬ (i₁.val + n.val > ti₁.refs.length ∨ i₂.val + n.val > ti₂.refs.length) →
       n.val ≠ 0 → ¬ (i₁.val ≤ i₂.val) →
       j₁.val + 1 = i₁.val + n.val → j₂.val + 1 = i₂.val + n.val → n.val = n'.val + 1 →
-      Step_read Nm z
+      Step_read Nm z .tableCopyGt
         [constAddr att₁ i₁, constAddr att₂ i₂, constAddr att' n,
          .plain (.tableCopy x y)]
         [constAddr att₁ j₁, constAddr att₂ j₂, .plain (.tableGet y), .plain (.tableSet x),
@@ -1016,7 +1056,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       {x : TableIdx} {y : ElemIdx} {ti : TableInst} {ei : ElemInst} :
       z.tableOf x = some ti → z.elemOf y = some ei →
       (i.val + n.val > ti.refs.length ∨ j.val + n.val > ei.refs.length) →
-      Step_read Nm z
+      Step_read Nm z .tableInitOob
         [constAddr att i, constI32 j, constI32 n, .plain (.tableInit x y)] [.trap]
   /-- `rule Step_read/table.init-zero:
       z; (CONST at i) (CONST I32 j) (CONST I32 n) (TABLE.INIT x y) ~> eps
@@ -1027,7 +1067,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       z.tableOf x = some ti → z.elemOf y = some ei →
       ¬ (i.val + n.val > ti.refs.length ∨ j.val + n.val > ei.refs.length) →
       n.val = 0 →
-      Step_read Nm z
+      Step_read Nm z .tableInitZero
         [constAddr att i, constI32 j, constI32 n, .plain (.tableInit x y)] []
   /-- `rule Step_read/table.init-succ:
       z; (CONST at i) (CONST I32 j) (CONST I32 n) (TABLE.INIT x y) ~>
@@ -1042,7 +1082,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       ¬ (i.val + n.val > ti.refs.length ∨ j.val + n.val > ei.refs.length) →
       n.val ≠ 0 → ei.refs[j.val]? = some r →
       i'.val = i.val + 1 → j'.val = j.val + 1 → n.val = n'.val + 1 →
-      Step_read Nm z
+      Step_read Nm z .tableInitSucc
         [constAddr att i, constI32 j, constI32 n, .plain (.tableInit x y)]
         [constAddr att i, r.toAdmin, .plain (.tableSet x),
          constAddr att i', constI32 j', constI32 n', .plain (.tableInit x y)]
@@ -1053,7 +1093,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       {x : MemIdx} {ao : MemArg} {mi : MemInst} :
       z.memOf x = some mi →
       i.val + ao.offset.val + nt.size / 8 > mi.bytes.length →
-      Step_read Nm z [constAddr att i, .plain (.load nt none x ao)] [.trap]
+      Step_read Nm z .loadNumOob [constAddr att i, .plain (.load nt none x ao)] [.trap]
   /-- `rule Step_read/load-num-val: z; (CONST at i) (LOAD nt x ao) ~> (CONST nt c)
       -- if $nbytes_(nt, c) = $mem(z, x).BYTES[i + ao.OFFSET : $size(nt)/8]`. -/
   -- core-exec: Step_read/load-num-val
@@ -1061,7 +1101,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       {x : MemIdx} {ao : MemArg} {mi : MemInst} {c : Num_ nt} :
       z.memOf x = some mi →
       Nm.nbytes_ nt c = slice mi.bytes (i.val + ao.offset.val) (nt.size / 8) →
-      Step_read Nm z [constAddr att i, .plain (.load nt none x ao)]
+      Step_read Nm z .loadNumVal [constAddr att i, .plain (.load nt none x ao)]
         [.plain (.const nt c)]
   /-- `rule Step_read/load-pack-oob: z; (CONST at i) (LOAD Inn (n _ sx) x ao) ~> TRAP
       -- if $(i + ao.OFFSET + n/8 > |$mem(z, x).BYTES|)`. -/
@@ -1070,7 +1110,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       {sz : Sz} {sx : Sx} {x : MemIdx} {ao : MemArg} {mi : MemInst} :
       z.memOf x = some mi →
       i.val + ao.offset.val + sz.toNat / 8 > mi.bytes.length →
-      Step_read Nm z
+      Step_read Nm z .loadPackOob
         [constAddr att i, .plain (.load inn.toNumType (some ⟨sz, sx⟩) x ao)] [.trap]
   /-- `rule Step_read/load-pack-val:
       z; (CONST at i) (LOAD Inn (n _ sx) x ao) ~> (CONST Inn $extend__(n, $size(Inn), sx, c))
@@ -1082,7 +1122,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       z.memOf x = some mi →
       Nm.ibytes_ sz.toNat c = slice mi.bytes (i.val + ao.offset.val) (sz.toNat / 8) →
       Nm.extend__ sz.toNat inn.size sx c = d →
-      Step_read Nm z
+      Step_read Nm z .loadPackVal
         [constAddr att i, .plain (.load inn.toNumType (some ⟨sz, sx⟩) x ao)]
         [constInn inn d]
   /-- `rule Step_read/vload-oob: z; (CONST at i) (VLOAD V128 x ao) ~> TRAP
@@ -1092,7 +1132,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       {ao : MemArg} {mi : MemInst} :
       z.memOf x = some mi →
       i.val + ao.offset.val + VecType.v128.size / 8 > mi.bytes.length →
-      Step_read Nm z [constAddr att i, .plain (.vload .v128 none x ao)] [.trap]
+      Step_read Nm z .vloadOob [constAddr att i, .plain (.vload .v128 none x ao)] [.trap]
   /-- `rule Step_read/vload-val: z; (CONST at i) (VLOAD V128 x ao) ~> (VCONST V128 c)
       -- if $vbytes_(V128, c) = $mem(z, x).BYTES[i + ao.OFFSET : $vsize(V128)/8]`. -/
   -- core-exec: Step_read/vload-val
@@ -1101,7 +1141,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       z.memOf x = some mi →
       Nm.vbytes_ .v128 c =
         slice mi.bytes (i.val + ao.offset.val) (VecType.v128.size / 8) →
-      Step_read Nm z [constAddr att i, .plain (.vload .v128 none x ao)]
+      Step_read Nm z .vloadVal [constAddr att i, .plain (.vload .v128 none x ao)]
         [.plain (.vconst .v128 c)]
   /-- `rule Step_read/vload-pack-oob:
       z; (CONST at i) (VLOAD V128 (SHAPE M X K _ sx) x ao) ~> TRAP
@@ -1111,7 +1151,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       {sx : Sx} {x : MemIdx} {ao : MemArg} {mi : MemInst} :
       z.memOf x = some mi →
       i.val + ao.offset.val + sz.toNat * k / 8 > mi.bytes.length →
-      Step_read Nm z
+      Step_read Nm z .vloadPackOob
         [constAddr att i, .plain (.vload .v128 (some (.shape sz k sx)) x ao)] [.trap]
   /-- `rule Step_read/vload-pack-val:
       z; (CONST at i) (VLOAD V128 (SHAPE M X K _ sx) x ao) ~> (VCONST V128 c)
@@ -1130,7 +1170,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       js.mapM (fun j => inToLane sh.lane (Nm.extend__ sz.toNat sh.lane.size sx j)) =
         some ls →
       Nm.inv_lanes_ sh ls = c →
-      Step_read Nm z
+      Step_read Nm z .vloadPackVal
         [constAddr att i, .plain (.vload .v128 (some (.shape sz k sx)) x ao)]
         [.plain (.vconst .v128 c)]
   /-- `rule Step_read/vload-splat-oob:
@@ -1141,7 +1181,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       {x : MemIdx} {ao : MemArg} {mi : MemInst} :
       z.memOf x = some mi →
       i.val + ao.offset.val + sz.toNat / 8 > mi.bytes.length →
-      Step_read Nm z
+      Step_read Nm z .vloadSplatOob
         [constAddr att i, .plain (.vload .v128 (some (.splat sz)) x ao)] [.trap]
   /-- `rule Step_read/vload-splat-val:
       z; (CONST at i) (VLOAD V128 (SPLAT N) x ao) ~> (VCONST V128 c)
@@ -1157,7 +1197,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       Nm.ibytes_ sh.lane.size j = slice mi.bytes (i.val + ao.offset.val) (sz.toNat / 8) →
       inToLane sh.lane j = some lv →
       Nm.inv_lanes_ sh (List.replicate sh.dim.toNat lv) = c →
-      Step_read Nm z
+      Step_read Nm z .vloadSplatVal
         [constAddr att i, .plain (.vload .v128 (some (.splat sz)) x ao)]
         [.plain (.vconst .v128 c)]
   /-- `rule Step_read/vload-zero-oob:
@@ -1168,7 +1208,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       {x : MemIdx} {ao : MemArg} {mi : MemInst} :
       z.memOf x = some mi →
       i.val + ao.offset.val + sz.toNat / 8 > mi.bytes.length →
-      Step_read Nm z
+      Step_read Nm z .vloadZeroOob
         [constAddr att i, .plain (.vload .v128 (some (.zero sz)) x ao)] [.trap]
   /-- `rule Step_read/vload-zero-val:
       z; (CONST at i) (VLOAD V128 (ZERO N) x ao) ~> (VCONST V128 c)
@@ -1180,7 +1220,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       z.memOf x = some mi →
       Nm.ibytes_ sz.toNat j = slice mi.bytes (i.val + ao.offset.val) (sz.toNat / 8) →
       Nm.extend__ sz.toNat 128 .u j = c →
-      Step_read Nm z
+      Step_read Nm z .vloadZeroVal
         [constAddr att i, .plain (.vload .v128 (some (.zero sz)) x ao)]
         [.plain (.vconst .v128 c)]
   /-- `rule Step_read/vload_lane-oob:
@@ -1191,7 +1231,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       {sz : Sz} {x : MemIdx} {ao : MemArg} {j : LaneIdx} {mi : MemInst} :
       z.memOf x = some mi →
       i.val + ao.offset.val + sz.toNat / 8 > mi.bytes.length →
-      Step_read Nm z
+      Step_read Nm z .vloadLaneOob
         [constAddr att i, .plain (.vconst .v128 c₁),
          .plain (.vloadLane .v128 sz x ao j)] [.trap]
   /-- `rule Step_read/vload_lane-val:
@@ -1209,7 +1249,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       inToLane sh.lane k = some lv →
       setAt? (Nm.lanes_ sh c₁) j.val lv = some ls →
       Nm.inv_lanes_ sh ls = c →
-      Step_read Nm z
+      Step_read Nm z .vloadLaneVal
         [constAddr att i, .plain (.vconst .v128 c₁),
          .plain (.vloadLane .v128 sz x ao j)] [.plain (.vconst .v128 c)]
   /-- `rule Step_read/memory.size: z; (MEMORY.SIZE x) ~> (CONST at n)
@@ -1220,7 +1260,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       {n : AddrLit att} :
       z.memOf x = some mi → n.val * (64 * Ki) = mi.bytes.length →
       mi.type.addr = att →
-      Step_read Nm z [.plain (.memorySize x)] [constAddr att n]
+      Step_read Nm z .memorySize [.plain (.memorySize x)] [constAddr att n]
   /-- `rule Step_read/memory.fill-oob:
       z; (CONST at i) val (CONST at n) (MEMORY.FILL x) ~> TRAP
       -- if $(i + n) > |$mem(z, x).BYTES|`. -/
@@ -1228,7 +1268,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   | memoryFillOob {z : State} {att : AddrType} {i n : AddrLit att} {v : Val}
       {x : MemIdx} {mi : MemInst} :
       z.memOf x = some mi → i.val + n.val > mi.bytes.length →
-      Step_read Nm z
+      Step_read Nm z .memoryFillOob
         [constAddr att i, v.toAdmin, constAddr att n, .plain (.memoryFill x)] [.trap]
   /-- `rule Step_read/memory.fill-zero:
       z; (CONST at i) val (CONST at n) (MEMORY.FILL x) ~> eps
@@ -1237,7 +1277,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   | memoryFillZero {z : State} {att : AddrType} {i n : AddrLit att} {v : Val}
       {x : MemIdx} {mi : MemInst} :
       z.memOf x = some mi → ¬ (i.val + n.val > mi.bytes.length) → n.val = 0 →
-      Step_read Nm z
+      Step_read Nm z .memoryFillZero
         [constAddr att i, v.toAdmin, constAddr att n, .plain (.memoryFill x)] []
   /-- `rule Step_read/memory.fill-succ:
       z; (CONST at i) val (CONST at n) (MEMORY.FILL x) ~>
@@ -1248,7 +1288,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       {x : MemIdx} {mi : MemInst} :
       z.memOf x = some mi → ¬ (i.val + n.val > mi.bytes.length) → n.val ≠ 0 →
       i'.val = i.val + 1 → n.val = n'.val + 1 →
-      Step_read Nm z
+      Step_read Nm z .memoryFillSucc
         [constAddr att i, v.toAdmin, constAddr att n, .plain (.memoryFill x)]
         [constAddr att i, v.toAdmin, .plain (.store .i32 (some ⟨.s8⟩) x MemArg.zero),
          constAddr att i', v.toAdmin, constAddr att n', .plain (.memoryFill x)]
@@ -1260,7 +1300,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       {i₂ : AddrLit att₂} {n : AddrLit att'} {x₁ x₂ : MemIdx} {mi₁ mi₂ : MemInst} :
       z.memOf x₁ = some mi₁ → z.memOf x₂ = some mi₂ →
       (i₁.val + n.val > mi₁.bytes.length ∨ i₂.val + n.val > mi₂.bytes.length) →
-      Step_read Nm z
+      Step_read Nm z .memoryCopyOob
         [constAddr att₁ i₁, constAddr att₂ i₂, constAddr att' n,
          .plain (.memoryCopy x₁ x₂)] [.trap]
   /-- `rule Step_read/memory.copy-zero:
@@ -1272,7 +1312,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       z.memOf x₁ = some mi₁ → z.memOf x₂ = some mi₂ →
       ¬ (i₁.val + n.val > mi₁.bytes.length ∨ i₂.val + n.val > mi₂.bytes.length) →
       n.val = 0 →
-      Step_read Nm z
+      Step_read Nm z .memoryCopyZero
         [constAddr att₁ i₁, constAddr att₂ i₂, constAddr att' n,
          .plain (.memoryCopy x₁ x₂)] []
   /-- `rule Step_read/memory.copy-le:
@@ -1290,7 +1330,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       ¬ (i₁.val + n.val > mi₁.bytes.length ∨ i₂.val + n.val > mi₂.bytes.length) →
       n.val ≠ 0 → i₁.val ≤ i₂.val →
       i₁'.val = i₁.val + 1 → i₂'.val = i₂.val + 1 → n.val = n'.val + 1 →
-      Step_read Nm z
+      Step_read Nm z .memoryCopyLe
         [constAddr att₁ i₁, constAddr att₂ i₂, constAddr att' n,
          .plain (.memoryCopy x₁ x₂)]
         [constAddr att₁ i₁, constAddr att₂ i₂,
@@ -1312,7 +1352,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       ¬ (i₁.val + n.val > mi₁.bytes.length ∨ i₂.val + n.val > mi₂.bytes.length) →
       n.val ≠ 0 → ¬ (i₁.val ≤ i₂.val) →
       j₁.val + 1 = i₁.val + n.val → j₂.val + 1 = i₂.val + n.val → n.val = n'.val + 1 →
-      Step_read Nm z
+      Step_read Nm z .memoryCopyGt
         [constAddr att₁ i₁, constAddr att₂ i₂, constAddr att' n,
          .plain (.memoryCopy x₁ x₂)]
         [constAddr att₁ j₁, constAddr att₂ j₂,
@@ -1328,7 +1368,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       {x : MemIdx} {y : DataIdx} {mi : MemInst} {di : DataInst} :
       z.memOf x = some mi → z.dataOf y = some di →
       (i.val + n.val > mi.bytes.length ∨ j.val + n.val > di.bytes.length) →
-      Step_read Nm z
+      Step_read Nm z .memoryInitOob
         [constAddr att i, constI32 j, constI32 n, .plain (.memoryInit x y)] [.trap]
   /-- `rule Step_read/memory.init-zero:
       z; (CONST at i) (CONST I32 j) (CONST I32 n) (MEMORY.INIT x y) ~> eps
@@ -1339,7 +1379,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       z.memOf x = some mi → z.dataOf y = some di →
       ¬ (i.val + n.val > mi.bytes.length ∨ j.val + n.val > di.bytes.length) →
       n.val = 0 →
-      Step_read Nm z
+      Step_read Nm z .memoryInitZero
         [constAddr att i, constI32 j, constI32 n, .plain (.memoryInit x y)] []
   /-- `rule Step_read/memory.init-succ:
       z; (CONST at i) (CONST I32 j) (CONST I32 n) (MEMORY.INIT x y) ~>
@@ -1354,7 +1394,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       ¬ (i.val + n.val > mi.bytes.length ∨ j.val + n.val > di.bytes.length) →
       n.val ≠ 0 → di.bytes[j.val]? = some b → bc.val = b.val →
       i'.val = i.val + 1 → j'.val = j.val + 1 → n.val = n'.val + 1 →
-      Step_read Nm z
+      Step_read Nm z .memoryInitSucc
         [constAddr att i, constI32 j, constI32 n, .plain (.memoryInit x y)]
         [constAddr att i, constI32 bc, .plain (.store .i32 (some ⟨.s8⟩) x MemArg.zero),
          constAddr att i', constI32 j', constI32 n', .plain (.memoryInit x y)]
@@ -1362,45 +1402,45 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   -- core-exec: Step_read/ref.null-idx
   | refNullIdx {z : State} {x : TypeIdx} {dt : DefType} :
       z.typeOf x = some dt →
-      Step_read Nm z [.plain (.refNull (.use (.idx x)))]
+      Step_read Nm z .refNullIdx [.plain (.refNull (.use (.idx x)))]
         [Ref.toAdmin (.null (.use (.defd dt)))]
   /-- `rule Step_read/ref.func:
       z; (REF.FUNC x) ~> (REF.FUNC_ADDR $moduleinst(z).FUNCS[x])`. -/
   -- core-exec: Step_read/ref.func
   | refFunc {z : State} {x : FuncIdx} {a : FuncAddr} :
       (z.moduleinst).funcs[x.val]? = some a →
-      Step_read Nm z [.plain (.refFunc x)] [.addrref (.funcAddr a)]
+      Step_read Nm z .refFunc [.plain (.refFunc x)] [.addrref (.funcAddr a)]
   /-- `rule Step_read/ref.test-true: s; f; ref (REF.TEST rt) ~> (CONST I32 1)
       -- Ref_ok: s |- ref : rt'
       -- Reftype_sub: {} |- rt' <: $inst_reftype(f.MODULE, rt)`. -/
   -- core-exec: Step_read/ref.test-true
   | refTestTrue {z : State} {r : Ref} {rt rt' : RefType} {c : U32} :
       Ref_ok z.store r rt' →
-      Reftype_sub Context.empty rt' (instRefType z.frame.mod rt) →
+      ReftypeSubFor Context.empty rt' (instRefType z.frame.mod rt) →
       c.val = 1 →
-      Step_read Nm z [r.toAdmin, .plain (.refTest rt)] [constI32 c]
+      Step_read Nm z .refTestTrue [r.toAdmin, .plain (.refTest rt)] [constI32 c]
   /-- `rule Step_read/ref.test-false: s; f; ref (REF.TEST rt) ~> (CONST I32 0)
       -- otherwise`. -/
   -- core-exec: Step_read/ref.test-false
   | refTestFalse {z : State} {r : Ref} {rt : RefType} {c : U32} :
       (¬ ∃ rt' : RefType, Ref_ok z.store r rt' ∧
-          Reftype_sub Context.empty rt' (instRefType z.frame.mod rt)) →
+          ReftypeSubFor Context.empty rt' (instRefType z.frame.mod rt)) →
       c.val = 0 →
-      Step_read Nm z [r.toAdmin, .plain (.refTest rt)] [constI32 c]
+      Step_read Nm z .refTestFalse [r.toAdmin, .plain (.refTest rt)] [constI32 c]
   /-- `rule Step_read/ref.cast-succeed: s; f; ref (REF.CAST rt) ~> ref
       -- Ref_ok: s |- ref : rt'
       -- Reftype_sub: {} |- rt' <: $inst_reftype(f.MODULE, rt)`. -/
   -- core-exec: Step_read/ref.cast-succeed
   | refCastSucceed {z : State} {r : Ref} {rt rt' : RefType} :
       Ref_ok z.store r rt' →
-      Reftype_sub Context.empty rt' (instRefType z.frame.mod rt) →
-      Step_read Nm z [r.toAdmin, .plain (.refCast rt)] [r.toAdmin]
+      ReftypeSubFor Context.empty rt' (instRefType z.frame.mod rt) →
+      Step_read Nm z .refCastSucceed [r.toAdmin, .plain (.refCast rt)] [r.toAdmin]
   /-- `rule Step_read/ref.cast-fail: s; f; ref (REF.CAST rt) ~> TRAP  -- otherwise`. -/
   -- core-exec: Step_read/ref.cast-fail
   | refCastFail {z : State} {r : Ref} {rt : RefType} :
       (¬ ∃ rt' : RefType, Ref_ok z.store r rt' ∧
-          Reftype_sub Context.empty rt' (instRefType z.frame.mod rt)) →
-      Step_read Nm z [r.toAdmin, .plain (.refCast rt)] [.trap]
+          ReftypeSubFor Context.empty rt' (instRefType z.frame.mod rt)) →
+      Step_read Nm z .refCastFail [r.toAdmin, .plain (.refCast rt)] [.trap]
   /-- `rule Step_read/struct.new_default:
       z; (STRUCT.NEW_DEFAULT x) ~> val* (STRUCT.NEW x)
       -- Expand: $type(z, x) ~~ STRUCT (mut? zt)*
@@ -1410,14 +1450,14 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       {vs : List Val} :
       z.typeOf x = some dt → Expand dt (.struct fts) →
       (fts.toList.mapM fun ft => default_ (fieldStorage ft).unpack) = some vs →
-      Step_read Nm z [.plain (.structNewDefault x)]
+      Step_read Nm z .structNewDefault [.plain (.structNewDefault x)]
         (vals vs ++ [.plain (.structNew x)])
   /-- `rule Step_read/struct.get-null:
       z; (REF.NULL ht) (STRUCT.GET sx? x i) ~> TRAP`. -/
   -- core-exec: Step_read/struct.get-null
   | structGetNull {z : State} {ht : HeapType} {sx : Option Sx} {x : TypeIdx}
       {i : U32} :
-      Step_read Nm z [Ref.toAdmin (.null ht), .plain (.structGet sx x i)] [.trap]
+      Step_read Nm z .structGetNull [Ref.toAdmin (.null ht), .plain (.structGet sx x i)] [.trap]
   /-- `rule Step_read/struct.get-struct:
       z; (REF.STRUCT_ADDR a) (STRUCT.GET sx? x i)
       ~> $unpackfield_(zt*[i], sx?, $structinst(z)[a].FIELDS[i])
@@ -1430,7 +1470,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       z.structinst[a]? = some si →
       fts.toList[i.val]? = some ft → si.fields[i.val]? = some fv →
       Nm.unpackfield_ (fieldStorage ft) sx fv = some v →
-      Step_read Nm z
+      Step_read Nm z .structGetStruct
         [.addrref (.structAddr a), .plain (.structGet sx x i)] [v.toAdmin]
   /-- `rule Step_read/array.new_default:
       z; (CONST I32 n) (ARRAY.NEW_DEFAULT x) ~> val^n (ARRAY.NEW_FIXED x n)
@@ -1441,7 +1481,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       {ft : FieldType} {v : Val} :
       z.typeOf x = some dt → Expand dt (.array ft) →
       default_ (fieldStorage ft).unpack = some v →
-      Step_read Nm z [constI32 n, .plain (.arrayNewDefault x)]
+      Step_read Nm z .arrayNewDefault [constI32 n, .plain (.arrayNewDefault x)]
         (vals (List.replicate n.val v) ++ [.plain (.arrayNewFixed x n)])
   /-- `rule Step_read/array.new_elem-oob:
       z; (CONST I32 i) (CONST I32 n) (ARRAY.NEW_ELEM x y) ~> TRAP
@@ -1450,7 +1490,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   | arrayNewElemOob {z : State} {i n : U32} {x : TypeIdx} {y : ElemIdx}
       {ei : ElemInst} :
       z.elemOf y = some ei → i.val + n.val > ei.refs.length →
-      Step_read Nm z [constI32 i, constI32 n, .plain (.arrayNewElem x y)] [.trap]
+      Step_read Nm z .arrayNewElemOob [constI32 i, constI32 n, .plain (.arrayNewElem x y)] [.trap]
   /-- `rule Step_read/array.new_elem-alloc:
       z; (CONST I32 i) (CONST I32 n) (ARRAY.NEW_ELEM x y) ~> ref^n (ARRAY.NEW_FIXED x n)
       -- if ref^n = $elem(z, y).REFS[i : n]`. -/
@@ -1458,7 +1498,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   | arrayNewElemAlloc {z : State} {i n : U32} {x : TypeIdx} {y : ElemIdx}
       {ei : ElemInst} {rs : List Ref} :
       z.elemOf y = some ei → rs = slice ei.refs i.val n.val → rs.length = n.val →
-      Step_read Nm z [constI32 i, constI32 n, .plain (.arrayNewElem x y)]
+      Step_read Nm z .arrayNewElemAlloc [constI32 i, constI32 n, .plain (.arrayNewElem x y)]
         (vals (rs.map Val.ref) ++ [.plain (.arrayNewFixed x n)])
   /-- `rule Step_read/array.new_data-oob:
       z; (CONST I32 i) (CONST I32 n) (ARRAY.NEW_DATA x y) ~> TRAP
@@ -1470,7 +1510,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       z.typeOf x = some dt → Expand dt (.array ft) →
       zsize (fieldStorage ft) = some zs → z.dataOf y = some di →
       i.val + n.val * zs / 8 > di.bytes.length →
-      Step_read Nm z [constI32 i, constI32 n, .plain (.arrayNewData x y)] [.trap]
+      Step_read Nm z .arrayNewDataOob [constI32 i, constI32 n, .plain (.arrayNewData x y)] [.trap]
   /-- `rule Step_read/array.new_data-num:
       z; (CONST I32 i) (CONST I32 n) (ARRAY.NEW_DATA x y)
       ~> ($const($cunpack(zt), $cunpacknum_(zt, c)))^n (ARRAY.NEW_FIXED x n)
@@ -1488,14 +1528,14 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       (cs.map (fun c => Nm.zbytes_ (fieldStorage ft) c)).flatten =
         slice di.bytes i.val (n.val * zs / 8) →
       cs.mapM (Nm.cunpackConst (fieldStorage ft)) = some is →
-      Step_read Nm z [constI32 i, constI32 n, .plain (.arrayNewData x y)]
+      Step_read Nm z .arrayNewDataNum [constI32 i, constI32 n, .plain (.arrayNewData x y)]
         (plains is ++ [.plain (.arrayNewFixed x n)])
   /-- `rule Step_read/array.get-null:
       z; (REF.NULL ht) (CONST I32 i) (ARRAY.GET sx? x) ~> TRAP`. -/
   -- core-exec: Step_read/array.get-null
   | arrayGetNull {z : State} {ht : HeapType} {i : U32} {sx : Option Sx}
       {x : TypeIdx} :
-      Step_read Nm z
+      Step_read Nm z .arrayGetNull
         [Ref.toAdmin (.null ht), constI32 i, .plain (.arrayGet sx x)] [.trap]
   /-- `rule Step_read/array.get-oob:
       z; (REF.ARRAY_ADDR a) (CONST I32 i) (ARRAY.GET sx? x) ~> TRAP
@@ -1504,7 +1544,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   | arrayGetOob {z : State} {a : ArrayAddr} {i : U32} {sx : Option Sx}
       {x : TypeIdx} {ai : ArrayInst} :
       z.arrayinst[a]? = some ai → i.val ≥ ai.fields.length →
-      Step_read Nm z
+      Step_read Nm z .arrayGetOob
         [.addrref (.arrayAddr a), constI32 i, .plain (.arrayGet sx x)] [.trap]
   /-- `rule Step_read/array.get-array:
       z; (REF.ARRAY_ADDR a) (CONST I32 i) (ARRAY.GET sx? x)
@@ -1517,23 +1557,23 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       z.typeOf x = some dt → Expand dt (.array ft) →
       z.arrayinst[a]? = some ai → ai.fields[i.val]? = some fv →
       Nm.unpackfield_ (fieldStorage ft) sx fv = some v →
-      Step_read Nm z
+      Step_read Nm z .arrayGetArray
         [.addrref (.arrayAddr a), constI32 i, .plain (.arrayGet sx x)] [v.toAdmin]
   /-- `rule Step_read/array.len-null: z; (REF.NULL ht) ARRAY.LEN ~> TRAP`. -/
   -- core-exec: Step_read/array.len-null
   | arrayLenNull {z : State} {ht : HeapType} :
-      Step_read Nm z [Ref.toAdmin (.null ht), .plain .arrayLen] [.trap]
+      Step_read Nm z .arrayLenNull [Ref.toAdmin (.null ht), .plain .arrayLen] [.trap]
   /-- `rule Step_read/array.len-array:
       z; (REF.ARRAY_ADDR a) ARRAY.LEN ~> (CONST I32 $(|$arrayinst(z)[a].FIELDS|))`. -/
   -- core-exec: Step_read/array.len-array
   | arrayLenArray {z : State} {a : ArrayAddr} {ai : ArrayInst} {c : U32} :
       z.arrayinst[a]? = some ai → c.val = ai.fields.length →
-      Step_read Nm z [.addrref (.arrayAddr a), .plain .arrayLen] [constI32 c]
+      Step_read Nm z .arrayLenArray [.addrref (.arrayAddr a), .plain .arrayLen] [constI32 c]
   /-- `rule Step_read/array.fill-null:
       z; (REF.NULL ht) (CONST I32 i) val (CONST I32 n) (ARRAY.FILL x) ~> TRAP`. -/
   -- core-exec: Step_read/array.fill-null
   | arrayFillNull {z : State} {ht : HeapType} {i n : U32} {v : Val} {x : TypeIdx} :
-      Step_read Nm z
+      Step_read Nm z .arrayFillNull
         [Ref.toAdmin (.null ht), constI32 i, v.toAdmin, constI32 n,
          .plain (.arrayFill x)] [.trap]
   /-- `rule Step_read/array.fill-oob:
@@ -1543,7 +1583,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   | arrayFillOob {z : State} {a : ArrayAddr} {i n : U32} {v : Val} {x : TypeIdx}
       {ai : ArrayInst} :
       z.arrayinst[a]? = some ai → i.val + n.val > ai.fields.length →
-      Step_read Nm z
+      Step_read Nm z .arrayFillOob
         [.addrref (.arrayAddr a), constI32 i, v.toAdmin, constI32 n,
          .plain (.arrayFill x)] [.trap]
   /-- `rule Step_read/array.fill-zero:
@@ -1553,7 +1593,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   | arrayFillZero {z : State} {a : ArrayAddr} {i n : U32} {v : Val} {x : TypeIdx}
       {ai : ArrayInst} :
       z.arrayinst[a]? = some ai → ¬ (i.val + n.val > ai.fields.length) → n.val = 0 →
-      Step_read Nm z
+      Step_read Nm z .arrayFillZero
         [.addrref (.arrayAddr a), constI32 i, v.toAdmin, constI32 n,
          .plain (.arrayFill x)] []
   /-- `rule Step_read/array.fill-succ:
@@ -1566,7 +1606,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       {x : TypeIdx} {ai : ArrayInst} :
       z.arrayinst[a]? = some ai → ¬ (i.val + n.val > ai.fields.length) → n.val ≠ 0 →
       i'.val = i.val + 1 → n.val = n'.val + 1 →
-      Step_read Nm z
+      Step_read Nm z .arrayFillSucc
         [.addrref (.arrayAddr a), constI32 i, v.toAdmin, constI32 n,
          .plain (.arrayFill x)]
         [.addrref (.arrayAddr a), constI32 i, v.toAdmin, .plain (.arraySet x),
@@ -1578,7 +1618,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   -- core-exec: Step_read/array.copy-null1
   | arrayCopyNull1 {z : State} {ht₁ : HeapType} {i₁ i₂ n : U32} {r : Ref}
       {x₁ x₂ : TypeIdx} :
-      Step_read Nm z
+      Step_read Nm z .arrayCopyNull1
         [Ref.toAdmin (.null ht₁), constI32 i₁, r.toAdmin, constI32 i₂, constI32 n,
          .plain (.arrayCopy x₁ x₂)] [.trap]
   /-- `rule Step_read/array.copy-null2:
@@ -1587,7 +1627,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   -- core-exec: Step_read/array.copy-null2
   | arrayCopyNull2 {z : State} {ht₂ : HeapType} {i₁ i₂ n : U32} {r : Ref}
       {x₁ x₂ : TypeIdx} :
-      Step_read Nm z
+      Step_read Nm z .arrayCopyNull2
         [r.toAdmin, constI32 i₁, Ref.toAdmin (.null ht₂), constI32 i₂, constI32 n,
          .plain (.arrayCopy x₁ x₂)] [.trap]
   /-- `rule Step_read/array.copy-oob1:
@@ -1598,7 +1638,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   | arrayCopyOob1 {z : State} {a₁ a₂ : ArrayAddr} {i₁ i₂ n : U32}
       {x₁ x₂ : TypeIdx} {ai₁ : ArrayInst} :
       z.arrayinst[a₁]? = some ai₁ → i₁.val + n.val > ai₁.fields.length →
-      Step_read Nm z
+      Step_read Nm z .arrayCopyOob1
         [.addrref (.arrayAddr a₁), constI32 i₁, .addrref (.arrayAddr a₂),
          constI32 i₂, constI32 n, .plain (.arrayCopy x₁ x₂)] [.trap]
   /-- `rule Step_read/array.copy-oob2:
@@ -1609,7 +1649,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   | arrayCopyOob2 {z : State} {a₁ a₂ : ArrayAddr} {i₁ i₂ n : U32}
       {x₁ x₂ : TypeIdx} {ai₂ : ArrayInst} :
       z.arrayinst[a₂]? = some ai₂ → i₂.val + n.val > ai₂.fields.length →
-      Step_read Nm z
+      Step_read Nm z .arrayCopyOob2
         [.addrref (.arrayAddr a₁), constI32 i₁, .addrref (.arrayAddr a₂),
          constI32 i₂, constI32 n, .plain (.arrayCopy x₁ x₂)] [.trap]
   /-- `rule Step_read/array.copy-zero: ... ~> eps  -- otherwise  -- if n = 0`. -/
@@ -1619,7 +1659,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       z.arrayinst[a₁]? = some ai₁ → z.arrayinst[a₂]? = some ai₂ →
       ¬ (i₁.val + n.val > ai₁.fields.length) →
       ¬ (i₂.val + n.val > ai₂.fields.length) → n.val = 0 →
-      Step_read Nm z
+      Step_read Nm z .arrayCopyZero
         [.addrref (.arrayAddr a₁), constI32 i₁, .addrref (.arrayAddr a₂),
          constI32 i₂, constI32 n, .plain (.arrayCopy x₁ x₂)] []
   /-- `rule Step_read/array.copy-le: ... ~>
@@ -1639,7 +1679,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       z.typeOf x₂ = some dt₂ → Expand dt₂ (.array ft₂) →
       i₁.val ≤ i₂.val → sx_ (fieldStorage ft₂) = some sx →
       i₁'.val = i₁.val + 1 → i₂'.val = i₂.val + 1 → n.val = n'.val + 1 →
-      Step_read Nm z
+      Step_read Nm z .arrayCopyLe
         [.addrref (.arrayAddr a₁), constI32 i₁, .addrref (.arrayAddr a₂),
          constI32 i₂, constI32 n, .plain (.arrayCopy x₁ x₂)]
         [.addrref (.arrayAddr a₁), constI32 i₁, .addrref (.arrayAddr a₂),
@@ -1663,7 +1703,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       z.typeOf x₂ = some dt₂ → Expand dt₂ (.array ft₂) →
       sx_ (fieldStorage ft₂) = some sx →
       j₁.val + 1 = i₁.val + n.val → j₂.val + 1 = i₂.val + n.val → n.val = n'.val + 1 →
-      Step_read Nm z
+      Step_read Nm z .arrayCopyGt
         [.addrref (.arrayAddr a₁), constI32 i₁, .addrref (.arrayAddr a₂),
          constI32 i₂, constI32 n, .plain (.arrayCopy x₁ x₂)]
         [.addrref (.arrayAddr a₁), constI32 j₁, .addrref (.arrayAddr a₂),
@@ -1676,7 +1716,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   -- core-exec: Step_read/array.init_elem-null
   | arrayInitElemNull {z : State} {ht : HeapType} {i j n : U32} {x : TypeIdx}
       {y : ElemIdx} :
-      Step_read Nm z
+      Step_read Nm z .arrayInitElemNull
         [Ref.toAdmin (.null ht), constI32 i, constI32 j, constI32 n,
          .plain (.arrayInitElem x y)] [.trap]
   /-- `rule Step_read/array.init_elem-oob1: ... ~> TRAP
@@ -1685,7 +1725,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   | arrayInitElemOob1 {z : State} {a : ArrayAddr} {i j n : U32} {x : TypeIdx}
       {y : ElemIdx} {ai : ArrayInst} :
       z.arrayinst[a]? = some ai → i.val + n.val > ai.fields.length →
-      Step_read Nm z
+      Step_read Nm z .arrayInitElemOob1
         [.addrref (.arrayAddr a), constI32 i, constI32 j, constI32 n,
          .plain (.arrayInitElem x y)] [.trap]
   /-- `rule Step_read/array.init_elem-oob2: ... ~> TRAP
@@ -1694,7 +1734,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   | arrayInitElemOob2 {z : State} {a : ArrayAddr} {i j n : U32} {x : TypeIdx}
       {y : ElemIdx} {ei : ElemInst} :
       z.elemOf y = some ei → j.val + n.val > ei.refs.length →
-      Step_read Nm z
+      Step_read Nm z .arrayInitElemOob2
         [.addrref (.arrayAddr a), constI32 i, constI32 j, constI32 n,
          .plain (.arrayInitElem x y)] [.trap]
   /-- `rule Step_read/array.init_elem-zero: ... ~> eps  -- otherwise  -- if n = 0`. -/
@@ -1704,7 +1744,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       z.arrayinst[a]? = some ai → z.elemOf y = some ei →
       ¬ (i.val + n.val > ai.fields.length) → ¬ (j.val + n.val > ei.refs.length) →
       n.val = 0 →
-      Step_read Nm z
+      Step_read Nm z .arrayInitElemZero
         [.addrref (.arrayAddr a), constI32 i, constI32 j, constI32 n,
          .plain (.arrayInitElem x y)] []
   /-- `rule Step_read/array.init_elem-succ: ... ~>
@@ -1719,7 +1759,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       ¬ (i.val + n.val > ai.fields.length) → ¬ (j.val + n.val > ei.refs.length) →
       n.val ≠ 0 → ei.refs[j.val]? = some r →
       i'.val = i.val + 1 → j'.val = j.val + 1 → n.val = n'.val + 1 →
-      Step_read Nm z
+      Step_read Nm z .arrayInitElemSucc
         [.addrref (.arrayAddr a), constI32 i, constI32 j, constI32 n,
          .plain (.arrayInitElem x y)]
         [.addrref (.arrayAddr a), constI32 i, r.toAdmin, .plain (.arraySet x),
@@ -1731,7 +1771,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   -- core-exec: Step_read/array.init_data-null
   | arrayInitDataNull {z : State} {ht : HeapType} {i j n : U32} {x : TypeIdx}
       {y : DataIdx} :
-      Step_read Nm z
+      Step_read Nm z .arrayInitDataNull
         [Ref.toAdmin (.null ht), constI32 i, constI32 j, constI32 n,
          .plain (.arrayInitData x y)] [.trap]
   /-- `rule Step_read/array.init_data-oob1: ... ~> TRAP
@@ -1740,7 +1780,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
   | arrayInitDataOob1 {z : State} {a : ArrayAddr} {i j n : U32} {x : TypeIdx}
       {y : DataIdx} {ai : ArrayInst} :
       z.arrayinst[a]? = some ai → i.val + n.val > ai.fields.length →
-      Step_read Nm z
+      Step_read Nm z .arrayInitDataOob1
         [.addrref (.arrayAddr a), constI32 i, constI32 j, constI32 n,
          .plain (.arrayInitData x y)] [.trap]
   /-- `rule Step_read/array.init_data-oob2: ... ~> TRAP
@@ -1752,7 +1792,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       z.typeOf x = some dt → Expand dt (.array ft) →
       zsize (fieldStorage ft) = some zs → z.dataOf y = some di →
       j.val + n.val * zs / 8 > di.bytes.length →
-      Step_read Nm z
+      Step_read Nm z .arrayInitDataOob2
         [.addrref (.arrayAddr a), constI32 i, constI32 j, constI32 n,
          .plain (.arrayInitData x y)] [.trap]
   /-- `rule Step_read/array.init_data-zero: ... ~> eps  -- otherwise  -- if n = 0`. -/
@@ -1764,7 +1804,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       z.typeOf x = some dt → Expand dt (.array ft) →
       zsize (fieldStorage ft) = some zs → z.dataOf y = some di →
       ¬ (j.val + n.val * zs / 8 > di.bytes.length) → n.val = 0 →
-      Step_read Nm z
+      Step_read Nm z .arrayInitDataZero
         [.addrref (.arrayAddr a), constI32 i, constI32 j, constI32 n,
          .plain (.arrayInitData x y)] []
   /-- `rule Step_read/array.init_data-num: ... ~>
@@ -1785,7 +1825,7 @@ inductive Step_read (Nm : Numerics) : State → List AdminInstr → List AdminIn
       Nm.zbytes_ (fieldStorage ft) c = slice di.bytes j.val (zs / 8) →
       Nm.cunpackConst (fieldStorage ft) c = some ci →
       i'.val = i.val + 1 → j'.val = j.val + zs / 8 → n.val = n'.val + 1 →
-      Step_read Nm z
+      Step_read Nm z .arrayInitDataNum
         [.addrref (.arrayAddr a), constI32 i, constI32 j, constI32 n,
          .plain (.arrayInitData x y)]
         [.addrref (.arrayAddr a), constI32 i, .plain ci, .plain (.arraySet x),
@@ -1805,8 +1845,8 @@ inductive Step (Nm : Numerics) : State → List AdminInstr → State → List Ad
       Step_pure Nm is is' → Step Nm z is z is'
   /-- `rule Step/read: z; instr* ~> z; instr'*  -- Step_read: z; instr* ~> instr'*`. -/
   -- core-exec: Step/read
-  | read {z : State} {is is' : List AdminInstr} :
-      Step_read Nm z is is' → Step Nm z is z is'
+  | read {z : State} {rule : ReadRule} {is is' : List AdminInstr} :
+      Step_read Nm z rule is is' → Step Nm z is z is'
   /-- `rule Step/ctxt-instrs:
       z; val* instr* instr_1* ~> z'; val* instr'* instr_1*
       -- Step: z; instr* ~> z'; instr'*  -- if val* =/= eps \/ instr_1* =/= eps`. -/
@@ -2118,5 +2158,43 @@ inductive Eval_expr (Nm : Numerics) : State → Expr → State → List Val → 
   -- core-exec: Eval_expr
   | mk {z z' : State} {e : Expr} {vs : List Val} :
       Steps Nm z (exprAdmin e) z' (vals vs) → Eval_expr Nm z e z' vs
+
+/-! ## Explicit authority endpoints -/
+
+/-- The byte-identical pinned store-reading relation. -/
+abbrev Step_readPinned := @Step_read pinnedExecutionAuthority
+
+/-- AMD-011 store reading with an explicit numeric provider, for internal proofs. -/
+abbrev Step_readAmendedFor := @Step_read amendedExecutionAuthority
+
+/-- The sole public AMD-011 store-reading relation, bound to released numerics. -/
+abbrev Step_readA := Step_readAmendedFor releasedNumerics
+
+/-- The byte-identical pinned one-step relation. -/
+abbrev StepPinned := @Step pinnedExecutionAuthority
+
+/-- AMD-011 one-step execution with an explicit numeric provider, for internal proofs. -/
+abbrev StepAmendedFor := @Step amendedExecutionAuthority
+
+/-- Erasure target of the public event-labelled step relation. -/
+abbrev StepEraseA := StepAmendedFor releasedNumerics
+
+/-- The byte-identical pinned reflexive-transitive execution relation. -/
+abbrev StepsPinned := @Steps pinnedExecutionAuthority
+
+/-- AMD-011 reflexive-transitive execution with an explicit numeric provider. -/
+abbrev StepsAmendedFor := @Steps amendedExecutionAuthority
+
+/-- Erasure target of the public event-labelled run relation. -/
+abbrev StepsEraseA := StepsAmendedFor releasedNumerics
+
+/-- The byte-identical pinned expression-evaluation relation. -/
+abbrev Eval_exprPinned := @Eval_expr pinnedExecutionAuthority
+
+/-- AMD-011 expression evaluation with an explicit numeric provider. -/
+abbrev Eval_exprAmendedFor := @Eval_expr amendedExecutionAuthority
+
+/-- Erasure target of the public event-labelled expression evaluator. -/
+abbrev Eval_exprEraseA := Eval_exprAmendedFor releasedNumerics
 
 end WasmGemmGnaf.Wasm.Core.Exec

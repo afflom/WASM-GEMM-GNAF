@@ -217,8 +217,9 @@ def successorsOfInstr (c : Config) (i : Instr) (rest : List Instr) :
       | [] => []
   | _ => []
 
-/-- **SPEC section 7.1.**  Every permitted nondeterministic successor of a
-configuration. -/
+/-- Every permitted nondeterministic successor of a configuration in the
+legacy `Wasm.Subset` machine.  This is not the public amended-Core successor
+function required by SPEC section 7.4. -/
 def successors (c : Config) : List (Event × Config) :=
   if c.status = Status.running then
     match c.code with
@@ -228,8 +229,10 @@ def successors (c : Config) : List (Event × Config) :=
 
 /-! ## The relational reduction -/
 
-/-- The reduction relation of the released machine.  Every constructor is one
-Core rule, stated by equations on the fields of the configuration it reduces.
+/-- The reduction relation of the legacy `Wasm.Subset` machine.  Every
+constructor is one subset rule, stated by equations on the fields of the
+configuration it reduces.  It is retained as internal evidence and is not the
+public amended-Core release relation.
 `memoryGrowSucceed` and `memoryGrowRefuse` are simultaneously applicable
 whenever growth is possible: that is the profile's permitted nondeterminism. -/
 inductive Step : Config → Event → Config → Prop

@@ -2,10 +2,11 @@
   Universal lower bounds on the release objective, and an exact statement of what
   a lower bound cannot do.
 
-  SCOPE.  The bounds here quantify over EVERY competitor -- they are not
-  restricted to bilinear schemes as `Universal/BilinearLowerBound.lean` is.  They
-  are nonetheless NOT the obligation UOR-GNAF section 19.3 calls "a universal
-  lower bound attained", because they are not tight: see
+  SCOPE. The aggregation lemmas here are generic over a finite carrier and a
+  natural-valued function. They can be instantiated on a complete competitor
+  carrier once that public evaluator exists, but they do not themselves supply
+  such a carrier or a per-competitor cost floor. They are therefore NOT the
+  obligation UOR-GNAF section 19.3 calls "a universal lower bound attained": see
   `lower_bound_below_released_is_not_optimality` at the end of this file, which
   proves in Lean precisely why.
 
@@ -39,8 +40,8 @@ theorem foldl_add_ge_card_mul {α : Type} (f : α → Nat) (k : Nat) :
 /--
 **Full-domain aggregation lower bound.**
 
-If every raw invocation costs at least `k` on some charged coordinate, the
-full-domain sum of that coordinate is at least `k` times the size of the domain.
+If every element of a finite carrier contributes at least `k`, the full sum is
+at least `k` times the carrier size.
 
 This is the shape every universal lower bound in this repository must take:
 SPEC section 9.2 aggregates the dynamic vector by summing over the complete raw
@@ -96,9 +97,8 @@ Formally: from `L < S` it is false that every score at least `L` is also at leas
 "complete admission, attainment, and ... a universal lower bound attained" -- and
 exactly what is undischarged here.
 
-This theorem is why `LB-002` and the bounds above, though genuinely universal,
-do not close `GO-001`.  The repository states the gap rather than papering over
-it.
+This theorem is why a strict floor below a released score cannot close `GO-001`.
+The repository states the gap rather than papering over it.
 -/
 theorem lower_bound_below_released_is_not_optimality
     (lowerBound releasedScore : Nat) (hgap : lowerBound < releasedScore) :

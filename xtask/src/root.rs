@@ -117,5 +117,6 @@ fn render(modules: &BTreeMap<&str, Vec<String>>) -> String {
             out.push(String::new());
         }
     }
+    out.push("set_option autoImplicit false".to_string());
     format!("{}\n", out.join("\n").trim_end())
 }

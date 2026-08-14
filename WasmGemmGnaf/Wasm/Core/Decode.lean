@@ -65,6 +65,15 @@ def ByteArray.toBytes (ba : ByteArray) : Bytes :=
 def decode (bytes : ByteArray) : Except DecodeFault Module :=
   Decode.decModule (ByteArray.toBytes bytes)
 
+/-- The executable decoder for the exact AMD-007/008/010 authority revision. -/
+def decodeA (bytes : ByteArray) : Except DecodeFault Module :=
+  Decode.decModuleA (ByteArray.toBytes bytes)
+
+/-- The historical `decode` name is definitionally the explicit pinned decoder. -/
+theorem decode_eq_pinned (bytes : ByteArray) :
+    decode bytes = Decode.decModulePinned (ByteArray.toBytes bytes) :=
+  rfl
+
 /-- SOUNDNESS, against the declarative grammar and not against an encoder:
 whatever `decode` accepts is derivable in the pinned binary format, and the
 module it returns is the one the derivation produces. -/
@@ -85,6 +94,22 @@ exactly the same byte sequences and agree on the value. -/
 theorem decode_iff_Bmodule {bytes : ByteArray} {m : Module} :
     decode bytes = .ok m ↔ Bmodule (ByteArray.toBytes bytes) m :=
   ⟨decode_sound, decode_complete⟩
+
+/-- Soundness of `decodeA` against the exact amended grammar instantiation. -/
+theorem decode_soundA {bytes : ByteArray} {m : Module}
+    (h : decodeA bytes = .ok m) : BmoduleA (ByteArray.toBytes bytes) m :=
+  Decode.decModule_soundA _ m h
+
+/-- Completeness of `decodeA` against the exact amended grammar instantiation. -/
+theorem decode_completeA {bytes : ByteArray} {m : Module}
+    (h : BmoduleA (ByteArray.toBytes bytes) m) : decodeA bytes = .ok m :=
+  Decode.decModule_completeA _ m h
+
+/-- The amended executable decoder and amended grammar accept exactly the same
+byte sequences and agree on the decoded module. -/
+theorem decode_iff_BmoduleA {bytes : ByteArray} {m : Module} :
+    decodeA bytes = .ok m ↔ BmoduleA (ByteArray.toBytes bytes) m :=
+  ⟨decode_soundA, decode_completeA⟩
 
 /-! ## Kernel-checked derivations
 

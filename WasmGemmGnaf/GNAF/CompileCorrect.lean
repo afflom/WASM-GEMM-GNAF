@@ -1,23 +1,23 @@
 import WasmGemmGnaf.GNAF.Compile
 import WasmGemmGnaf.Wasm.Run
-import WasmGemmGnaf.Artifact.Emit
 
 set_option autoImplicit false
 set_option maxRecDepth 8000
 
 /-!
-# GNAF: what the compiler is proved to guarantee about execution (SPEC §11.4)
+# GNAF: execution facts for the legacy subset compiler
 
-This file collects the refinement facts that the *current* state of the Wasm
-layer actually supports, and states precisely which SPEC §11.4 obligations are
-therefore **not** discharged anywhere in this repository.
+This file collects the facts supported by the legacy `Wasm.Subset.Module`
+compiler and machine.  They are not facts about the public amended-Core module
+carrier or `Artifact.emit`, and they do not discharge SPEC §11.4's
+compiler refinement or exact-cost obligations.
 
 ## What is proved here
 
 `Wasm/Config.lean` fixes initialization: `Wasm.initialConfig` validates the
 module, allocates the store, locates the exported `gemm`, and builds the
 harness control frame.  Because `GNAF.compile_validates` proves the emitted
-module passes release validation, and because the emitted module's shape is
+module passes the legacy subset validator, and because the emitted module's shape is
 fixed, initialization of a compiled module can be computed exactly:
 
 * `GNAF.compile_initialConfig` — the initial configuration of a compiled module
@@ -27,12 +27,12 @@ fixed, initialization of a compiled module can be computed exactly:
 * `GNAF.compile_gemmBody` — the harness runs exactly the compiled body;
 * `GNAF.compile_runInvariant` — the initial configuration satisfies
   `Wasm.RunInvariant`, so `Wasm.returned_has_entry_store` applies to every run
-  of a compiled module: a normally returning run of a compiled artifact has
+  of a compiled module: a normally returning run of a compiled legacy module has
   crossed the harness boundary and carries exactly one entry store.
 
 The last section closes the anti-vacuity gap of SPEC §8.3: `GNAF.gemmWitness` is
 a concrete `1×1×1` modular-`u32` GEMM plan proved to lie inside
-`Plan.inReleasedSubset`, so `GNAF.code_no_unreachable` and the other in-subset
+`Plan.inReleasedSubset`, so `GNAF.code_no_unreachable` and the other legacy-subset
 results have an exhibited inhabitant rather than an unwitnessed domain.  The
 witness is not only in the subset: `GNAF.gemmWitness_writes_C` proves that
 running it deposits the modular product into the declared `C` region, so the
@@ -164,7 +164,7 @@ theorem compile_runInvariant (c : CheckedPlan s t) (raw : Wasm.RawInvocation) :
       (bodyCode (envOf s c.plan) s.scratch c.plan) raw) :=
   Wasm.runInvariant_of_beforeEntry rfl rfl
 
-/-- **Every normally returning run of a compiled artifact has crossed the
+/-- **Every normally returning run of a compiled legacy module has crossed the
 harness boundary**, so its observation carries exactly one entry store.  This is
 SPEC §7.4's presence invariant, instantiated at the compiled module. -/
 theorem compile_returned_has_entry_store (c : CheckedPlan s t)
@@ -176,7 +176,7 @@ theorem compile_returned_has_entry_store (c : CheckedPlan s t)
     final.entry?.isSome = true :=
   Wasm.returned_has_entry_store hred (compile_runInvariant c raw) hfin
 
-/-- A finite execution of a compiled artifact is a `*BeforeEntry` observation
+/-- A finite execution of a compiled legacy module is a `*BeforeEntry` observation
 exactly when it never crossed the harness boundary. -/
 theorem compile_beforeEntry_iff (c : CheckedPlan s t) (raw : Wasm.RawInvocation)
     {o : Wasm.ExecutionObservation}
@@ -185,7 +185,7 @@ theorem compile_beforeEntry_iff (c : CheckedPlan s t) (raw : Wasm.RawInvocation)
     o.BeforeEntry ↔ Wasm.Event.enterGemm ∉ o.trace :=
   Wasm.beforeEntry_iff_not_mem_enterGemm h rfl
 
-/-! ## The first reduction of a compiled artifact -/
+/-! ## The first reduction of a compiled legacy module -/
 
 /-- The store after the harness has installed the raw invocation bytes. -/
 def installedStore (e : CompileEnv) (raw : Wasm.RawInvocation) : Wasm.Store :=
@@ -202,7 +202,7 @@ theorem storeBytes_compiledStore (e : CompileEnv) (raw : Wasm.RawInvocation)
   rw [if_pos (by rw [hsize]; exact hfit)]
   rfl
 
-/-- **The compiled artifact reaches its compiled body in one reduction.**
+/-- **The compiled legacy module reaches its compiled body in one reduction.**
 Whenever the raw invocation fits in the declared memory, the harness step of
 SPEC §7.2 installs the raw bytes, crosses the entry boundary, and hands control
 to exactly the instruction sequence the compiler emitted. -/
@@ -235,28 +235,6 @@ theorem compile_body_reachable (c : CheckedPlan s t) (raw : Wasm.RawInvocation)
       cfg.code = bodyCode (envOf s c.plan) s.scratch c.plan :=
   ⟨_, Wasm.Reduces.single (compile_enters_gemm _ _ raw hfit), rfl⟩
 
-/-! ## The artifact round trip -/
-
-/-- The emitted artifact of a compiled plan decodes back to exactly the
-compiled module. -/
-theorem compile_decode_emit (c : CheckedPlan s t) :
-    Wasm.Subset.decode (Artifact.emit (compile c)) = .ok (compile c) :=
-  Artifact.decode_emit _
-
-/-- Compiled modules with distinct emitted bytes are distinct modules, and
-conversely: the artifact identifies the module it came from. -/
-theorem compile_emit_injective {c c' : CheckedPlan s t}
-    (h : Artifact.emit (compile c) = Artifact.emit (compile c')) :
-    compile c = compile c' :=
-  Artifact.emit_injective h
-
-/-- The emitted artifact of a compiled plan decodes to a module that passes
-release validation. -/
-theorem compile_emit_decodes_valid (c : CheckedPlan s t) :
-    ∃ m : Wasm.Module,
-      Wasm.Subset.decode (Artifact.emit (compile c)) = .ok m ∧ Wasm.validate m = true :=
-  ⟨compile c, compile_decode_emit c, compile_validates c⟩
-
 /-! ## The anti-vacuity GEMM witness (SPEC §8.3)
 
 `compile_validates` holds for every `CheckedPlan`, and `code_no_unreachable`
@@ -264,7 +242,7 @@ holds for every plan inside `Plan.inReleasedSubset`.  Both are universally
 quantified, so on their own neither exhibits a single plan that is *both*
 inside the subset and a GEMM.  This section supplies one.
 
-`gemmWitness` is a complete released-profile plan: it classifies the raw ABI
+`gemmWitness` is a complete legacy-target plan: it classifies the raw ABI
 header, dispatches on the declared layout class, runs the blocked traversal and
 the `i`/`j` loop nest, accumulates the `k` reduction under the modular-`u32`
 arithmetic contract of SPEC §8.2, sets the released status word, and constructs
@@ -325,9 +303,9 @@ What the witness *does* now publish is the whole result: `C` is declared as its
 four stored cells, so `buildOutput` emits the complete little-endian image of
 the product (`gemmWitness_eval_out`) rather than one byte of it. -/
 
-/-- The released modular arithmetic contract with a `u32` accumulator: SPEC
-§8.2 compatibility row 0 at stored kind `u32`, and the one contract shape the
-released `i32` profile evaluates exactly. -/
+/-- The modular arithmetic contract with a `u32` accumulator: SPEC §8.2
+compatibility row 0 at stored kind `u32`, and the contract shape the
+legacy `i32` target evaluates exactly. -/
 def gemmWitnessContract : ArithmeticContract :=
   { mode := .modular, stored := .u32, accumulator := .u32 }
 
@@ -431,7 +409,7 @@ def gemmWitnessKernel (order : TraversalOrder) : Plan :=
           (.seq (.reduce gemmWitnessContract 3 gemmWitnessA gemmWitnessB)
             (.storeReg gemmWitnessC (IndexMap.packed ⟨1, 1, 1⟩) 4 3)))))
 
-/-- **The anti-vacuity witness.**  A complete released GEMM plan: classify the
+/-- **Legacy-target anti-vacuity witness.**  A complete GEMM plan: classify the
 raw header, dispatch on the layout class, run the kernel, set the status word,
 build the output. -/
 def gemmWitness : Plan :=
@@ -446,13 +424,13 @@ def gemmWitness : Plan :=
       (.setStatus .resourceExhausted))
     (.buildOutput gemmWitnessC)
 
-/-! ### The witness is inside the released subset and type checks -/
+/-! ### The witness is inside the legacy target subset and type checks -/
 
-/-- **The released subset is inhabited by a GEMM plan.** -/
+/-- **The legacy target subset is inhabited by a GEMM plan.** -/
 theorem gemmWitness_inReleasedSubset : gemmWitness.inReleasedSubset = true := by
   decide
 
-/-- The witness uses no vector operation, so the released profile's lack of
+/-- The witness uses no vector operation, so the legacy target's lack of
 SIMD refuses nothing in it. -/
 theorem gemmWitness_usesVector : gemmWitness.usesVector = false := by decide
 
@@ -466,7 +444,7 @@ def gemmWitnessChecked : CheckedPlan gemmWitnessSig gemmWitnessOutSig :=
 
 /-! ### The witness compiles, validates, and refuses nothing -/
 
-/-- **The compiled witness passes release validation.** -/
+/-- **The compiled witness passes legacy subset validation.** -/
 theorem gemmWitness_compiles : Wasm.validate (compile gemmWitnessChecked) = true :=
   compile_validates gemmWitnessChecked
 
@@ -478,18 +456,10 @@ theorem gemmWitness_no_unreachable :
       = false :=
   bodyCode_no_unreachable _ _ _ gemmWitness_inReleasedSubset
 
-/-- The emitted artifact of the witness decodes back to a module that passes
-release validation. -/
-theorem gemmWitness_emit_decodes_valid :
-    Wasm.Subset.decode (Artifact.emit (compile gemmWitnessChecked)) =
-        .ok (compile gemmWitnessChecked) ∧
-      Wasm.validate (compile gemmWitnessChecked) = true :=
-  ⟨compile_decode_emit _, gemmWitness_compiles⟩
-
 /-! ### What the witness computes -/
 
 /-- The witness descriptor really classifies `valid`: the header cells are the
-released ABI literals and the declared kind/mode triple is compatible. -/
+the selected ABI literals and the declared kind/mode triple is compatible. -/
 theorem gemmWitnessMachine_classify (a b c : Nat) :
     (gemmWitnessMachine a b c).classify = Classification.valid := rfl
 
@@ -605,7 +575,7 @@ theorem gemmWitness_eval_conforms (a b c : Nat) :
   hasType_preservation gemmWitness_typed _ (gemmWitnessMachine_conforms a b c)
 
 /-- **`Plan.inReleasedSubset` is inhabited**, and its inhabitant really is a
-compiled, validating, `unreachable`-free artifact. -/
+compiled, legacy-validating, `unreachable`-free subset module. -/
 theorem exists_inReleasedSubset_checkedPlan :
     ∃ (s t : Sig) (c : CheckedPlan s t),
       c.plan.inReleasedSubset = true ∧
@@ -1305,10 +1275,10 @@ output is the 256-cell `C` region. -/
 def gemmKernelOutSig : Sig :=
   { gemmKernelSig with outputType := .bytes 256, statusSet := true }
 
-/-- **The input-dependent kernel is inside the released subset.** -/
+/-- **The input-dependent kernel is inside the legacy target subset.** -/
 theorem gemmKernel_inReleasedSubset : gemmKernel.inReleasedSubset = true := by decide
 
-/-- The kernel uses no vector operation, so the released profile's lack of SIMD
+/-- The kernel uses no vector operation, so the legacy target's lack of SIMD
 refuses nothing in it. -/
 theorem gemmKernel_usesVector : gemmKernel.usesVector = false := by decide
 
@@ -1319,7 +1289,7 @@ theorem gemmKernel_typed : HasType gemmKernelSig gemmKernel gemmKernelOutSig := 
 def gemmKernelChecked : CheckedPlan gemmKernelSig gemmKernelOutSig :=
   { plan := gemmKernel, typed := gemmKernel_typed }
 
-/-- **The compiled kernel passes release validation.** -/
+/-- **The compiled kernel passes legacy subset validation.** -/
 theorem gemmKernel_compiles : Wasm.validate (compile gemmKernelChecked) = true :=
   compile_validates gemmKernelChecked
 

@@ -32,7 +32,7 @@
   accepts.  A polymorphic frame with fewer tracked operands is more general
   than a concrete one, which is exactly the `Bot`-generating case of `pop_val`.
 -/
-import WasmGemmGnaf.Wasm.Core.Validation.Types
+import WasmGemmGnaf.Wasm.Core.SubtypeSound
 
 set_option autoImplicit false
 
@@ -82,6 +82,20 @@ theorem resulttype_ok_of_nvb {C : Context} {ts : List ValType}
     (h : ts.all ValType.nvb = true) : Resulttype_ok C ts :=
   .mk (fun t ht => valtype_ok_of_nvb (List.all_eq_true.mp h t ht))
 
+/-- Corrected-hierarchy form of `valtype_ok_of_nvb`. -/
+theorem valtype_okA_of_nvb {C : Context} {t : ValType} (h : ValType.nvb t = true) :
+    Valtype_okA C t := by
+  cases t with
+  | num _ => exact .num .mk
+  | vec _ => exact .vec .mk
+  | ref _ => simp [ValType.nvb] at h
+  | bot => exact .bot
+
+/-- Corrected-hierarchy form of `resulttype_ok_of_nvb`. -/
+theorem resulttype_okA_of_nvb {C : Context} {ts : List ValType}
+    (h : ts.all ValType.nvb = true) : Resulttype_okA C ts :=
+  .mk (fun t ht => valtype_okA_of_nvb (List.all_eq_true.mp h t ht))
+
 /-! ## `matches_val`
 
 The appendix assumes a subtyping check on value types.  On the decided fragment
@@ -121,6 +135,20 @@ theorem valtype_sub_refl {C : Context} (t : ValType) : Valtype_sub C t t := by
           | some n => cases n; exact .null .refl
   | bot => exact .bot
 
+/-- Reflexivity in the corrected value-type relation. -/
+theorem valtype_subA_refl {C : Context} (t : ValType) : Valtype_subA C t t := by
+  cases t with
+  | num _ => exact .num .mk
+  | vec _ => exact .vec .mk
+  | ref rt =>
+      refine .ref ?_
+      cases rt with
+      | ref nul ht =>
+          cases nul with
+          | none => exact .nonnull .refl
+          | some n => cases n; exact .null .refl
+  | bot => exact .bot
+
 /-- `subOf` is SOUND at every value type and in every context. -/
 theorem valtype_sub_of_subOf {C : Context} {t₁ t₂ : ValType} (h : subOf t₁ t₂ = true) :
     Valtype_sub C t₁ t₂ := by
@@ -129,10 +157,27 @@ theorem valtype_sub_of_subOf {C : Context} {t₁ t₂ : ValType} (h : subOf t₁
   · subst h; exact .bot
   · subst h; exact valtype_sub_refl t₁
 
+/-- `subOf` is sound for the corrected relation as well. -/
+theorem valtype_subA_of_subOf {C : Context} {t₁ t₂ : ValType}
+    (h : subOf t₁ t₂ = true) : Valtype_subA C t₁ t₂ := by
+  simp only [subOf, Bool.or_eq_true, beq_iff_eq] at h
+  rcases h with h | h
+  · subst h; exact .bot
+  · subst h; exact valtype_subA_refl t₁
+
 /-- `subOf` is COMPLETE whenever the SUPERtype is in the decided fragment: a
 `numtype`, a `vectype` or `BOT` can be a supertype only of itself or of `BOT`. -/
 theorem subOf_of_valtype_sub {C : Context} {t₁ t₂ : ValType}
     (h : Valtype_sub C t₁ t₂) (h₂ : ValType.nvb t₂ = true) : subOf t₁ t₂ = true := by
+  cases h with
+  | num hn => cases hn; simp
+  | vec hv => cases hv; simp
+  | ref _ => simp [ValType.nvb] at h₂
+  | bot => simp
+
+/-- Fragment completeness of `subOf` for the corrected relation. -/
+theorem subOf_of_valtype_subA {C : Context} {t₁ t₂ : ValType}
+    (h : Valtype_subA C t₁ t₂) (h₂ : ValType.nvb t₂ = true) : subOf t₁ t₂ = true := by
   cases h with
   | num hn => cases hn; simp
   | vec hv => cases hv; simp
@@ -146,6 +191,22 @@ def subs : List ValType → List ValType → Bool
   | [], [] => true
   | t₁ :: ts₁, t₂ :: ts₂ => subOf t₁ t₂ && subs ts₁ ts₂
   | _, _ => false
+
+/-- Full corrected `matches_val`, including reference subtyping. -/
+def subOfA (C : Context) (t₁ t₂ : ValType) : Bool :=
+  decValtypeSubN C C.subtypeFuel t₁ t₂
+
+/-- Full corrected pointwise result-type matching. -/
+def subsA (C : Context) (ts₁ ts₂ : List ValType) : Bool :=
+  decResulttypeSubN C C.subtypeFuel ts₁ ts₂
+
+theorem valtype_subA_of_subOfA {C : Context} {t₁ t₂ : ValType}
+    (h : subOfA C t₁ t₂ = true) : Valtype_subA C t₁ t₂ :=
+  decValtypeSubN_sound h
+
+theorem resulttype_subA_of_subsA {C : Context} {ts₁ ts₂ : List ValType}
+    (h : subsA C ts₁ ts₂ = true) : Resulttype_subA C ts₁ ts₂ :=
+  decResulttypeSubN_sound h
 
 @[simp] theorem subs_nil : subs [] [] = true := rfl
 
@@ -238,6 +299,11 @@ theorem resulttype_sub_of_subs {C : Context} {as bs : List ValType}
     (h : subs as bs = true) : Resulttype_sub C as bs :=
   .mk (subs_length h) (fun _ _ _ ha hb => valtype_sub_of_subOf (subs_getElem h ha hb))
 
+/-- Corrected-hierarchy form of `resulttype_sub_of_subs`. -/
+theorem resulttype_subA_of_subs {C : Context} {as bs : List ValType}
+    (h : subs as bs = true) : Resulttype_subA C as bs :=
+  .mk (subs_length h) (fun _ _ _ ha hb => valtype_subA_of_subOf (subs_getElem h ha hb))
+
 /-- ... and back, when the supertypes are in the decided fragment. -/
 theorem subs_of_resulttype_sub {C : Context} {as bs : List ValType}
     (h : Resulttype_sub C as bs) (hb : bs.all ValType.nvb = true) : subs as bs = true := by
@@ -245,6 +311,15 @@ theorem subs_of_resulttype_sub {C : Context} {as bs : List ValType}
   | mk hlen hall =>
       refine subs_of_getElem hlen (fun i a b ha hbb => ?_)
       refine subOf_of_valtype_sub (hall i a b ha hbb) ?_
+      exact List.all_eq_true.mp hb b (List.mem_of_getElem? hbb)
+
+/-- Fragment completeness of `subs` for the corrected relation. -/
+theorem subs_of_resulttype_subA {C : Context} {as bs : List ValType}
+    (h : Resulttype_subA C as bs) (hb : bs.all ValType.nvb = true) : subs as bs = true := by
+  cases h with
+  | mk hlen hall =>
+      refine subs_of_getElem hlen (fun i a b ha hbb => ?_)
+      refine subOf_of_valtype_subA (hall i a b ha hbb) ?_
       exact List.all_eq_true.mp hb b (List.mem_of_getElem? hbb)
 
 /-! ## The operand stack
@@ -290,6 +365,19 @@ def pops (st : St) : List ValType → Option St
   | [] => some st
   | t :: ts => match st.pops ts with
       | some st' => st'.popE t
+      | none => none
+
+/-- Full `pop_val(expect)` using corrected reference subtyping. -/
+def popEA (C : Context) (st : St) (t : ValType) : Option St :=
+  match st.vals with
+  | a :: rest => if subOfA C a t then some ⟨st.poly, rest⟩ else none
+  | [] => if st.poly then some st else none
+
+/-- Full `pop_vals`, using `popEA` for every expected type. -/
+def popsA (C : Context) (st : St) : List ValType → Option St
+  | [] => some st
+  | t :: ts => match popsA C st ts with
+      | some st' => popEA C st' t
       | none => none
 
 /-- `unreachable()`: purge the frame's operands and set its flag. -/
@@ -776,6 +864,324 @@ theorem subs_eq_of_nv : ∀ {as bs : List ValType}, subs as bs = true →
         · rw [h1] at hn; exact absurd hn.1 (by simp [ValType.nv])
         · exact h1
       rw [this, subs_eq_of_nv h.2 hn.2]
+
+/-! ### `pop_val()` with no expectation, repeated
+
+`Instr_ok/br_table` leaves the operand type `t*` FREE and only requires it to be
+below every label's type, so the algorithm cannot pop against a fixed
+expectation: `appendix/algorithm.rst` writes the `br_table` case as
+`push_vals(pop_vals(label_types(ctrls[n])))`, i.e. it reads the operands the
+frame actually supplies and compares them afterwards.  `popN` is that read: the
+appendix's untyped `pop_val()` iterated `n` times, in `pop_vals` order.
+
+It is PRINCIPAL, and that is the whole reason a single pass decides `br_table`:
+`popN_pops` says the frame can pop what `popN` returns, and `popN_principal`
+says every sequence the frame can pop is above it, so checking `popN`'s answer
+against the labels decides the existential the rule quantifies over. -/
+
+/-- `pop_val()` repeated `n` times: the operand types the frame supplies at its
+top, deepest first, `BOT` where a polymorphic frame has nothing left. -/
+def popN (st : St) : Nat → Option (List ValType × St)
+  | 0 => some ([], st)
+  | n + 1 =>
+      match st.popN n with
+      | some (ts, st') =>
+          match st'.pop with
+          | some (t, st'') => some (t :: ts, st'')
+          | none => none
+      | none => none
+
+/-- `pop_val()` against the type it just returned succeeds. -/
+theorem popE_of_pop {st st' : St} {t : ValType} (h : st.pop = some (t, st')) :
+    st.popE t = some st' := by
+  unfold pop at h
+  cases hv : st.vals with
+  | nil =>
+      rw [hv] at h
+      cases hb : st.poly with
+      | false => rw [hb] at h; exact absurd h (by simp)
+      | true =>
+          rw [hb] at h
+          simp only [Option.some.injEq, Prod.mk.injEq, if_pos] at h
+          rw [popE_nil hv, hb, ← h.2]
+          simp
+  | cons a rest =>
+      rw [hv] at h
+      simp only [Option.some.injEq, Prod.mk.injEq] at h
+      rw [popE_cons hv, ← h.1, if_pos (subOf_refl a), ← h.2]
+
+theorem popN_zero (st : St) : st.popN 0 = some ([], st) := rfl
+
+theorem popN_succ (st : St) (n : Nat) :
+    st.popN (n + 1) =
+      (match st.popN n with
+       | some (ts, st') =>
+           (match st'.pop with
+            | some (t, st'') => some (t :: ts, st'')
+            | none => none)
+       | none => none) := rfl
+
+theorem popN_length : ∀ {n : Nat} {st : St} {ts : List ValType} {st' : St},
+    st.popN n = some (ts, st') → ts.length = n
+  | 0, st, _, _, h => by
+      rw [popN_zero] at h
+      simp only [Option.some.injEq, Prod.mk.injEq] at h
+      rw [← h.1]; rfl
+  | n + 1, st, _, _, h => by
+      rw [popN_succ] at h
+      cases hp : st.popN n with
+      | none => simp only [hp] at h; exact absurd h (by simp)
+      | some p =>
+          obtain ⟨us, s⟩ := p
+          simp only [hp] at h
+          cases hq : s.pop with
+          | none => simp only [hq] at h; exact absurd h (by simp)
+          | some q =>
+              obtain ⟨u, s'⟩ := q
+              simp only [hq, Option.some.injEq, Prod.mk.injEq] at h
+              rw [← h.1]
+              simp [popN_length hp]
+
+theorem popN_pops : ∀ {n : Nat} {st : St} {ts : List ValType} {st' : St},
+    st.popN n = some (ts, st') → st.pops ts = some st'
+  | 0, st, _, _, h => by
+      rw [popN_zero] at h
+      simp only [Option.some.injEq, Prod.mk.injEq] at h
+      rw [← h.1, ← h.2]; rfl
+  | n + 1, st, _, _, h => by
+      rw [popN_succ] at h
+      cases hp : st.popN n with
+      | none => simp only [hp] at h; exact absurd h (by simp)
+      | some p =>
+          obtain ⟨us, s⟩ := p
+          simp only [hp] at h
+          cases hq : s.pop with
+          | none => simp only [hq] at h; exact absurd h (by simp)
+          | some q =>
+              obtain ⟨u, s'⟩ := q
+              simp only [hq, Option.some.injEq, Prod.mk.injEq] at h
+              rw [← h.1, pops_cons, popN_pops hp, ← h.2]
+              exact popE_of_pop hq
+
+theorem popN_nvb : ∀ {n : Nat} {st : St} {ts : List ValType} {st' : St},
+    st.popN n = some (ts, st') → st.vals.all ValType.nvb = true →
+    ts.all ValType.nvb = true ∧ st'.vals.all ValType.nvb = true
+  | 0, st, _, _, h, hst => by
+      rw [popN_zero] at h
+      simp only [Option.some.injEq, Prod.mk.injEq] at h
+      rw [← h.1, ← h.2]; exact ⟨rfl, hst⟩
+  | n + 1, st, _, _, h, hst => by
+      rw [popN_succ] at h
+      cases hp : st.popN n with
+      | none => simp only [hp] at h; exact absurd h (by simp)
+      | some p =>
+          obtain ⟨us, s⟩ := p
+          simp only [hp] at h
+          cases hq : s.pop with
+          | none => simp only [hq] at h; exact absurd h (by simp)
+          | some q =>
+              obtain ⟨u, s'⟩ := q
+              simp only [hq, Option.some.injEq, Prod.mk.injEq] at h
+              obtain ⟨hus, hs⟩ := popN_nvb hp hst
+              obtain ⟨hu, hs'⟩ := pop_nvb hq hs
+              rw [← h.1, ← h.2]
+              exact ⟨by simp [hu, hus], hs'⟩
+
+/-- `pop_vals` consumes exactly `|ts|` operands, whatever the expectations
+were: the frame it leaves is determined by the LENGTH of its argument.  This is
+what makes `popN`'s answer comparable with any other successful pop. -/
+theorem pops_vals : ∀ {ts : List ValType} {st st' : St},
+    st.pops ts = some st' → st'.vals = st.vals.drop ts.length := by
+  intro ts
+  induction ts with
+  | nil => intro st st' h; cases h; simp
+  | cons t ts ih =>
+      intro st st' h
+      rw [pops_cons] at h
+      cases hp : st.pops ts with
+      | none => simp only [hp] at h; exact absurd h (by simp)
+      | some s =>
+          simp only [hp] at h
+          have hs : s.vals = st.vals.drop ts.length := ih hp
+          have hd : st.vals.drop (t :: ts).length = (st.vals.drop ts.length).drop 1 := by
+            rw [List.drop_drop]; rfl
+          cases hv : s.vals with
+          | nil =>
+              rw [popE_nil hv] at h
+              cases hb : s.poly with
+              | false => rw [hb] at h; exact absurd h (by simp)
+              | true =>
+                  rw [hb] at h
+                  simp only [if_true, Option.some.injEq] at h
+                  rw [← h, hv, hd, ← hs, hv]
+                  rfl
+          | cons a rest =>
+              rw [popE_cons hv] at h
+              by_cases hsub : subOf a t
+              · rw [if_pos hsub] at h
+                cases h
+                rw [hd, ← hs, hv]
+                rfl
+              · rw [if_neg hsub] at h; exact absurd h (by simp)
+
+theorem popN_vals {n : Nat} {st st' : St} {ts : List ValType}
+    (h : st.popN n = some (ts, st')) : st'.vals = st.vals.drop n := by
+  rw [pops_vals (popN_pops h), popN_length h]
+
+theorem popN_poly {n : Nat} {st st' : St} {ts : List ValType}
+    (h : st.popN n = some (ts, st')) : st'.poly = st.poly :=
+  pops_poly (popN_pops h)
+
+/-- Two frames with the same flag and the same operands are the same frame. -/
+theorem eq_of {st₁ st₂ : St} (hp : st₁.poly = st₂.poly) (hv : st₁.vals = st₂.vals) :
+    st₁ = st₂ := by
+  cases st₁; cases st₂; simp_all
+
+/-! ## Full corrected-reference stack facts -/
+
+@[simp] theorem subOfA_refl (C : Context) (t : ValType) :
+    subOfA C t t = true := decValtypeSub_refl C t
+
+def SatA (C : Context) (st : St) (ts : List ValType) : Prop :=
+  ∃ st', popsA C st ts = some st' ∧ st'.vals = []
+
+theorem popsA_append (C : Context) (st : St) (ts₁ ts₂ : List ValType) :
+    popsA C st (ts₁ ++ ts₂) =
+      match popsA C st ts₂ with
+      | some st' => popsA C st' ts₁
+      | none => none := by
+  induction ts₁ generalizing st with
+  | nil =>
+      cases h : popsA C st ts₂ <;> simp [h, popsA]
+  | cons t ts₁ ih =>
+      show (match popsA C st (ts₁ ++ ts₂) with
+            | some st' => popEA C st' t
+            | none => none) = _
+      rw [ih]
+      cases popsA C st ts₂ <;> rfl
+
+theorem pushs_popsA (C : Context) (st : St) : ∀ ts : List ValType,
+    popsA C (st.pushs ts) ts = some st := by
+  intro ts
+  induction ts generalizing st with
+  | nil => rfl
+  | cons t ts ih =>
+      show (match popsA C ((st.push t).pushs ts) ts with
+            | some st' => popEA C st' t
+            | none => none) = some st
+      rw [ih (st.push t)]
+      simp [popEA, push, subOfA_refl]
+
+theorem popsA_unreach (C : Context) : ∀ ts : List ValType,
+    popsA C (St.mk true []) ts = some (St.mk true [])
+  | [] => rfl
+  | t :: ts => by
+      rw [popsA, popsA_unreach C ts]
+      rfl
+
+theorem satA_unreach (C : Context) (ts : List ValType) :
+    SatA C (St.mk true []) ts := ⟨_, popsA_unreach C ts, rfl⟩
+
+theorem satA_own (C : Context) (st : St) : SatA C st st.vals.reverse := by
+  refine ⟨St.mk st.poly [], ?_, rfl⟩
+  simpa [pushs_eq] using pushs_popsA C (St.mk st.poly []) st.vals.reverse
+
+theorem satA_append {C : Context} {st st₀ : St} {ts rs : List ValType}
+    (h : popsA C st ts = some st₀) (hsat : SatA C st₀ rs) :
+    SatA C st (rs ++ ts) := by
+  obtain ⟨st', hp, hv⟩ := hsat
+  exact ⟨st', by rw [popsA_append, h]; exact hp, hv⟩
+
+theorem push_satA {C : Context} {st : St} {t : ValType} {rs : List ValType}
+    (h : SatA C (st.push t) rs) :
+    ∃ rs' u, rs = rs' ++ [u] ∧ subOfA C t u = true ∧ SatA C st rs' := by
+  rcases list_snoc rs with rfl | ⟨rs', u, rfl⟩
+  · obtain ⟨st', hp, hv⟩ := h
+    simp only [popsA] at hp
+    cases hp
+    exact absurd hv (by simp [push])
+  · obtain ⟨st', hp, hv⟩ := h
+    rw [popsA_append] at hp
+    by_cases hb : subOfA C t u = true
+    · have hpop : popsA C (st.push t) [u] = some st := by
+        simp [popsA, popEA, push, hb]
+      rw [hpop] at hp
+      exact ⟨rs', u, rfl, hb, ⟨st', hp, hv⟩⟩
+    · have hpop : popsA C (st.push t) [u] = none := by
+        simp [popsA, popEA, push, hb]
+      rw [hpop] at hp
+      contradiction
+
+theorem pops_split_satA (C : Context) : ∀ (ts : List ValType) {st : St}
+    {ts' : List ValType}, SatA C (st.pushs ts) ts' →
+      ∃ rs cs, ts' = rs ++ cs ∧ subsA C ts cs = true ∧ SatA C st rs
+  | [], st, ts', h => ⟨ts', [], by simp, rfl, h⟩
+  | t :: ts, st, ts', h => by
+      obtain ⟨rs, cs, he, hs, hsat⟩ := pops_split_satA C ts (st := st.push t) h
+      obtain ⟨rs', u, he', hu, hsat'⟩ := push_satA hsat
+      refine ⟨rs', u :: cs, ?_, ?_, hsat'⟩
+      · rw [he, he', List.append_assoc]
+        rfl
+      · simp only [subsA, decResulttypeSubN, decSeq₂, Bool.and_eq_true]
+        exact ⟨hu, hs⟩
+
+theorem satA_empty_false {C : Context} {rs : List ValType}
+    (h : SatA C (St.mk false []) rs) : rs = [] := by
+  rcases list_snoc rs with rfl | ⟨rs', u, rfl⟩
+  · rfl
+  · obtain ⟨st', hp, _⟩ := h
+    rw [popsA_append] at hp
+    have : popsA C (St.mk false []) [u] = none := by rfl
+    rw [this] at hp
+    contradiction
+
+theorem popEA_of_pop {C : Context} {st st' : St} {t : ValType}
+    (h : st.pop = some (t, st')) : popEA C st t = some st' := by
+  cases st with
+  | mk poly vals =>
+    cases vals with
+    | nil =>
+        cases poly with
+        | false => simp [pop] at h
+        | true =>
+            simp [pop] at h
+            obtain ⟨rfl, rfl⟩ := h
+            rfl
+    | cons a rest =>
+        simp [pop] at h
+        obtain ⟨rfl, rfl⟩ := h
+        simp [popEA, subOfA_refl]
+
+theorem popN_popsA {C : Context} : ∀ {n : Nat} {st : St} {ts : List ValType}
+    {st' : St}, st.popN n = some (ts, st') → popsA C st ts = some st'
+  | 0, st, _, _, h => by
+      rw [popN_zero] at h
+      simp only [Option.some.injEq, Prod.mk.injEq] at h
+      rw [← h.1, ← h.2]
+      rfl
+  | n + 1, st, _, _, h => by
+      rw [popN_succ] at h
+      cases hp : st.popN n with
+      | none => simp only [hp] at h; contradiction
+      | some p =>
+          obtain ⟨us, s⟩ := p
+          simp only [hp] at h
+          cases hq : s.pop with
+          | none => simp only [hq] at h; contradiction
+          | some q =>
+              obtain ⟨u, s'⟩ := q
+              simp only [hq, Option.some.injEq, Prod.mk.injEq] at h
+              rw [← h.1, popsA, popN_popsA hp, ← h.2]
+              exact popEA_of_pop hq
+
+theorem finishA_iff_satA {C : Context} {st : St} {ts : List ValType} :
+    (match popsA C st ts with
+     | some st' => st'.vals.isEmpty
+     | none => false) = true ↔ SatA C st ts := by
+  unfold SatA
+  cases hp : popsA C st ts with
+  | none => simp
+  | some st' => simp [List.isEmpty_iff]
 
 end St
 end Validate

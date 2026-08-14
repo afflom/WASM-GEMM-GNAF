@@ -10,8 +10,10 @@
 
   at the pinned commit, in source order, grouped by the source's own fragment
   headings.  256 of the 543 opcode productions of the pinned binary format are
-  in this file: the release profile enables SIMD and relaxed SIMD, so leaving
-  them out is exactly the narrowing the external audit rejected.
+  in this file: the complete Core binary grammar recognizes SIMD and relaxed
+  SIMD, while the release-profile validator rejects relaxed SIMD under SPEC
+  §7.2.  Omitting those productions from the binary grammar would therefore
+  still be an unsound narrowing of the decoded Core format.
 
   None of these alternatives recurs into `Binstr`, so they are ordinary
   non-recursive relations; `BinaryGrammar/Expressions.lean` folds them into the

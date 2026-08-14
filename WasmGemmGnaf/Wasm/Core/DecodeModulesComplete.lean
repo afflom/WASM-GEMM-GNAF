@@ -486,15 +486,15 @@ One completeness theorem per `grammar B<section-item>` of
 `5.4-binary.modules.spectec`. -/
 
 /-- `Bexpr` as a `CompleteD`. -/
-theorem decExpr_CompleteD : CompleteD Bexpr decExpr :=
+theorem decExpr_CompleteD [authority : BinaryAuthority] : CompleteD Bexpr decExpr :=
   fun d b e r hd h => decExpr_completeD d b e r hd h
 
-theorem decType_complete : Complete Btype decType := by
+theorem decType_complete [authority : BinaryAuthority] : Complete Btype decType := by
   intro b t r h
   cases h with
   | mk => rename_i qt hq; simp only [decType, decRectype_complete _ qt r hq]
 
-theorem decImport_complete : Complete Bimport decImport := by
+theorem decImport_complete [authority : BinaryAuthority] : Complete Bimport decImport := by
   intro b im r h
   cases h with
   | mk b₁ b₂ b₃ nm₁ nm₂ xt h₁ h₂ h₃ =>
@@ -537,7 +537,7 @@ theorem decElemkind_complete : Complete Belemkind decElemkind := by
       show decElemkind (tb 0x00 :: r) = _
       simp only [decElemkind, expectByte_eq 0x00 (by decide) r]
 
-theorem decLocals_complete : Complete Blocals decLocals := by
+theorem decLocals_complete [authority : BinaryAuthority] : Complete Blocals decLocals := by
   intro b ls r h
   cases h with
   | mk bn bt n t hn ht =>
@@ -547,21 +547,23 @@ theorem decLocals_complete : Complete Blocals decLocals := by
 
 /-- Every `Breftype` derivation begins with a byte other than `0x40`, which is
 what separates the shorthand table form from the `0x40 0x00` form. -/
-theorem Breftype_head {bs : Bytes} {rt : RefType} (h : Breftype bs rt) :
+theorem Breftype_head [authority : BinaryAuthority]
+    {bs : Bytes} {rt : RefType} (h : Breftype bs rt) :
     ∃ b u, bs = b :: u ∧ ¬ (b.val = 0x40) := by
   obtain ⟨b, u, hb, hne, _⟩ := Bvaltype_head (Bvaltype.ref bs rt h)
   exact ⟨b, u, hb, hne⟩
 
 /-- Every `Btabletype` derivation begins with a byte other than `0x40`, so the
 shorthand table form and the `0x40 0x00` form are separated by the first byte. -/
-theorem Btabletype_head {bs : Bytes} {tt : TableType} (h : Btabletype bs tt) :
+theorem Btabletype_head [authority : BinaryAuthority]
+    {bs : Bytes} {tt : TableType} (h : Btabletype bs tt) :
     ∃ c u, bs = c :: u ∧ ¬ (c.val = 0x40) := by
   cases h with
   | mk br bl rt at' lim hr hl =>
       obtain ⟨c, u, hc, hcne⟩ := Breftype_head hr
       exact ⟨c, u ++ bl, by rw [hc]; simp, hcne⟩
 
-theorem decTable_completeD : CompleteD Btable decTable := by
+theorem decTable_completeD [authority : BinaryAuthority] : CompleteD Btable decTable := by
   intro d b tab r hd h
   cases h with
   | shorthand =>
@@ -586,7 +588,7 @@ theorem decTable_completeD : CompleteD Btable decTable := by
         decTabletype_complete bt tt (be ++ r) htt,
         decExpr_completeD d be e r hlt.2 he]
 
-theorem decGlobal_completeD : CompleteD Bglobal decGlobal := by
+theorem decGlobal_completeD [authority : BinaryAuthority] : CompleteD Bglobal decGlobal := by
   intro d b g r hd h
   cases h with
   | mk bg be gt e hg he =>
@@ -596,7 +598,7 @@ theorem decGlobal_completeD : CompleteD Bglobal decGlobal := by
       simp only [decGlobal, decGlobaltype_complete bg gt (be ++ r) hg,
         decExpr_completeD d be e r hlt he]
 
-theorem decFunc_completeD : CompleteD Bfunc decFunc := by
+theorem decFunc_completeD [authority : BinaryAuthority] : CompleteD Bfunc decFunc := by
   intro d b c r hd h
   cases h with
   | mk bl be locss e hlocs he hlen =>
@@ -609,7 +611,7 @@ theorem decFunc_completeD : CompleteD Bfunc decFunc := by
           (be ++ r) hlt.1 hlocs,
         if_pos hlen, decExpr_completeD d be e r hlt.2 he]
 
-theorem decCode_completeD : CompleteD Bcode decCode := by
+theorem decCode_completeD [authority : BinaryAuthority] : CompleteD Bcode decCode := by
   intro d b c r hd h
   cases h with
   | mk =>
@@ -630,7 +632,7 @@ theorem decCode_completeD : CompleteD Bcode decCode := by
 The eight `Belem` tags and the three `Bdata` tags are `Bu32`s, so a non-minimal
 encoding of the tag is accepted here exactly as it is for an opcode selector. -/
 
-theorem decElem_completeD : CompleteD Belem decElem := by
+theorem decElem_completeD [authority : BinaryAuthority] : CompleteD Belem decElem := by
   intro d b el r hd h
   cases h with
   | activeFuncrefZero bt be by' e ys x htag hexp hlist hx0 =>
@@ -701,7 +703,7 @@ theorem decElem_completeD : CompleteD Belem decElem := by
         decReftype_complete br rt (bl ++ r) href,
         decList_completeD decExpr_CompleteD d bl es r hl hlist]
 
-theorem decData_completeD : CompleteD Bdata decData := by
+theorem decData_completeD [authority : BinaryAuthority] : CompleteD Bdata decData := by
   intro d b dt r hd h
   cases h with
   | activeZero bt be bb e bl x htag hexp hlist hx0 =>
@@ -811,7 +813,8 @@ theorem finishModule_complete
 
 /-- **COMPLETENESS OF THE MODULE DECODER.**  Every derivation of the pinned
 `Bmodule` is decoded, to the module the derivation produces. -/
-theorem decModule_complete (bs : Bytes) (m : Module) (h : Bmodule bs m) :
+theorem decModule_complete [authority : BinaryAuthority]
+    (bs : Bytes) (m : Module) (h : Bmodule bs m) :
     decModule bs = .ok m := by
   cases h with
   | mk bmag bver c₀ c₁ c₂ c₃ c₄ c₅ c₆ c₇ c₈ c₉ c₁₀ c₁₁ c₁₂ c₁₃ u₀ u₁ u₂ u₃ u₄ u₅ u₆ u₇ u₈ u₉ u₁₀ u₁₁ u₁₂ u₁₃ bty bim bfu bta bme btg bgl bex bst bel bdc bco bda types imports typeidxs tables mems tags globals exports start elems n codes datas funcs hmag hver hu₀ hty hu₁ him hu₂ hfu hu₃ hta hu₄ hme hu₅ htg hu₆ hgl hu₇ hex hu₈ hst hu₉ hel hu₁₀ hdc hu₁₁ hco hu₁₂ hda hu₁₃ hcnt hdatai hlenc hzip =>
@@ -1023,5 +1026,10 @@ theorem decModule_complete (bs : Bytes) (m : Module) (h : Bmodule bs m) :
       simp only [hX14, strip, List.isEmpty_nil, if_true]
       exact finishModule_complete types imports typeidxs tables mems tags globals exports
         start elems n codes datas hcnt hdatai hlenc
+
+/-- Completeness of the amended decoder against the exact amended grammar. -/
+theorem decModule_completeA (bs : Bytes) (m : Module) (h : BmoduleA bs m) :
+    decModuleA bs = .ok m :=
+  @decModule_complete amendedBinaryAuthority bs m h
 
 end WasmGemmGnaf.Wasm.Core.Decode

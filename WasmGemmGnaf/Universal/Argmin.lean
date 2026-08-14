@@ -6,11 +6,11 @@
 
   WHAT THIS FILE DOES.
 
-  It proves that `GlobalOptimal` is *attainable*: if the admissible set is
-  nonempty — i.e. if there exists even one byte sequence that is profile valid,
-  semantically correct, and within resources, and that the decider evaluates —
-  then some byte sequence satisfies `GlobalOptimal` outright.  The construction
-  is entirely classical; nothing is computed.
+  It proves a generic finite-argmin existence theorem for the current legacy
+  subset evaluation carrier: if that admissible set is nonempty and its decider
+  answers admissible bytes, then some byte sequence satisfies the current
+  `GlobalOptimal`. The construction is entirely classical; nothing is computed.
+  This is not the public amended-Core release predicate.
 
   The chain is:
 
@@ -45,8 +45,9 @@
   WHAT THIS FILE DOES NOT DO.
 
   It does NOT prove `Artifact.released_wasm_gemm_gnaf_global_optimal`, and it
-  does not bring that theorem any closer than the two remaining obligations it
-  isolates:
+  does not reduce the release theorem to only two obligations. It isolates two
+  additional obligations that would remain even after the public carrier,
+  evaluator, and universal lower-bound/coverage work were complete:
 
     (a) NONEMPTINESS — exhibiting one concrete byte sequence together with
         proofs of `ProfileValid`, `SemanticCorrect` and `SemanticWithinResources`
@@ -57,8 +58,10 @@
         non-constructive: `exists_globalOptimal_of_nonempty` produces an
         existential, not a computable choice, so it names no literal.
 
-  The value of the file is the reduction: the optimality half of the release
-  theorem is discharged, and what remains is an exhibition problem.
+  Public amended-Core evaluation soundness/completeness, an admissible released
+  candidate, universal coverage or an attained lower bound, and exact byte
+  identification all remain open. The value of this file is only the generic
+  finite-argmin construction under its explicit legacy-carrier hypotheses.
 
   ONE HYPOTHESIS IS ADDED, AND IT IS NOT DERIVABLE.  `GlobalOptimal` requires
   that the decider's answer on an admissible competitor *is* that competitor's
@@ -197,7 +200,7 @@ variable {P : Wasm.Profile}
 `initialEq` (costed initialization is a function), `initial` by
 `initialConfigEq`, `observations` by `treeComplete` (the explorer is a
 function), and `resourceVector` by `resourceExact`. -/
-theorem inputEvaluation_subsingleton {S : Setting P} {module : Wasm.Module}
+theorem inputEvaluation_subsingleton {S : Setting P} {module : Wasm.Subset.Module}
     {raw : Gemm.RawInvocation P} (a b : InputEvaluation S module raw) : a = b := by
   obtain ⟨ai, aini, aceq, aeq, aobs, atc, arv, arex⟩ := a
   obtain ⟨bi, bini, bceq, beq, bobs, btc, brv, brex⟩ := b
@@ -217,7 +220,7 @@ theorem inputEvaluation_subsingleton {S : Setting P} {module : Wasm.Module}
   subst hrv
   rfl
 
-instance instSubsingletonInputEvaluation {S : Setting P} {module : Wasm.Module}
+instance instSubsingletonInputEvaluation {S : Setting P} {module : Wasm.Subset.Module}
     {raw : Gemm.RawInvocation P} : Subsingleton (InputEvaluation S module raw) :=
   ⟨inputEvaluation_subsingleton⟩
 
@@ -483,7 +486,7 @@ theorem deciderAnswersAdmissible_rel (hdec : DeciderAnswersAdmissible S D)
   systemEvaluationRel_of_exists (hdec b hadm e) e
 
 /--
-  **SPEC §13, Phase D — `GlobalOptimal` is attainable.**
+  Generic finite-argmin existence for the current legacy evaluation carrier.
 
   If the admissible set is nonempty (one byte sequence that is profile valid,
   semantically correct, within resources, and evaluated by the decider), and the
@@ -493,12 +496,13 @@ theorem deciderAnswersAdmissible_rel (hdec : DeciderAnswersAdmissible S D)
   lower-bound clause over **all** of `ByteArray`, and the canonical tie-break
   clause.
 
-  This does NOT prove `Artifact.released_wasm_gemm_gnaf_global_optimal`.  That
-  theorem needs, in addition, (a) a nonempty witness — a concrete module with
-  proofs of the three extensional predicates — and (b) an identification proof
-  that the committed release literal is the byte sequence selected here.  The
-  selection below is an existential produced by classical reasoning; it names no
-  literal.
+  `ProfileValid` and `SystemEvaluation` here still use `Wasm.Subset.Module`, so
+  this is not yet SPEC §13 Phase D over the public amended-Core carrier.  It does
+  not prove `Artifact.released_wasm_gemm_gnaf_global_optimal`.  Public-carrier
+  evaluation soundness/completeness, a nonempty correct released candidate,
+  coverage or an attained lower bound, and identification of committed bytes all
+  remain open.  The selection below is an existential produced by classical
+  reasoning; it names no literal.
 -/
 theorem exists_globalOptimal_of_nonempty
     (hdec : DeciderAnswersAdmissible S D)
@@ -529,14 +533,12 @@ end Argmin
 
 `systemEvaluation_subsingleton` above carries `[Foundation.Fintype
 (Gemm.RawInvocation P)]`, SPEC §8.4's `problem_input_fintype`, because
-`Cost.exact_unique` sums over the raw-input carrier.  That instance used to be
-an assumption of this repository (`O-3`).  It is now a *theorem*:
-`Gemm.raw_input_finite` in `Universal/EnumerateInputs.lean` is a global,
-choice-free `Foundation.Fintype` built from `Gemm.rawInvocations`, its coverage
-proof and its duplicate-freedom proof.
-
-So the proposition SPEC §15 names can be stated with no hypothesis at all, which
-is what the section below does. -/
+`Cost.exact_unique` sums over the raw-input carrier.  A global instance named
+`Gemm.raw_input_finite` exists in `Universal/EnumerateInputs.lean`, but its
+compiled axiom closure reaches `Classical.choice`.  SPEC §4 does not credit
+choice-tainted executable enumeration witnesses, so `UV-004` remains open.
+The section below can omit an explicit instance binder syntactically, but that
+does not turn the transitive dependency into a discharge. -/
 
 section Functional
 
@@ -547,9 +549,10 @@ variable {P : Wasm.Profile}
 
   Two evaluations that the decider relates to the same byte sequence are equal.
 
-  Three things about the statement.  It carries **no** `Foundation.Fintype`
-  hypothesis — the instance is `Gemm.raw_input_finite`, discharged, not assumed.
-  It is quantified over **every** `Setting` and **every** `Decider`, so it does
+  Three things about the statement.  It carries no explicit
+  `Foundation.Fintype` binder, but the synthesized global instance is currently
+  choice-tainted and receives no SPEC §4 credit.  It is quantified over **every**
+  `Setting` and **every** `Decider`, so it does
   not depend on which evaluator is installed; in particular it will still hold
   verbatim of SPEC §10.1's implemented `Universal.evaluate` once that exists.
   And it is proved from uniqueness of the *codomain*

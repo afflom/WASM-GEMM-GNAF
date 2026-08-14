@@ -29,10 +29,13 @@
   expression that runs off the end of its input simply has no derivation.
 -/
 import WasmGemmGnaf.Wasm.Core.BinaryGrammar.Vector
+import WasmGemmGnaf.Wasm.Core.BinaryGrammar.InstructionsAmended
 
 set_option autoImplicit false
 
 namespace WasmGemmGnaf.Wasm.Core.Binary
+
+variable [authority : BinaryAuthority]
 
 mutual
 
@@ -79,7 +82,7 @@ inductive Binstr : Bytes → Instr → Prop where
         (.tryTable bt cs (InstrSeq.ofList ins))
   -- The fragments that do not mention `Binstr`, taken as they stand.
   | ofParametric (bs : Bytes) (i : Instr) : BinstrParametric bs i → Binstr bs i
-  | ofControl (bs : Bytes) (i : Instr) : BinstrControl bs i → Binstr bs i
+  | ofControl (bs : Bytes) (i : Instr) : BinstrControlFor bs i → Binstr bs i
   | ofLocal (bs : Bytes) (i : Instr) : BinstrLocal bs i → Binstr bs i
   | ofGlobal (bs : Bytes) (i : Instr) : BinstrGlobal bs i → Binstr bs i
   | ofTable (bs : Bytes) (i : Instr) : BinstrTable bs i → Binstr bs i
@@ -90,12 +93,13 @@ inductive Binstr : Bytes → Instr → Prop where
   | ofCast (bs : Bytes) (i : Instr) : BinstrCast bs i → Binstr bs i
   | ofExtern (bs : Bytes) (i : Instr) : BinstrExtern bs i → Binstr bs i
   | ofI31 (bs : Bytes) (i : Instr) : BinstrI31 bs i → Binstr bs i
-  | ofNum (bs : Bytes) (i : Instr) : BinstrNum bs i → Binstr bs i
+  | ofNum (bs : Bytes) (i : Instr) : BinstrNumFor bs i → Binstr bs i
   | ofVecMem (bs : Bytes) (i : Instr) : BinstrVecMem bs i → Binstr bs i
   | ofVecRel (bs : Bytes) (i : Instr) : BinstrVecRel bs i → Binstr bs i
   | ofVecV128 (bs : Bytes) (i : Instr) : BinstrVecV128 bs i → Binstr bs i
   | ofVecInt8And16 (bs : Bytes) (i : Instr) : BinstrVecInt8And16 bs i → Binstr bs i
-  | ofVecInt32And64 (bs : Bytes) (i : Instr) : BinstrVecInt32And64 bs i → Binstr bs i
+  | ofVecInt32And64 (bs : Bytes) (i : Instr) :
+      BinstrVecInt32And64For bs i → Binstr bs i
   | ofVecFloat (bs : Bytes) (i : Instr) : BinstrVecFloat bs i → Binstr bs i
 
 /-- `(in:Binstr)*`: the Kleene star of `Binstr`.  It has to be its own inductive
@@ -112,5 +116,17 @@ end
 inductive Bexpr : Bytes → Expr → Prop where
   | mk (bs : Bytes) (ins : List Instr) :
       Binstrs bs ins → Bexpr (bs ++ [tb 0x0B]) (InstrSeq.ofList ins)
+
+/-- The explicit byte-identical pinned instruction relation. -/
+abbrev BinstrPinned := @Binstr pinnedBinaryAuthority
+
+/-- The exact AMD-007/008/010/012 instruction relation. -/
+abbrev BinstrA := @Binstr amendedBinaryAuthority
+
+/-- The explicit byte-identical pinned expression relation. -/
+abbrev BexprPinned := @Bexpr pinnedBinaryAuthority
+
+/-- The exact AMD-007/008/010/012 expression relation. -/
+abbrev BexprA := @Bexpr amendedBinaryAuthority
 
 end WasmGemmGnaf.Wasm.Core.Binary

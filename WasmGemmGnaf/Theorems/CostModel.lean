@@ -6,15 +6,18 @@
   SPEC §15's required-name list is checkable against full statements in one
   place.
 
-  ## SPEC §15 declarations discharged here
+  ## Exact SPEC §15 declarations discharged here
 
   | SPEC §15 name                        | discharged by                          |
   |--------------------------------------|----------------------------------------|
-  | `Cost.module_bytes_exact`            | `Theorems.module_bytes_exact`          |
   | `Cost.transition_accounting_positive`| `Theorems.transition_accounting_positive` |
   | `Cost.objective_sublevel_finite`     | `Theorems.objective_sublevel_finite`   |
 
-  These are SPEC §15's *complete* Cost list: all three are proved.
+  `Theorems.module_bytes_exact` is a proved projection from the repository's
+  parameterized `Cost.ExactAggregateCost`.  SPEC §9.1 instead binds the public
+  profile, bytes, and `Wasm.Module`, and derives decoding, validation, and static
+  charges from those objects.  No bridge from that public-Core predicate is
+  proved, so the required `Cost.module_bytes_exact` remains outstanding.
 
   ## Additional proved results indexed here (not on the §15 list)
 
@@ -34,8 +37,9 @@
   * `sublevelEnumeration_length` — the sublevel enumeration is exactly the
     finite product of the 36 coordinate ranges `{0, …, u}`.
   * `exact_aggregate_unique`, `raw_charge_le_dynamicSum`,
-    `raw_charge_le_dynamicMax` — the SPEC §9.1 full-domain accounting facts that
-    sit beside `module_bytes_exact`: the exact aggregate determines the whole
+    `raw_charge_le_dynamicMax` — accounting facts for the repository's
+    parameterized aggregate predicate that sit beside `module_bytes_exact`:
+    the exact aggregate determines the whole
     cost vector, and no raw invocation's charge escapes either aggregate.
   * `transition_accounting_strict` — the strict form of positive accounting.
 
@@ -50,12 +54,11 @@
   establish that any particular released artifact's cost vector is exact — that
   needs a baseline, and is `O-4`/`O-6`.
 
-  ## SPEC §15 Cost declarations outstanding
+  ## SPEC §15 Cost declaration outstanding
 
-  None.  All three Cost names SPEC §15 requires are proved and re-indexed above.
-  What the objective cannot yet be *applied* to — a released artifact, a
-  competitor universe — is outstanding elsewhere, under `O-3`, `O-4` and `O-5`,
-  and is recorded in `Theorems/Status.lean`.
+  `Cost.module_bytes_exact` remains outstanding at the public-Core proposition.
+  The exact released artifact and competitor application are also open under
+  `O-3`, `O-4`, and `O-5`, as recorded in `Theorems/Status.lean`.
 -/
 import WasmGemmGnaf.Cost.Vector
 import WasmGemmGnaf.Cost.Event
@@ -125,18 +128,17 @@ theorem transition_accounting_strict (v : DynamicVector) (e : Event) :
     v.total < (sequentialCompose v e.charge).total :=
   Cost.transition_accounting_strict v e
 
-/-! ## SPEC §9.1: the exact aggregate
+/-! ## The repository's parameterized aggregate
 
 `ExactAggregateCost bytes decodes decodeSteps validationSteps staticDataBytes
-repetitions dynamicFor cost` is the SPEC §9.1 predicate pinning a complete
-system cost to the byte string it charges.  See the scope note in this module's
-header: `decodes`, `decodeSteps`, `validationSteps` and `staticDataBytes` are
-parameters, so these are conditional statements about any cost vector that
-satisfies the predicate. -/
+repetitions dynamicFor cost` takes decodability and the three static quantities
+as parameters.  It is weaker than SPEC §9.1's public-Core predicate, which binds
+them to a profile and module.  The results below are conditional statements
+about this repository predicate and do not bridge that gap. -/
 
-/-- **SPEC §15, `Cost.module_bytes_exact`.**  A cost vector exact for `bytes`
-records the module size as literally `bytes.size` — the size coordinate is the
-byte count, not an estimate, a bound, or an artifact-supplied number. -/
+/-- A projection from the repository's parameterized aggregate predicate: a
+cost vector exact under its supplied parameters records `bytes.size`.  This is
+not the public-Core SPEC §15 discharge. -/
 theorem module_bytes_exact {Raw : Type} [Foundation.Fintype Raw]
     {bytes : ByteArray} {decodes : Prop}
     {decodeSteps validationSteps staticDataBytes repetitions : Nat}

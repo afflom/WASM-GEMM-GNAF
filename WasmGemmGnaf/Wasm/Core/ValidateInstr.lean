@@ -20,17 +20,36 @@
     * value types: `numtype` and `vectype` (`I32 I64 F32 F64 V128`), plus the
       `BOT` the algorithm itself generates.  NOT reference types.
     * instructions: `NOP`, `UNREACHABLE`, `DROP`, `SELECT` (both forms),
-      `BLOCK`, `LOOP`, `IF`, `BR`, `BR_IF`, `RETURN`, `CALL`, `LOCAL.*`,
-      `GLOBAL.*`, `LOAD`, `STORE`, `VLOAD`, `VLOAD_LANE`, `VSTORE`,
-      `VSTORE_LANE`, `MEMORY.SIZE`, `MEMORY.GROW`, `MEMORY.FILL`,
-      `MEMORY.COPY`, `MEMORY.INIT`, `DATA.DROP`, every numeric instruction
-      (`CONST UNOP BINOP TESTOP RELOP CVTOP`) and every SIMD instruction of
-      `1.3-syntax.instructions.spectec` (`VCONST`, `VVUNOP` ... `VCVTOP`,
-      `VSPLAT`, `VEXTRACT_LANE`, `VREPLACE_LANE`).
-    * NOT: `BR_TABLE`, the reference and GC instructions, the table and element
-      instructions, `CALL_REF`/`CALL_INDIRECT`, the tail calls, and exception
-      handling.  Every one of those needs `Heaptype_sub`, whose decidability is
-      a separate obligation this file does not discharge.
+      `BLOCK`, `LOOP`, `IF`, `BR`, `BR_IF`, `BR_TABLE`, `RETURN`, `CALL`,
+      `RETURN_CALL`, `LOCAL.*`, `GLOBAL.*`, `LOAD`, `STORE`, `VLOAD`,
+      `VLOAD_LANE`, `VSTORE`, `VSTORE_LANE`, `MEMORY.SIZE`, `MEMORY.GROW`,
+      `MEMORY.FILL`, `MEMORY.COPY`, `MEMORY.INIT`, `DATA.DROP`, every numeric
+      instruction (`CONST UNOP BINOP TESTOP RELOP CVTOP`) and every SIMD
+      instruction of `1.3-syntax.instructions.spectec` (`VCONST`, `VVUNOP` ...
+      `VCVTOP`, `VSPLAT`, `VEXTRACT_LANE`, `VREPLACE_LANE`).
+    * NOT: the reference and GC instructions, the table and element
+      instructions, `CALL_REF`/`CALL_INDIRECT`, `RETURN_CALL_REF` /
+      `RETURN_CALL_INDIRECT`, and exception handling.  Every one of those
+      mentions a REFERENCE type in its rule, so deciding it needs
+      `Heaptype_sub`, whose decidability is a separate obligation this file
+      does not discharge.
+
+  WHAT `BR_TABLE` AND `RETURN_CALL` NEEDED, AND WHY THEY DID NOT NEED THAT.
+  Both rules are stated with subtyping --- `Instr_ok/br_table` requires
+  `Resulttype_sub: C |- t* <: C.LABELS[l]` at every label and
+  `Instr_ok/return_call` requires `Resulttype_sub: C |- t_2* <: C.RETURN` --- but
+  on the decided fragment every type on the RIGHT of those premises is a
+  `numtype` or a `vectype`, and `Valtype_sub` at such a type is exactly `BOT` or
+  equality (`ValidateStack.subOf_of_valtype_sub`).  So the two rules are decided
+  by the operand stack alone.
+
+  `BR_TABLE` in particular leaves `t*` FREE and bounds it only from ABOVE, once
+  per label, so the algorithm cannot pop against a fixed expectation.  It pops
+  with NO expectation --- `St.popN`, the appendix's `pop_val()` iterated --- and
+  compares the answer with every label afterwards.  That answer is PRINCIPAL
+  (`ValidateSeq.popN_principal`), which is why one pass decides the
+  existential: in unreachable code it returns `BOT`, so a `br_table` whose
+  labels DISAGREE is still accepted, exactly as Core 3.0 requires.
 
   Multi-value blocks, block types given by a type index, and full stack
   polymorphism ARE inside the fragment; they are what the appendix algorithm is
@@ -39,19 +58,16 @@
   with no fragment hypothesis; only COMPLETENESS (`checkSeq_complete`) is
   fragment-scoped.
 
-  WHERE THE TWO EQUIVALENCE THEOREMS LIVE.  Not in this file: they are stated
-  over the AMENDED judgment `Instrs_ok'`, which is declared in
-  `Core/Validation/InstructionsAmended.lean` --- a file that imports this one's
-  declarative dependency but not this one.  `Core/ValidateSeq.lean` imports both
-  and carries `checkSeq_sound`, `checkSeq_complete`, `checkExpr_sound` and
-  `checkExpr_complete`.  What this file contributes to them is the opcode
-  dispatch (`instrType`, `checkInstr`, `checkSeq`) together with
-  `instrType_sound` and `instrType_complete`, which are the per-instruction
-  halves both directions consume.  The reason the equivalence cannot be stated
-  over the PINNED `Instrs_ok` is the negative result at the end of this file.
+  The corrected declarative target is the sole combined hierarchy
+  `Instr_okA`/`Instrs_okA` in
+  `Core/Validation/InstructionsCombinedAmended.lean`.  The unrestricted pass
+  below is `checkInstrA`/`checkSeqA`; the older fragment pass remains only while
+  its existing proof is used as a migration lemma.  It is not the release
+  validity endpoint.
 -/
 import WasmGemmGnaf.Wasm.Core.ValidateStack
-import WasmGemmGnaf.Wasm.Core.Validation.Instructions
+import WasmGemmGnaf.Wasm.Core.ValidateTypes
+import WasmGemmGnaf.Wasm.Core.Validation.InstructionsCombinedAmended
 
 set_option autoImplicit false
 
@@ -84,6 +100,28 @@ def blockType (C : Context) : BlockType → Option (List ValType × List ValType
       | some dt => funcTypeOf dt
       | none => none
 
+/-! ## Full amended-Core type expansion
+
+The original dispatcher below was developed first for numeric/vector value
+types.  These two helpers are the same two partial semantic operations without
+that historical restriction.  Validity of an inline result type is checked
+through the corrected hierarchy; an indexed function type is determined by
+`Expand`, exactly as in `Blocktype_okA/typeidx`. -/
+
+def funcTypeOfA (dt : DefType) : Option (List ValType × List ValType) :=
+  match expandDt dt with
+  | some (.func dom cod) => some (ValTypes.toList dom, ValTypes.toList cod)
+  | _ => none
+
+def blockTypeA (C : Context) : BlockType → Option (List ValType × List ValType)
+  | .result none => some ([], [])
+  | .result (some t) =>
+      if checkValtypeOkA C t then some ([], [t]) else none
+  | .idx x =>
+      match C.types[x.val]? with
+      | some dt => funcTypeOfA dt
+      | none => none
+
 /-- The `blocktype`s of the decided fragment. -/
 def BlockType.frag : BlockType → Bool
   | .result none => true
@@ -106,8 +144,10 @@ def Instr.frag : Instr → Bool
   | .ifElse bt thn els => BlockType.frag bt && InstrSeq.frag thn && InstrSeq.frag els
   | .br _ => true
   | .brIf _ => true
+  | .brTable _ _ => true
   | .ret => true
   | .call _ => true
+  | .returnCall _ => true
   | .localGet _ => true
   | .localSet _ => true
   | .localTee _ => true
@@ -366,6 +406,628 @@ def instrTypeRaw (C : Context) : Instr → Option InstrType
 def instrType (C : Context) (i : Instr) : Option InstrType :=
   if Instr.wf i = true then instrTypeRaw C i else none
 
+/-! ## The unrestricted fixed-type opcode dispatcher
+
+Most Core instructions have a type determined by their immediate operands and
+the context.  `instrTypeRawA` extends the earlier numeric/vector dispatcher at
+exactly those arms; instructions whose rule leaves a heap type, nullability,
+stack prefix, or local-initialization effect existential are handled directly
+by the full stack pass below. -/
+
+def instrTypeRawA (C : Context) : Instr → Option InstrType
+  | .select (some [t]) =>
+      if checkValtypeOkA C t then some ⟨[t, t, ValType.i32], [], [t]⟩ else none
+  | .select (some _) => none
+  | .brIf l =>
+      match C.labels[l.val]? with
+      | some ts => some ⟨ts ++ [ValType.i32], [], ts⟩
+      | none => none
+  | .call x =>
+      match C.funcs[x.val]? with
+      | some dt => (funcTypeOfA dt).map fun p => ⟨p.1, [], p.2⟩
+      | none => none
+  | .callRef (.idx x) =>
+      match C.types[x.val]? with
+      | some dt => (funcTypeOfA dt).map fun p =>
+          ⟨p.1 ++ [.ref (.ref (some .null) (.use (.idx x)))], [], p.2⟩
+      | none => none
+  | .callRef _ => none
+  | .callIndirect x (.idx y) =>
+      match C.tables[x.val]?, C.types[y.val]? with
+      | some tt, some dt =>
+          if decReftypeSubN C C.subtypeFuel tt.elem RefType.funcref then
+            (funcTypeOfA dt).map fun p => ⟨p.1 ++ [tt.addr.toValType], [], p.2⟩
+          else none
+      | _, _ => none
+  | .callIndirect _ _ => none
+  | .localGet x =>
+      match C.locals[x.val]? with
+      | some ⟨.set, t⟩ => some ⟨[], [], [t]⟩
+      | _ => none
+  | .localSet x =>
+      match C.locals[x.val]? with
+      | some ⟨_, t⟩ => some ⟨[t], [x], []⟩
+      | none => none
+  | .localTee x =>
+      match C.locals[x.val]? with
+      | some ⟨_, t⟩ => some ⟨[t], [x], [t]⟩
+      | none => none
+  | .globalGet x =>
+      match C.globals[x.val]? with
+      | some gt => some ⟨[], [], [gt.valtype]⟩
+      | none => none
+  | .globalSet x =>
+      match C.globals[x.val]? with
+      | some ⟨some .mut, t⟩ => some ⟨[t], [], []⟩
+      | _ => none
+  | .refNull ht =>
+      if checkHeaptypeOkA C ht then
+        some ⟨[], [], [.ref (.ref (some .null) ht)]⟩
+      else none
+  | .refFunc x =>
+      match C.funcs[x.val]? with
+      | some dt =>
+          if decide (x ∈ C.refs) then
+            some ⟨[], [], [.ref (.ref none (.use (.defd dt)))]⟩
+          else none
+      | none => none
+  | .refI31 => some ⟨[ValType.i32], [], [.ref (.ref none (.abs .i31))]⟩
+  | .refEq => some ⟨[.ref RefType.eqref, .ref RefType.eqref], [], [ValType.i32]⟩
+  | .i31Get _ => some ⟨[.ref RefType.i31ref], [], [ValType.i32]⟩
+  | .structNew x =>
+      match C.types[x.val]? with
+      | some dt => match expandDt dt with
+          | some (.struct fts) =>
+              some ⟨fts.unpacked, [], [.ref (.ref none (.use (.idx x)))]⟩
+          | _ => none
+      | none => none
+  | .structNewDefault x =>
+      match C.types[x.val]? with
+      | some dt => match expandDt dt with
+          | some (.struct fts) =>
+              if fts.unpacked.all ValType.hasDefault then
+                some ⟨[], [], [.ref (.ref none (.use (.idx x)))]⟩
+              else none
+          | _ => none
+      | none => none
+  | .structGet sx x i =>
+      match C.types[x.val]? with
+      | some dt => match expandDt dt with
+          | some (.struct fts) => match (FieldTypes.toList fts)[i.val]? with
+              | some (.mk _ zt) =>
+                  if decide ((sx = none) ↔ StorageType.isUnpacked zt = true) then
+                    some ⟨[.ref (.ref (some .null) (.use (.idx x)))], [],
+                      [StorageType.unpack zt]⟩
+                  else none
+              | none => none
+          | _ => none
+      | none => none
+  | .structSet x i =>
+      match C.types[x.val]? with
+      | some dt => match expandDt dt with
+          | some (.struct fts) => match (FieldTypes.toList fts)[i.val]? with
+              | some (.mk (some .mut) zt) =>
+                  some ⟨[.ref (.ref (some .null) (.use (.idx x))),
+                    StorageType.unpack zt], [], []⟩
+              | _ => none
+          | _ => none
+      | none => none
+  | .arrayNew x =>
+      match C.types[x.val]? with
+      | some dt => match expandDt dt with
+          | some (.array ft) =>
+              some ⟨[StorageType.unpack ft.storage, ValType.i32], [],
+                [.ref (.ref none (.use (.idx x)))]⟩
+          | _ => none
+      | none => none
+  | .arrayNewDefault x =>
+      match C.types[x.val]? with
+      | some dt => match expandDt dt with
+          | some (.array ft) =>
+              if (StorageType.unpack ft.storage).hasDefault then
+                some ⟨[ValType.i32], [], [.ref (.ref none (.use (.idx x)))]⟩
+              else none
+          | _ => none
+      | none => none
+  | .arrayNewFixed x n =>
+      match C.types[x.val]? with
+      | some dt => match expandDt dt with
+          | some (.array ft) =>
+              some ⟨List.replicate n.val (StorageType.unpack ft.storage), [],
+                [.ref (.ref none (.use (.idx x)))]⟩
+          | _ => none
+      | none => none
+  | .arrayNewElem x y =>
+      match C.types[x.val]?, C.elems[y.val]? with
+      | some dt, some rt' => match expandDt dt with
+          | some (.array (.mk _ (.val (.ref rt)))) =>
+              if decReftypeSubN C C.subtypeFuel rt' rt then
+                some ⟨[ValType.i32, ValType.i32], [],
+                  [.ref (.ref none (.use (.idx x)))]⟩
+              else none
+          | _ => none
+      | _, _ => none
+  | .arrayNewData x y =>
+      match C.types[x.val]?, C.datas[y.val]? with
+      | some dt, some .ok => match expandDt dt with
+          | some (.array ft) =>
+              if (StorageType.unpack ft.storage).isNumOrVec then
+                some ⟨[ValType.i32, ValType.i32], [],
+                  [.ref (.ref none (.use (.idx x)))]⟩
+              else none
+          | _ => none
+      | _, _ => none
+  | .arrayGet sx x =>
+      match C.types[x.val]? with
+      | some dt => match expandDt dt with
+          | some (.array ft) =>
+              if decide ((sx = none) ↔ StorageType.isUnpacked ft.storage = true) then
+                some ⟨[.ref (.ref (some .null) (.use (.idx x))), ValType.i32], [],
+                  [StorageType.unpack ft.storage]⟩
+              else none
+          | _ => none
+      | none => none
+  | .arraySet x =>
+      match C.types[x.val]? with
+      | some dt => match expandDt dt with
+          | some (.array (.mk (some .mut) zt)) =>
+              some ⟨[.ref (.ref (some .null) (.use (.idx x))), ValType.i32,
+                StorageType.unpack zt], [], []⟩
+          | _ => none
+      | none => none
+  | .arrayLen => some ⟨[.ref RefType.arrayref], [], [ValType.i32]⟩
+  | .arrayFill x =>
+      match C.types[x.val]? with
+      | some dt => match expandDt dt with
+          | some (.array (.mk (some .mut) zt)) =>
+              some ⟨[.ref (.ref (some .null) (.use (.idx x))), ValType.i32,
+                StorageType.unpack zt, ValType.i32], [], []⟩
+          | _ => none
+      | none => none
+  | .arrayCopy x₁ x₂ =>
+      match C.types[x₁.val]?, C.types[x₂.val]? with
+      | some dt₁, some dt₂ => match expandDt dt₁, expandDt dt₂ with
+          | some (.array (.mk (some .mut) zt₁)), some (.array (.mk _ zt₂)) =>
+              if decStoragetypeSubN C C.subtypeFuel zt₂ zt₁ then
+                some ⟨[.ref (.ref (some .null) (.use (.idx x₁))), ValType.i32,
+                  .ref (.ref (some .null) (.use (.idx x₂))), ValType.i32,
+                  ValType.i32], [], []⟩
+              else none
+          | _, _ => none
+      | _, _ => none
+  | .arrayInitElem x y =>
+      match C.types[x.val]?, C.elems[y.val]? with
+      | some dt, some rt => match expandDt dt with
+          | some (.array (.mk (some .mut) zt)) =>
+              if decStoragetypeSubN C C.subtypeFuel (.val (.ref rt)) zt then
+                some ⟨[.ref (.ref (some .null) (.use (.idx x))), ValType.i32,
+                  ValType.i32, ValType.i32], [], []⟩
+              else none
+          | _ => none
+      | _, _ => none
+  | .arrayInitData x y =>
+      match C.types[x.val]?, C.datas[y.val]? with
+      | some dt, some .ok => match expandDt dt with
+          | some (.array (.mk (some .mut) zt)) =>
+              if (StorageType.unpack zt).isNumOrVec then
+                some ⟨[.ref (.ref (some .null) (.use (.idx x))), ValType.i32,
+                  ValType.i32, ValType.i32], [], []⟩
+              else none
+          | _ => none
+      | _, _ => none
+  | .tableGet x =>
+      match C.tables[x.val]? with
+      | some tt => some ⟨[tt.addr.toValType], [], [.ref tt.elem]⟩
+      | none => none
+  | .tableSet x =>
+      match C.tables[x.val]? with
+      | some tt => some ⟨[tt.addr.toValType, .ref tt.elem], [], []⟩
+      | none => none
+  | .tableSize x =>
+      match C.tables[x.val]? with
+      | some tt => some ⟨[], [], [tt.addr.toValType]⟩
+      | none => none
+  | .tableGrow x =>
+      match C.tables[x.val]? with
+      | some tt => some ⟨[.ref tt.elem, tt.addr.toValType], [], [ValType.i32]⟩
+      | none => none
+  | .tableFill x =>
+      match C.tables[x.val]? with
+      | some tt =>
+          some ⟨[tt.addr.toValType, .ref tt.elem, tt.addr.toValType], [], []⟩
+      | none => none
+  | .tableCopy x₁ x₂ =>
+      match C.tables[x₁.val]?, C.tables[x₂.val]? with
+      | some tt₁, some tt₂ =>
+          if decReftypeSubN C C.subtypeFuel tt₂.elem tt₁.elem then
+            some ⟨[tt₁.addr.toValType, tt₂.addr.toValType,
+              (AddrType.min tt₁.addr tt₂.addr).toValType], [], []⟩
+          else none
+      | _, _ => none
+  | .tableInit x y =>
+      match C.tables[x.val]?, C.elems[y.val]? with
+      | some tt, some rt =>
+          if decReftypeSubN C C.subtypeFuel rt tt.elem then
+            some ⟨[tt.addr.toValType, ValType.i32, ValType.i32], [], []⟩
+          else none
+      | _, _ => none
+  | .elemDrop x =>
+      match C.elems[x.val]? with
+      | some _ => some ⟨[], [], []⟩
+      | none => none
+  | _ => none
+
+def instrTypeA (C : Context) (i : Instr) : Option InstrType :=
+  if Instr.wf i = true then instrTypeRawA C i else none
+
+theorem instrTypeA_sound {C : Context} {i : Instr} {it : InstrType}
+    (h : instrTypeA C i = some it) : Instr_okA C i it := by
+  rw [instrTypeA] at h
+  by_cases hwf : Instr.wf i = true
+  · rw [if_pos hwf] at h
+    unfold instrTypeRawA at h
+    split at h
+    · -- SELECT t
+      rename_i t
+      split at h
+      · rename_i ht
+        injection h with h; subst h
+        exact .select_expl (checkValtypeOkA_sound ht)
+      · contradiction
+    · contradiction
+    · -- BR_IF
+      rename_i l
+      split at h
+      · rename_i ts hl
+        injection h with h; subst h
+        exact .br_if hl
+      · contradiction
+    · -- CALL
+      rename_i x
+      split at h
+      · rename_i dt hx
+        unfold funcTypeOfA at h
+        split at h
+        · rename_i dom cod he
+          injection h with h; subst h
+          exact .call hx (.mk he)
+        · contradiction
+      · contradiction
+    · -- CALL_REF
+      rename_i x
+      split at h
+      · rename_i dt hx
+        unfold funcTypeOfA at h
+        split at h
+        · rename_i dom cod he
+          injection h with h; subst h
+          exact .call_ref hx (.mk he)
+        · contradiction
+      · contradiction
+    · contradiction
+    · -- CALL_INDIRECT
+      rename_i x y
+      split at h
+      · rename_i tt dt hx hy
+        split at h
+        · rename_i hsub
+          unfold funcTypeOfA at h
+          split at h
+          · rename_i dom cod he
+            injection h with h; subst h
+            exact .call_indirect hx (decReftypeSubN_sound hsub) hy (.mk he)
+          · contradiction
+        · contradiction
+      · contradiction
+    · contradiction
+    · -- LOCAL.GET
+      rename_i x
+      split at h
+      · rename_i t hx
+        injection h with h; subst h
+        exact .local_get hx
+      · contradiction
+    · -- LOCAL.SET
+      rename_i x
+      split at h
+      · rename_i ini t hx
+        injection h with h; subst h
+        exact .local_set hx
+      · contradiction
+    · -- LOCAL.TEE
+      rename_i x
+      split at h
+      · rename_i ini t hx
+        injection h with h; subst h
+        exact .local_tee hx
+      · contradiction
+    · -- GLOBAL.GET
+      rename_i x
+      split at h
+      · rename_i gt hx
+        injection h with h; subst h
+        exact .global_get hx
+      · contradiction
+    · -- GLOBAL.SET
+      rename_i x
+      split at h
+      · rename_i t hx
+        injection h with h; subst h
+        exact .global_set hx
+      · contradiction
+    · -- REF.NULL
+      rename_i ht
+      split at h
+      · rename_i hok
+        injection h with h; subst h
+        exact .ref_null (checkHeaptypeOkA_sound hok)
+      · contradiction
+    · -- REF.FUNC
+      rename_i x
+      split at h
+      · rename_i dt hx
+        split at h
+        · rename_i href
+          injection h with h; subst h
+          exact .ref_func hx (of_decide_eq_true href)
+        · contradiction
+      · contradiction
+    · injection h with h; subst h; exact .ref_i31
+    · injection h with h; subst h; exact .ref_eq
+    · rename_i sx
+      injection h with h; subst h; exact .i31_get
+    · -- STRUCT.NEW
+      rename_i x
+      split at h
+      · rename_i dt hx
+        split at h
+        · rename_i fts he
+          injection h with h; subst h
+          exact .struct_new hx (.mk he)
+        · contradiction
+      · contradiction
+    · -- STRUCT.NEW_DEFAULT
+      rename_i x
+      split at h
+      · rename_i dt hx
+        split at h
+        · rename_i fts he
+          split at h
+          · rename_i hd
+            injection h with h; subst h
+            exact .struct_new_default hx (.mk he)
+              (fun t ht => Defaultable.mk (List.all_eq_true.mp hd t ht))
+          · contradiction
+        · contradiction
+      · contradiction
+    · -- STRUCT.GET
+      rename_i sx x n
+      split at h
+      · rename_i dt hx
+        split at h
+        · rename_i fts he
+          split at h
+          · rename_i m zt hft
+            split at h
+            · rename_i hs
+              injection h with h; subst h
+              exact .struct_get hx (.mk he) hft (of_decide_eq_true hs)
+            · contradiction
+          · contradiction
+        · contradiction
+      · contradiction
+    · -- STRUCT.SET
+      rename_i x n
+      split at h
+      · rename_i dt hx
+        split at h
+        · rename_i fts he
+          split at h
+          · rename_i zt hft
+            injection h with h; subst h
+            exact .struct_set hx (.mk he) hft
+          · contradiction
+        · contradiction
+      · contradiction
+    · -- ARRAY.NEW
+      rename_i x
+      split at h
+      · rename_i dt hx
+        split at h
+        · rename_i ft he
+          injection h with h; subst h
+          exact .array_new hx (.mk he)
+        · contradiction
+      · contradiction
+    · -- ARRAY.NEW_DEFAULT
+      rename_i x
+      split at h
+      · rename_i dt hx
+        split at h
+        · rename_i ft he
+          split at h
+          · rename_i hd
+            injection h with h; subst h
+            exact .array_new_default hx (.mk he) (Defaultable.mk hd)
+          · contradiction
+        · contradiction
+      · contradiction
+    · -- ARRAY.NEW_FIXED
+      rename_i x n
+      split at h
+      · rename_i dt hx
+        split at h
+        · rename_i ft he
+          injection h with h; subst h
+          exact .array_new_fixed hx (.mk he)
+        · contradiction
+      · contradiction
+    · -- ARRAY.NEW_ELEM
+      rename_i x y
+      split at h
+      · rename_i dt rt' hx hy
+        split at h
+        · rename_i m rt he
+          split at h
+          · rename_i hs
+            injection h with h; subst h
+            exact .array_new_elem hx (.mk he) hy (decReftypeSubN_sound hs)
+          · contradiction
+        · contradiction
+      · contradiction
+    · -- ARRAY.NEW_DATA
+      rename_i x y
+      split at h
+      · rename_i dt hx hy
+        split at h
+        · rename_i ft he
+          split at h
+          · rename_i hn
+            injection h with h; subst h
+            exact .array_new_data hx (.mk he) hn hy
+          · contradiction
+        · contradiction
+      · contradiction
+    · -- ARRAY.GET
+      rename_i sx x
+      split at h
+      · rename_i dt hx
+        split at h
+        · rename_i ft he
+          split at h
+          · rename_i hs
+            injection h with h; subst h
+            exact .array_get hx (.mk he) (of_decide_eq_true hs)
+          · contradiction
+        · contradiction
+      · contradiction
+    · -- ARRAY.SET
+      rename_i x
+      split at h
+      · rename_i dt hx
+        split at h
+        · rename_i zt he
+          injection h with h; subst h
+          exact .array_set hx (.mk he)
+        · contradiction
+      · contradiction
+    · injection h with h; subst h; exact .array_len
+    · -- ARRAY.FILL
+      rename_i x
+      split at h
+      · rename_i dt hx
+        split at h
+        · rename_i zt he
+          injection h with h; subst h
+          exact .array_fill hx (.mk he)
+        · contradiction
+      · contradiction
+    · -- ARRAY.COPY
+      rename_i x₁ x₂
+      split at h
+      · rename_i dt₁ dt₂ hx₁ hx₂
+        split at h
+        · rename_i zt₁ m zt₂ he₁ he₂
+          split at h
+          · rename_i hs
+            injection h with h; subst h
+            exact .array_copy hx₁ (.mk he₁) hx₂ (.mk he₂)
+              (decStoragetypeSubN_sound hs)
+          · contradiction
+        · contradiction
+      · contradiction
+    · -- ARRAY.INIT_ELEM
+      rename_i x y
+      split at h
+      · rename_i dt rt hx hy
+        split at h
+        · rename_i zt he
+          split at h
+          · rename_i hs
+            injection h with h; subst h
+            exact .array_init_elem hx (.mk he) hy (decStoragetypeSubN_sound hs)
+          · contradiction
+        · contradiction
+      · contradiction
+    · -- ARRAY.INIT_DATA
+      rename_i x y
+      split at h
+      · rename_i dt hx hy
+        split at h
+        · rename_i zt he
+          split at h
+          · rename_i hn
+            injection h with h; subst h
+            exact .array_init_data hx (.mk he) hn hy
+          · contradiction
+        · contradiction
+      · contradiction
+    · -- TABLE.GET
+      rename_i x
+      split at h
+      · rename_i tt hx
+        injection h with h; subst h
+        exact .table_get hx
+      · contradiction
+    · -- TABLE.SET
+      rename_i x
+      split at h
+      · rename_i tt hx
+        injection h with h; subst h
+        exact .table_set hx
+      · contradiction
+    · -- TABLE.SIZE
+      rename_i x
+      split at h
+      · rename_i tt hx
+        injection h with h; subst h
+        exact .table_size hx
+      · contradiction
+    · -- TABLE.GROW
+      rename_i x
+      split at h
+      · rename_i tt hx
+        injection h with h; subst h
+        exact .table_grow hx
+      · contradiction
+    · -- TABLE.FILL
+      rename_i x
+      split at h
+      · rename_i tt hx
+        injection h with h; subst h
+        exact .table_fill hx
+      · contradiction
+    · -- TABLE.COPY
+      rename_i x₁ x₂
+      split at h
+      · rename_i tt₁ tt₂ hx₁ hx₂
+        split at h
+        · rename_i hs
+          injection h with h; subst h
+          exact .table_copy hx₁ hx₂ (decReftypeSubN_sound hs)
+        · contradiction
+      · contradiction
+    · -- TABLE.INIT
+      rename_i x y
+      split at h
+      · rename_i tt rt hx hy
+        split at h
+        · rename_i hs
+          injection h with h; subst h
+          exact .table_init hx hy (decReftypeSubN_sound hs)
+        · contradiction
+      · contradiction
+    · -- ELEM.DROP
+      rename_i x
+      split at h
+      · rename_i rt hx
+        injection h with h; subst h
+        exact .elem_drop hx
+      · contradiction
+    · contradiction
+  · rw [if_neg hwf] at h
+    contradiction
+
 
 /-! ## The single pass -/
 
@@ -403,6 +1065,23 @@ def checkInstr (C : Context) : St → Instr → Option St
             | none => none
           else none
       | none => none
+  | st, .brTable ls l =>
+      match st.popE ValType.i32 with
+      | some st₁ =>
+          match C.labels[l.val]? with
+          | some ts =>
+              match st₁.popN ts.length with
+              | some (us, _) =>
+                  if subs us ts &&
+                      ls.all (fun l' =>
+                        match C.labels[l'.val]? with
+                        | some ts' => subs us ts'
+                        | none => false) then
+                    some st.unreach
+                  else none
+              | none => none
+          | none => none
+      | none => none
   | st, .ret =>
       match C.ret with
       | some ts =>
@@ -411,6 +1090,21 @@ def checkInstr (C : Context) : St → Instr → Option St
             | some _ => some st.unreach
             | none => none
           else none
+      | none => none
+  | st, .returnCall x =>
+      match C.funcs[x.val]? with
+      | some dt =>
+          match funcTypeOf dt with
+          | some (dom, cod) =>
+              match C.ret with
+              | some ts =>
+                  if cod == ts then
+                    match st.pops dom with
+                    | some _ => some st.unreach
+                    | none => none
+                  else none
+              | none => none
+          | none => none
       | none => none
   | st, .block bt body =>
       match blockType C bt with
@@ -471,6 +1165,343 @@ def checkExpr (C : Context) (e : Expr) (ts : List ValType) : Bool :=
   | some st => st.finish ts
   | none => false
 
+/-! ## Full amended-Core stack pass
+
+The full pass carries the definite-initialization effects of `local.set` and
+`local.tee`.  The operand stack remains `St`; only its matching operation is
+changed to `popsA`, which includes corrected reference subtyping. -/
+
+def St.finishA (C : Context) (st : St) (ts : List ValType) : Bool :=
+  match st.popsA C ts with
+  | some st' => st'.vals.isEmpty
+  | none => false
+
+def Context.setEffects : Context → List LocalIdx → Option Context
+  | C, [] => some C
+  | C, x :: xs =>
+      match C.locals[x.val]? with
+      | some lt => Context.setEffects (C.setLocal x ⟨.set, lt.valtype⟩) xs
+      | none => none
+
+def splitLast? {α : Type} : List α → Option (List α × α)
+  | [] => none
+  | [a] => some ([], a)
+  | a :: as => (splitLast? as).map fun p => (a :: p.1, p.2)
+
+def checkCatchA (C : Context) : Catch → Bool
+  | .tag x l =>
+      match C.tags[x.val]?, C.labels[l.val]? with
+      | some jt, some ts => match asDefType jt with
+          | some dt => match expandDt dt with
+              | some (.func dom .nil) =>
+                  subsA C (ValTypes.toList dom) ts
+              | _ => false
+          | none => false
+      | _, _ => false
+  | .tagRef x l =>
+      match C.tags[x.val]?, C.labels[l.val]? with
+      | some jt, some ts => match asDefType jt with
+          | some dt => match expandDt dt with
+              | some (.func dom .nil) =>
+                  subsA C (ValTypes.toList dom ++
+                    [.ref (.ref none (.abs .exn))]) ts
+              | _ => false
+          | none => false
+      | _, _ => false
+  | .all l =>
+      match C.labels[l.val]? with
+      | some ts => subsA C [] ts
+      | none => false
+  | .allRef l =>
+      match C.labels[l.val]? with
+      | some ts => subsA C [.ref (.ref none (.abs .exn))] ts
+      | none => false
+
+/-- Infer the reference witness needed by a syntax rule from an untyped pop.
+`BOT` (including the empty polymorphic stack) uses semantic heap bottom, which
+is well formed and is below every value type. -/
+def St.popRef (st : St) : Option (Option RefType × St) :=
+  match st.pop with
+  | some (.ref rt, st') => some (some rt, st')
+  | some (.bot, st') => some (none, st')
+  | _ => none
+
+def applyTypeA (C : Context) (st : St) (it : InstrType) : Option St :=
+  match st.popsA C it.dom with
+  | some st' => some (st'.pushs it.cod)
+  | none => none
+
+mutual
+
+def checkInstrA (C : Context) (st : St) : Instr → Option (List LocalIdx × St)
+  | .unreachable => some ([], st.unreach)
+  | .drop =>
+      match st.pop with
+      | some (_, st') => some ([], st')
+      | none => none
+  | .select none =>
+      match st.popEA C ValType.i32 with
+      | some st₁ => match st₁.pop with
+          | some (t₁, st₂) => match st₂.pop with
+              | some (t₂, st₃) =>
+                  if (t₁.isNumOrVec && t₂.isNumOrVec) &&
+                      (subOfA C t₁ t₂ || subOfA C t₂ t₁) then
+                    some ([], st₃.push (if t₁ == ValType.bot then t₂ else t₁))
+                  else none
+              | none => none
+          | none => none
+      | none => none
+  | .br l =>
+      match C.labels[l.val]? with
+      | some ts => match st.popsA C ts with
+          | some _ => some ([], st.unreach)
+          | none => none
+      | none => none
+  | .brTable ls l =>
+      match st.popEA C ValType.i32 with
+      | some st₁ => match C.labels[l.val]? with
+          | some ts => match st₁.popN ts.length with
+              | some (us, _) =>
+                  if subsA C us ts && ls.all (fun l' =>
+                      match C.labels[l'.val]? with
+                      | some ts' => subsA C us ts'
+                      | none => false) then
+                    some ([], st.unreach)
+                  else none
+              | none => none
+          | none => none
+      | none => none
+  | .brOnNull l =>
+      match C.labels[l.val]?, st.popRef with
+      | some ts, some (rt?, st₁) =>
+          let ht := match rt? with
+            | some (.ref _ ht) => ht
+            | none => .abs .bot
+          match st₁.popsA C ts with
+          | some st₀ =>
+              some ([], st₀.pushs (ts ++ [.ref (.ref none ht)]))
+          | none => none
+      | _, _ => none
+  | .brOnNonNull l =>
+      match C.labels[l.val]? with
+      | some label => match splitLast? label with
+          | some (ts, .ref (.ref _ ht)) =>
+              applyTypeA C st
+                ⟨ts ++ [.ref (.ref (some .null) ht)], [], ts⟩ |>.map ([], ·)
+          | _ => none
+      | none => none
+  | .brOnCast l rt₁ rt₂ =>
+      match C.labels[l.val]? with
+      | some label => match splitLast? label with
+          | some (ts, .ref rt) =>
+              if checkReftypeOkA C rt₁ && checkReftypeOkA C rt₂ &&
+                  decReftypeSubN C C.subtypeFuel rt₂ rt₁ &&
+                  decReftypeSubN C C.subtypeFuel rt₂ rt then
+                applyTypeA C st ⟨ts ++ [.ref rt₁], [],
+                  ts ++ [.ref (RefType.diff rt₁ rt₂)]⟩ |>.map ([], ·)
+              else none
+          | _ => none
+      | none => none
+  | .brOnCastFail l rt₁ rt₂ =>
+      match C.labels[l.val]? with
+      | some label => match splitLast? label with
+          | some (ts, .ref rt) =>
+              if checkReftypeOkA C rt₁ && checkReftypeOkA C rt₂ &&
+                  decReftypeSubN C C.subtypeFuel rt₂ rt₁ &&
+                  decReftypeSubN C C.subtypeFuel (RefType.diff rt₁ rt₂) rt then
+                applyTypeA C st ⟨ts ++ [.ref rt₁], [], ts ++ [.ref rt₂]⟩ |>.map ([], ·)
+              else none
+          | _ => none
+      | none => none
+  | .ret =>
+      match C.ret with
+      | some ts => match st.popsA C ts with
+          | some _ => some ([], st.unreach)
+          | none => none
+      | none => none
+  | .returnCall x =>
+      match C.funcs[x.val]?, C.ret with
+      | some dt, some ret => match funcTypeOfA dt with
+          | some (dom, cod) =>
+              if subsA C cod ret then match st.popsA C dom with
+                | some _ => some ([], st.unreach)
+                | none => none
+              else none
+          | none => none
+      | _, _ => none
+  | .returnCallRef (.idx x) =>
+      match C.types[x.val]?, C.ret with
+      | some dt, some ret => match funcTypeOfA dt with
+          | some (dom, cod) =>
+              if subsA C cod ret then
+                match st.popsA C (dom ++
+                    [.ref (.ref (some .null) (.use (.idx x)))]) with
+                | some _ => some ([], st.unreach)
+                | none => none
+              else none
+          | none => none
+      | _, _ => none
+  | .returnCallRef _ => none
+  | .returnCallIndirect x (.idx y) =>
+      match C.tables[x.val]?, C.types[y.val]?, C.ret with
+      | some tt, some dt, some ret => match funcTypeOfA dt with
+          | some (dom, cod) =>
+              if decReftypeSubN C C.subtypeFuel tt.elem RefType.funcref &&
+                  subsA C cod ret then
+                match st.popsA C (dom ++ [tt.addr.toValType]) with
+                | some _ => some ([], st.unreach)
+                | none => none
+              else none
+          | none => none
+      | _, _, _ => none
+  | .returnCallIndirect _ _ => none
+  | .throw x =>
+      match C.tags[x.val]? with
+      | some jt => match asDefType jt with
+          | some dt => match expandDt dt with
+              | some (.func dom .nil) =>
+                  match st.popsA C (ValTypes.toList dom) with
+                  | some _ => some ([], st.unreach)
+                  | none => none
+              | _ => none
+          | none => none
+      | none => none
+  | .throwRef =>
+      match st.popEA C (.ref (.ref (some .null) (.abs .exn))) with
+      | some _ => some ([], st.unreach)
+      | none => none
+  | .refIsNull =>
+      match st.popRef with
+      | some (_, st') => some ([], st'.push ValType.i32)
+      | none => none
+  | .refAsNonNull =>
+      match st.popRef with
+      | some (rt?, st') =>
+          let ht := match rt? with
+            | some (.ref _ ht) => ht
+            | none => .abs .bot
+          some ([], st'.push (.ref (.ref none ht)))
+      | none => none
+  | .refTest rt =>
+      if checkReftypeOkA C rt then match st.popRef with
+        | some (rt'?, st') =>
+            let rt' := rt'?.getD rt
+            if decReftypeSubN C C.subtypeFuel rt rt' then
+              some ([], st'.push ValType.i32)
+            else none
+        | none => none
+      else none
+  | .refCast rt =>
+      if checkReftypeOkA C rt then match st.popRef with
+        | some (rt'?, st') =>
+            let rt' := rt'?.getD rt
+            if decReftypeSubN C C.subtypeFuel rt rt' then
+              some ([], st'.push (.ref rt))
+            else none
+        | none => none
+      else none
+  | .externConvertAny =>
+      match st.popRef with
+      | some (some (.ref nul ht), st') =>
+          if decHeaptypeSubN C C.subtypeFuel ht (.abs .any) then
+            some ([], st'.push (.ref (.ref nul (.abs .extern))))
+          else none
+      | some (none, st') =>
+          some ([], st'.push (.ref (.ref none (.abs .extern))))
+      | _ => none
+  | .anyConvertExtern =>
+      match st.popRef with
+      | some (some (.ref nul ht), st') =>
+          if decHeaptypeSubN C C.subtypeFuel ht (.abs .extern) then
+            some ([], st'.push (.ref (.ref nul (.abs .any))))
+          else none
+      | some (none, st') =>
+          some ([], st'.push (.ref (.ref none (.abs .any))))
+      | _ => none
+  | .block bt body =>
+      match blockTypeA C bt with
+      | some (ts₁, ts₂) => match st.popsA C ts₁ with
+          | some st₀ =>
+              match checkSeqA (Context.pushLabel ts₂ C)
+                  (St.mk false [] |>.pushs ts₁) body with
+              | some (_, stB) =>
+                  if stB.finishA (Context.pushLabel ts₂ C) ts₂ then
+                    some ([], st₀.pushs ts₂)
+                  else none
+              | none => none
+          | none => none
+      | none => none
+  | .loop bt body =>
+      match blockTypeA C bt with
+      | some (ts₁, ts₂) => match st.popsA C ts₁ with
+          | some st₀ =>
+              match checkSeqA (Context.pushLabel ts₁ C)
+                  (St.mk false [] |>.pushs ts₁) body with
+              | some (_, stB) =>
+                  if stB.finishA (Context.pushLabel ts₁ C) ts₂ then
+                    some ([], st₀.pushs ts₂)
+                  else none
+              | none => none
+          | none => none
+      | none => none
+  | .ifElse bt thn els =>
+      match blockTypeA C bt with
+      | some (ts₁, ts₂) => match st.popEA C ValType.i32 with
+          | some st' => match st'.popsA C ts₁ with
+              | some st₀ =>
+                  match checkSeqA (Context.pushLabel ts₂ C)
+                      (St.mk false [] |>.pushs ts₁) thn,
+                    checkSeqA (Context.pushLabel ts₂ C)
+                      (St.mk false [] |>.pushs ts₁) els with
+                  | some (_, stT), some (_, stE) =>
+                      if stT.finishA (Context.pushLabel ts₂ C) ts₂ &&
+                          stE.finishA (Context.pushLabel ts₂ C) ts₂ then
+                        some ([], st₀.pushs ts₂)
+                      else none
+                  | _, _ => none
+              | none => none
+          | none => none
+      | none => none
+  | .tryTable bt cs body =>
+      match blockTypeA C bt with
+      | some (ts₁, ts₂) =>
+          if cs.val.all (checkCatchA C) then match st.popsA C ts₁ with
+            | some st₀ =>
+                match checkSeqA (Context.pushLabel ts₂ C)
+                    (St.mk false [] |>.pushs ts₁) body with
+                | some (_, stB) =>
+                    if stB.finishA (Context.pushLabel ts₂ C) ts₂ then
+                      some ([], st₀.pushs ts₂)
+                    else none
+                | none => none
+            | none => none
+          else none
+      | none => none
+  | i =>
+      match instrTypeA C i with
+      | some it => (applyTypeA C st it).map (it.locals, ·)
+      | none => match instrType C i with
+          | some it => (applyTypeA C st it).map (it.locals, ·)
+          | none => none
+
+def checkSeqA (C : Context) (st : St) : InstrSeq → Option (List LocalIdx × St)
+  | .nil => some ([], st)
+  | .cons i rest =>
+      match checkInstrA C st i with
+      | some (xs₁, st') => match Context.setEffects C xs₁ with
+          | some C' => match checkSeqA C' st' rest with
+              | some (xs₂, st'') => some (xs₁ ++ xs₂, st'')
+              | none => none
+          | none => none
+      | none => none
+
+end
+
+def checkExprA (C : Context) (e : Expr) (ts : List ValType) : Bool :=
+  match checkSeqA C (St.mk false []) e with
+  | some (_, st) => st.finishA C ts
+  | none => false
+
 /-! ## Soundness of the computed instruction types
 
 Everything `instrType` accepts, the declarative judgment derives.  One case per
@@ -483,7 +1514,7 @@ theorem toInn_toNumType {nt : NumType} {n : Inn} (h : nt.toInn? = some n) :
   cases nt <;> simp [NumType.toInn?] at h <;> (try subst h) <;> rfl
 
 theorem instrType_sound {C : Context} {i : Instr} {it : InstrType}
-    (h : instrType C i = some it) : Instr_ok C i it := by
+    (h : instrType C i = some it) : Instr_okA C i it := by
   rw [instrType] at h
   by_cases hwf : Instr.wf i = true
   · rw [if_pos hwf] at h
@@ -496,7 +1527,7 @@ theorem instrType_sound {C : Context} {i : Instr} {it : InstrType}
       split at h
       · rename_i hnv
         injection h with h; subst h
-        exact .select_expl (valtype_ok_of_nvb (ValType.nvb_of_nv hnv))
+        exact .select_expl (valtype_okA_of_nvb (ValType.nvb_of_nv hnv))
       · exact absurd h (by simp)
     · -- BR_IF
       rename_i l
@@ -894,7 +1925,9 @@ def Instr.special : Instr → Bool
   | .drop => true
   | .select none => true
   | .br _ => true
+  | .brTable _ _ => true
   | .ret => true
+  | .returnCall _ => true
   | .block _ _ => true
   | .loop _ _ => true
   | .ifElse _ _ _ => true
@@ -953,8 +1986,8 @@ theorem funcTypeOf_of_expand {dt : DefType} {dom cod : ValTypes}
 
 theorem instrType_complete {C : Context} {i : Instr} {it : InstrType}
     (hC : Context.frag C = true) (hfrag : Instr.frag i = true)
-    (hsp : Instr.special i = false) (h : Instr_ok C i it) : instrType C i = some it := by
-  have hwf : Instr.wf i = true := Instr_ok.wf_of h
+    (hsp : Instr.special i = false) (h : Instr_okA C i it) : instrType C i = some it := by
+  have hwf : Instr.wf i = true := Instr_okA.wf_of h
   rw [instrType, if_pos hwf]
   cases h
   case nop => rfl
@@ -1143,6 +2176,26 @@ theorem funcTypeOf_nv {dt : DefType} {dom cod : List ValType}
     · exact absurd h (by simp)
   · exact absurd h (by simp)
 
+/-- `funcTypeOf` is `Expand` at a function type of the fragment, read as a
+function. -/
+theorem funcTypeOf_expand {dt : DefType} {dom cod : List ValType}
+    (h : funcTypeOf dt = some (dom, cod)) :
+    ∃ d c : ValTypes, Expand dt (.func d c) ∧
+      ValTypes.toList d = dom ∧ ValTypes.toList c = cod := by
+  rw [funcTypeOf] at h
+  cases hexp : expandDt dt with
+  | none => simp only [hexp] at h; exact absurd h (by simp)
+  | some ct =>
+      cases ct with
+      | func d c =>
+          simp only [hexp] at h
+          by_cases hif : (nvs (ValTypes.toList d) && nvs (ValTypes.toList c)) = true
+          · rw [if_pos hif] at h
+            simp only [Option.some.injEq, Prod.mk.injEq] at h
+            exact ⟨d, c, .mk hexp, h.1.symm ▸ rfl, h.2.symm ▸ rfl⟩
+          · rw [if_neg hif] at h; exact absurd h (by simp)
+      | _ => simp only [hexp] at h; exact absurd h (by simp)
+
 theorem instrType_nv {C : Context} {i : Instr} {it : InstrType}
     (h : instrType C i = some it) : nvs it.dom = true ∧ nvs it.cod = true := by
   rw [instrType] at h
@@ -1241,13 +2294,11 @@ mechanisation.
 WHAT THE REPOSITORY DOES ABOUT IT.  The pin is NOT advanced --- that would
 change the vendored blob set and the rule inventory.  The deviation is recorded
 as DEV-006 in `model/spec-deviations.json`, and
-`Core/Validation/InstructionsAmended.lean` states the amended judgment the
-repository uses (`Instrs_ok'`), proves it CONTAINS the pinned one
-(`Instrs_ok.to_amended`), derives the compositions the pinned rules cannot
-express, and proves the amendment did not widen the arity discipline.
-`Core/ValidateSeq.lean` then proves the equivalence of the algorithm with THAT
-judgment in both directions; `Core/ValidateModule.lean` carries the soundness
-half up to whole modules as `validate_sound`. -/
+`Core/Validation/InstructionsCombinedAmended.lean` states the sole amended
+judgment the repository uses (`Instrs_okA`), composes the sequence repair with
+the corrected type/subtyping hierarchy, derives the compositions the pinned
+rules cannot express, and proves that the repair does not widen the arity
+discipline. -/
 
 /-! ### The defect, stated in general
 
@@ -1390,6 +2441,89 @@ theorem Expr_ok.const_const_binop_untypable {C : Context} {nt : NumType}
   | mk hseq =>
       rw [InstrSeq.toList_ofList] at hseq
       exact Instrs_ok.const_const_binop_untypable hseq rfl
+
+/-! ## Soundness helpers for the full amended pass -/
+
+theorem funcTypeOfA_sound {dt : DefType} {dom cod : List ValType}
+    (h : funcTypeOfA dt = some (dom, cod)) :
+    ∃ ds cs : ValTypes, dom = ValTypes.toList ds ∧ cod = ValTypes.toList cs ∧
+      Expand dt (.func ds cs) := by
+  unfold funcTypeOfA at h
+  split at h
+  · rename_i ds cs he
+    injection h with h
+    obtain ⟨hdom, hcod⟩ := Prod.mk.injEq .. ▸ h
+    exact ⟨ds, cs, hdom.symm, hcod.symm, .mk he⟩
+  · contradiction
+
+theorem blockTypeA_sound {C : Context} {bt : BlockType}
+    {dom cod : List ValType} (h : blockTypeA C bt = some (dom, cod)) :
+    Blocktype_okA C bt ⟨dom, [], cod⟩ := by
+  cases bt with
+  | result t =>
+      cases t with
+      | none =>
+          simp only [blockTypeA, Option.some.injEq, Prod.mk.injEq] at h
+          obtain ⟨rfl, rfl⟩ := h
+          exact .valtype (fun _ hm => nomatch hm)
+      | some t =>
+          simp only [blockTypeA] at h
+          split at h
+          · rename_i ht
+            injection h with h
+            obtain ⟨rfl, rfl⟩ := Prod.mk.injEq .. ▸ h
+            exact .valtype (fun _ hm => by
+              simp only [Option.some.injEq] at hm
+              subst hm
+              exact checkValtypeOkA_sound ht)
+          · contradiction
+  | idx x =>
+      simp only [blockTypeA] at h
+      split at h
+      · rename_i dt hx
+        obtain ⟨ds, cs, rfl, rfl, he⟩ := funcTypeOfA_sound h
+        exact .typeidx hx he
+      · contradiction
+
+theorem checkCatchA_sound {C : Context} {c : Catch}
+    (h : checkCatchA C c = true) : Catch_okA C c := by
+  cases c with
+  | tag x l =>
+      simp only [checkCatchA] at h
+      split at h
+      · rename_i jt ts hx hl
+        split at h
+        · rename_i dt hj
+          split at h
+          · rename_i dom he
+            exact .catch hx hj (.mk he) hl (resulttype_subA_of_subsA h)
+          · contradiction
+        · contradiction
+      · contradiction
+  | tagRef x l =>
+      simp only [checkCatchA] at h
+      split at h
+      · rename_i jt ts hx hl
+        split at h
+        · rename_i dt hj
+          split at h
+          · rename_i dom he
+            exact .catch_ref hx hj (.mk he) hl (resulttype_subA_of_subsA h)
+          · contradiction
+        · contradiction
+      · contradiction
+  | all l =>
+      simp only [checkCatchA] at h
+      split at h
+      · rename_i ts hl
+        exact .catch_all hl (resulttype_subA_of_subsA h)
+      · contradiction
+  | allRef l =>
+      simp only [checkCatchA] at h
+      split at h
+      · rename_i ts hl
+        exact .catch_all_ref hl (resulttype_subA_of_subsA h)
+      · contradiction
 
 end Validate
 end WasmGemmGnaf.Wasm.Core

@@ -52,14 +52,14 @@
   first is now closed, and the state of each is:
 
   1. **CLOSED --- the pinned tree is vendored, and Lean is bound to its
-     content.**  `vendor/wasm-spec/` holds the forty
-     `document/core/{binary,valid,exec,syntax,appendix}` files of the official
-     `wg-3.0` tree at the pinned commit, with a per-file digest manifest at
+     content.**  `vendor/wasm-spec/` holds 374 pinned Core files (SpecTec
+     sources, rendered documents, and tests) from the official `wg-3.0` tree at
+     the pinned commit, with a per-file digest manifest at
      `vendor/wasm-spec/SHA256SUMS` and the commit at
      `vendor/wasm-spec/PINNED-COMMIT`; `authority/manifest.json` records
      `wasmCore.vendored = true`.  `Wasm/Revision.lean` records the digest of
      that manifest as `core3VendorManifestSha256`, and `xtask vendor`
-     recomputes it --- and rechecks `SHA256SUMS` against all forty files ---
+     recomputes it --- and rechecks `SHA256SUMS` against all 374 files ---
      from the bytes on disk, failing the gate when the Lean literal has
      drifted.  Lean stands on the literal; the tool is what stops the literal
      from being a wish.  Falsifier `M13` plants a mutated `SHA256SUMS` on a
@@ -70,8 +70,9 @@
      development does not use --- that the *string* `"Step.nop"` names the
      declaration `Step.nop`.  That correspondence is by review.
   3. **THE MAP IS NOT MIGRATED --- one row of it is.**  `binary-module` maps to
-     `WasmGemmGnaf.Wasm.decode`, which since the front-end migration IS the
-     pinned Core 3.0 decoder of `Wasm/Core/Decode.lean`.  Every OTHER row still
+     `WasmGemmGnaf.Wasm.decode`, which since the front-end migration is the
+     amended Core 3.0 decoder exposed by `Wasm/CoreFrontEnd.lean`.  Every
+     OTHER row still
      names a declaration of the i32 subset model (`InstrTyping.*`, `Step.*`,
      `Store.*`, `TableInst.*`, `V128.*`), which is a strictly narrower language
      than the pinned one.  So `profile_matches_pinned_revision` is, today, a
@@ -97,12 +98,12 @@
        The enumeration is a declared *subset* of the pinned rule set and is not
        proved to be all of it.
      * that the anchor's *body* says what the Lean declaration does.  The
-       vendored `.rst` sources state most rule bodies as unexpanded SpecTec
-       macro references (`${rule: ...}` / `$${rule: ...}`), whose `.watsup`
-       definitions are **not** in the vendored file set.  A label check is
-       therefore a check on rule *identity*, not on rule *content*, and no
-       tooling in this repository can close that difference from the vendored
-       bytes alone.
+       rendered `.rst` sources state most rule bodies as SpecTec macro
+       references, while the corresponding authoritative `.spectec` sources
+       are also vendored and inventoried by `xtask core`.  Anchor existence
+       is still only a check on rule *identity*: this manually curated map does
+       not prove semantic correspondence between a source body and the Lean
+       theorem body.
 
   Every declaration in this file is proved.  Nothing is assumed.
 -/
@@ -146,15 +147,15 @@ theorem string_append_left_cancel {p a b : String} (h : p ++ a = p ++ b) : a = b
   have h3 := congrArg String.ofList h2
   rwa [String.ofList_toList, String.ofList_toList] at h3
 
-/-! ## The status of a pinned rule -/
+/-! ## The status of a locally mapped legacy rule -/
 
-/-- What the released development does with a pinned rule. -/
+/-- What the current, mostly legacy map records for a rule identifier. -/
 inductive RuleStatus
-  /-- The rule has a Lean declaration and is reachable in the released
+  /-- The rule has a Lean declaration and is reachable in the legacy subset
   machine. -/
   | modelled
-  /-- The rule has a Lean declaration, but the released validator rejects the
-  instruction, so no released execution reaches it.  See the scope theorems in
+  /-- The rule has a Lean declaration, but the legacy subset validator rejects
+  the instruction, so no legacy subset execution reaches it.  See the scope theorems in
   `Wasm/Table.lean` and `Wasm/Vector.lean`. -/
   | modelledUnreachable
   /-- The rule belongs to a family the profile rejects; it has no Lean
@@ -777,7 +778,7 @@ def leanDeclaration? : PinnedCoreRuleId → Option String
 transcribed from, without its leading underscore: `"valid-nop"` is the anchor
 `.. _valid-nop:` of `vendor/wasm-spec/document/core/valid/instructions.rst`.
 `none` is exactly a rejected family, which by definition has no vendored rule
-in the released profile.
+in the locally represented profile fragment.
 
 `xtask vendor` checks that every anchor here is a label DEFINED in the vendored
 tree, so an invented identifier fails the gate.  Two things this map is not:
@@ -786,9 +787,9 @@ tree, so an invented identifier fails the gate.  Two things this map is not:
   case are one label and two Lean declarations (`exec-load-val` covers both
   `Step.load` and `Step.loadTrap`), and the harness rules specialize the
   vendored invocation and store rules.
-* it is not a claim about the rule's *body*.  The vendored `.rst` sources carry
-  most rule bodies as unexpanded SpecTec macros whose `.watsup` definitions are
-  not vendored, so the label is checkable and the body is not. -/
+* it is not a claim about the rule's *body*.  The rendered `.rst` anchor and
+  the authoritative `.spectec` sources are vendored, but mapping an anchor
+  to a Lean declaration does not prove that their bodies correspond. -/
 def vendorAnchor? : PinnedCoreRuleId → Option String
   | .decodeModule => some "binary-module"
   | .decodeUleb128 => some "binary-uint"
@@ -1139,7 +1140,7 @@ def PinnedCoreRuleId.row (id : PinnedCoreRuleId) : AdequacyRow :=
     family := id.family
     status := id.status }
 
-/-- The released conformance map: the pinned commit and the vendored tree,
+/-- The current, partly legacy conformance map: the pinned commit and vendored tree,
 together with one row per enabled identifier. -/
 def core3AdequacyMap : AdequacyMap :=
   { revisionCommit := core3RevisionCommit
@@ -1153,7 +1154,7 @@ theorem core3AdequacyMap_revisionCommit :
 
 /-- **Identity binding to the vendored content.**  The map carries the vendored
 tree record, whose `manifestSha256` is the digest of
-`vendor/wasm-spec/SHA256SUMS`, itself the list of digests of all forty vendored
+`vendor/wasm-spec/SHA256SUMS`, itself the list of digests of all 374 vendored
 files.  Changing any vendored byte changes that literal, and `xtask vendor`
 recomputes it from the bytes on disk. -/
 theorem core3AdequacyMap_vendorTree :
@@ -1391,10 +1392,10 @@ theorem mapped_declarations_referenced : True := by
   have _ := @ExprTyping.nil
   have _ := @ExprTyping.cons
   have _ := @validate
-  have _ := @WasmGemmGnaf.Wasm.Module.checkFunc
-  have _ := @WasmGemmGnaf.Wasm.Module.checkMems
-  have _ := @WasmGemmGnaf.Wasm.Module.checkGemmExport
-  have _ := @WasmGemmGnaf.Wasm.Module.checkClosed
+  have _ := @WasmGemmGnaf.Wasm.Subset.Module.checkFunc
+  have _ := @WasmGemmGnaf.Wasm.Subset.Module.checkMems
+  have _ := @WasmGemmGnaf.Wasm.Subset.Module.checkGemmExport
+  have _ := @WasmGemmGnaf.Wasm.Subset.Module.checkClosed
   have _ := @Store.alloc
   have _ := @Store.loadBytes
   have _ := @Store.storeBytes
@@ -1457,17 +1458,17 @@ theorem mapped_declarations_referenced : True := by
 
 /-! ## Scope of the `modelledUnreachable` status
 
-`Wasm/Table.lean` proves that the released validator rejects every table
+`Wasm/Table.lean` proves that the legacy subset validator rejects every table
 instruction, that a validating module declares no table or element segment at
 all, and that `Wasm/Step.lean` enumerates no successor for a table instruction.
 The same holds of the vector instructions, and is proved here because this is
 the first module importing both `Wasm/Vector.lean` and `Wasm/Step.lean`.
 
 Together these are the machine-checked meaning of `RuleStatus.modelledUnreachable`:
-the mapped declaration exists and its laws are proved, but no released execution
+the mapped declaration exists and its laws are proved, but no legacy subset execution
 reaches it. -/
 
-/-- The released validator types no vector instruction. -/
+/-- The legacy subset validator types no vector instruction. -/
 theorem checkInstr_vector_rejected (C : Ctx) (h : Nat) (s : VecShape)
     (lane : Nat) (lo hi : UInt64) (arg : MemArg) (lanes : List Nat)
     (u : VecUnOp) (b : VecBinOp) (r : VecRelOp) (ext : Option SignExt) :
@@ -1484,7 +1485,7 @@ theorem checkInstr_vector_rejected (C : Ctx) (h : Nat) (s : VecShape)
     checkInstr C h (.vecStore arg) = none :=
   ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
-/-- The released reduction relation enumerates no successor for a vector
+/-- The legacy subset reduction relation enumerates no successor for a vector
 instruction. -/
 theorem successorsOfInstr_vector_empty (c : Config) (rest : List Instr)
     (s : VecShape) (lane : Nat) (lo hi : UInt64) (arg : MemArg)

@@ -1,10 +1,10 @@
-//! `xtask gate [--no-mutation]` -- the normative release gate. SPEC section 20.2.
+//! `xtask gate` -- the normative release gate. SPEC section 20.2.
 //! Replaces `Tools/gate.py`.
 //!
-//! Exits non-zero unless every numbered condition holds. It is expected to fail
-//! at step 9 while WGG-GO-1 is outstanding; that failure is the conforming
-//! behaviour, and per UOR-GNAF 13.3 the gate MUST NOT return an unproved global
-//! label.
+//! Exits non-zero unless every numbered condition holds. While prerequisites and
+//! WGG-GO-1 are outstanding it fails at their corresponding steps, necessarily
+//! including step 9. Per UOR-GNAF 13.3 the gate MUST NOT return an unproved
+//! global label.
 //!
 //! Three rules here were each learned from a real defect and are load-bearing:
 //!
@@ -23,6 +23,15 @@ use crate::spec::{Outcome, Result, SpecError};
 use crate::{amendment, firewall, json, lean, manifest, repo, required, sha256, vendor};
 
 const CLAUSE: &str = "20.2";
+pub const RELEASE_THEOREM: &str =
+    "WasmGemmGnaf.Artifact.released_wasm_gemm_gnaf_global_optimal";
+
+/// The exact step-9 decision, factored so M6 can plant an absent/present
+/// environment response without depending on the repository's current closure
+/// state. JSON status is deliberately irrelevant.
+pub fn release_theorem_declared(seen: &str) -> bool {
+    seen.contains(&format!("'{RELEASE_THEOREM}' "))
+}
 
 /// The declarations whose PRESENCE decides steps 2, 4, 5, 8 and 9.
 ///
@@ -30,12 +39,12 @@ const CLAUSE: &str = "20.2";
 /// re-imports the whole library each time and times the gate out.
 const PRESENCE_PROBE: [&str; 7] = [
     "WasmGemmGnaf.Conformance.globalOptimal_matches_authority_schema",
-    "WasmGemmGnaf.Conformance.profileValid_matches_authority_schema",
+    "WasmGemmGnaf.Conformance.canonicalBytesLE_matches_authority_schema",
     "WasmGemmGnaf.Wasm.profile_matches_pinned_revision",
     "WasmGemmGnaf.Universal.universal_sublevel_coverage",
     "WasmGemmGnaf.Universal.all_competitors_lower_bound",
     "WasmGemmGnaf.Artifact.released_attains_lower_bound",
-    "WasmGemmGnaf.Artifact.released_wasm_gemm_gnaf_global_optimal",
+    RELEASE_THEOREM,
 ];
 
 /// Accumulates the numbered verdicts and prints each as it is decided.
@@ -68,7 +77,7 @@ fn verdict(ok: bool) -> &'static str {
     }
 }
 
-pub fn run(root: &Path, no_mutation: bool) -> Result<Outcome> {
+pub fn run(root: &Path) -> Result<Outcome> {
     let mut g = Gate { failed: 0 };
     println!("release gate (SPEC 20.2)\n");
 
@@ -139,17 +148,15 @@ pub fn run(root: &Path, no_mutation: bool) -> Result<Outcome> {
         &clip(&binding.findings.join("; "), 200),
     );
 
-    // SPEC 7.3, AMD-005 / DEV-006: the same discipline for the recorded grammar
-    // amendment. `Wasm/Core/ProfileAmendment.lean` discharges every property the
-    // record claims that Lean can state; this checks the half Lean cannot -- the
-    // digest of the vendored SpecTec source the defect is in, the SHA256SUMS
-    // entry for it, that the pin was NOT advanced to upstream's repair, and that
-    // the amended module declares the recorded relation and inflates no coverage
-    // inventory.
+    // SPEC 7.3, AMD-005 and AMD-007--AMD-013: apply the vendored-tree discipline
+    // to the canonical Core 3.0 authority-amendment set. This checks every exact
+    // source digest and textual operation, the pinned tree identity, the
+    // deviation/amendment register edges, every named amended Lean declaration,
+    // and the required absence of coverage markers in their source modules.
     let amended = amendment::binding(root)?;
     g.check(
         "1",
-        "the recorded grammar amendment matches the pinned source and the pin",
+        "the canonical authority-amendment set matches its pinned sources and registers",
         amended.is_ok(),
         &clip(&amended.findings.join("; "), 200),
     );
@@ -176,6 +183,12 @@ pub fn run(root: &Path, no_mutation: bool) -> Result<Outcome> {
         .filter(|d| !ids.contains(d))
         .collect();
     g.check("2", "no orphan dependencies", dangling.is_empty(), &py_list(&dangling));
+    g.check(
+        "2",
+        "complete SPEC 17.2 claim-row schema and falsifier linkage",
+        false,
+        "CM-007 open: current checker enforces only nonempty/unique IDs, non-orphan dependencies, and formalProof declaration fields",
+    );
 
     // SPEC 5.1: the Lean development and the Rust tooling are separate trees.
     // The tooling crate must never end up on the proof path.
@@ -342,23 +355,24 @@ pub fn run(root: &Path, no_mutation: bool) -> Result<Outcome> {
     let seen = presence.combined();
     let declared = |name: &str| seen.contains(&format!("'{name}' "));
 
-    // SPEC 1 / authority WGG-GO-1: the gate must compare the compiled UNFOLDED
-    // definition with the frozen schema, not merely find a name. The binding is
-    // definitional (Iff.rfl in Conformance/Schema.lean), so a weakened
-    // GlobalOptimal or an artifact-specific ProfileValid stops elaborating.
+    // SPEC 1 / authority WGG-GO-1: exact entries are compared definitionally,
+    // while known legacy-carrier mismatches must be marked as explicit gaps and
+    // receive no release credit. A self-restatement of a legacy body is not an
+    // authority match.
     //
     // The two named here are the ones the release theorem is stated in, so they
     // are answered from the presence probe already run. That is a spot check on
-    // two of thirteen, which is why the full audit follows it: the audit reads
+    // two of fourteen, which is why the full audit follows it: the audit reads
     // the authority's own `scopeCriticalDefinitions` array, so a definition
     // added to the frozen authority cannot pass unnoticed for want of anyone
-    // remembering to extend this list.
+    // remembering to extend this list. Exact and explicitly open entries are
+    // distinguished by the source markers.
     g.check(
         "2",
-        "scope-critical definitions match the frozen WGG-GO-1 schema",
+        "schema accounting declarations elaborate",
         declared("WasmGemmGnaf.Conformance.globalOptimal_matches_authority_schema")
-            && declared("WasmGemmGnaf.Conformance.profileValid_matches_authority_schema"),
-        "schema binding absent -- a name check alone cannot reject a weakened proposition",
+            && declared("WasmGemmGnaf.Conformance.canonicalBytesLE_matches_authority_schema"),
+        "exact schema binding absent -- a name check alone cannot reject a weakened proposition",
     );
 
     let required_definitions = crate::schema::scope_critical_definitions()?;
@@ -371,11 +385,12 @@ pub fn run(root: &Path, no_mutation: bool) -> Result<Outcome> {
     let unbound = crate::schema::audit(
         &required_definitions,
         &crate::schema::parse(&schema_source),
+        &crate::schema::parse_gaps(&schema_source),
     );
     g.check(
         "2",
         &format!(
-            "all {} authority scope-critical definitions definitionally bound",
+            "all {} authority names exactly bound or explicitly open",
             required_definitions.len()
         ),
         unbound.is_empty(),
@@ -416,25 +431,20 @@ pub fn run(root: &Path, no_mutation: bool) -> Result<Outcome> {
     g.check(
         "9",
         "released_wasm_gemm_gnaf_global_optimal closed",
-        declared("WasmGemmGnaf.Artifact.released_wasm_gemm_gnaf_global_optimal"),
+        release_theorem_declared(&seen),
         "declaration absent; answer class WorkloadIncomplete (UOR-GNAF 10.9)",
     );
 
     // ---- 10-13 --------------------------------------------------------------
     g.check("10", "Atlas seal reconstructs", false, "seal not constructed");
 
-    if no_mutation {
-        // Invoked from M6; running the suite here would recurse back into the gate.
-        g.check("11", "mutation suites reject planted faults", true, "skipped (invoked from M6)");
-    } else {
-        let mutation = run_command(Command::new(self_exe()?).arg("mutation"))?;
-        g.check(
-            "11",
-            "mutation suites reject planted faults",
-            mutation.ok,
-            &tail(mutation.stdout.trim(), 160),
-        );
-    }
+    let mutation = run_command(Command::new(self_exe()?).arg("mutation"))?;
+    g.check(
+        "11",
+        "mutation suites reject planted faults",
+        mutation.ok,
+        &tail(mutation.stdout.trim(), 160),
+    );
 
     g.check("12", "two clean emissions byte-identical", false, "gated on step 6");
 

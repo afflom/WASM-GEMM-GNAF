@@ -58,13 +58,13 @@ SOURCE CHECKS (read the tree)
                                pinned commit, and every vendored rule anchor cited by
                                `Wasm/Adequacy.lean`. --list adds the coverage
                                arithmetic and the SpecTec scope limit.
-    amendment                  The recorded grammar amendment (SPEC 7.3, AMD-005 /
-                               DEV-006), checked against the tree: the digest of the
-                               vendored SpecTec source the defect is in, the entry
-                               SHA256SUMS lists for it, that the pin was NOT advanced
-                               to upstream's repair, that the amended Lean module
-                               declares the recorded relation, and that it carries no
-                               Core 3.0 coverage marker.
+    amendment                  The canonical Core 3.0 authority-amendment set
+                               (SPEC 7.3; AMD-005 and AMD-007--AMD-013), checked
+                               against the pinned tree: exact source digests and
+                               textual operations, tree/pin identity, deviation and
+                               amendment register edges, all named amended Lean
+                               declarations, and zero coverage markers in their
+                               source modules.
     core [--list]              How much of the PINNED Core 3.0 front end the Lean
                                tree covers (SPEC 7.1). The checklist is EXTRACTED
                                from the vendored SpecTec sources -- every opcode
@@ -84,10 +84,9 @@ ENVIRONMENT CHECKS (question the compiled Lean environment)
                                (SPEC 17.1).
     axioms                     Axiom closure of every formalProof claim (SPEC 19).
     schema                     Every `scopeCriticalDefinitions` entry of the frozen
-                               WGG-GO-1 authority is bound to its fully spelled-out
-                               body by a definitional proof (SPEC 1). The authority
-                               JSON supplies the list; Lean's elaborator compares
-                               the bodies.
+                               WGG-GO-1 authority is either bound definitionally or
+                               marked as an explicit uncredited public-carrier gap
+                               (SPEC 1). The authority JSON supplies the inventory.
     signature                  Every SPEC 15 declaration the environment credits is
                                bound to SPEC's PROPOSITION, restated in full and
                                closed by `:= @Name`, in
@@ -102,10 +101,9 @@ GENERATORS (write a tracked file, deterministically)
     docs                       CONFORMANCE.md from model/claims.json (SPEC 17.3).
 
 RELEASE
-    gate [--no-mutation]       The normative release gate: SPEC 20.2's thirteen
-                               conditions. --no-mutation is for the M6 falsifier,
-                               which would otherwise recurse back into this suite.
-    mutation                   Planted falsifiers M1-M15 (SPEC 18). Every mutation is
+    gate                       The normative release gate: SPEC 20.2's thirteen
+                               conditions.
+    mutation                   Planted falsifiers M1-M22 (SPEC 18). Every mutation is
                                applied to a COPY, never to the repository.
 
 Requires `lake build` first for the environment checks.
@@ -174,7 +172,7 @@ fn dispatch(args: &[String]) -> Result<Outcome> {
         "independence" => independence::run(&root),
         "manifest" => manifest::run(has(rest, "--check")),
         "docs" => docs::run(has(rest, "--check")),
-        "gate" => gate::run(&root, has(rest, "--no-mutation")),
+        "gate" => gate::run(&root),
         "mutation" => mutation::run(&root),
         "help" | "--help" | "-h" => {
             print!("{USAGE}");

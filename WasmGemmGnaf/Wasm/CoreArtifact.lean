@@ -1,5 +1,5 @@
 /-
-  Wasm/CoreArtifact.lean --- the released module as PINNED CORE 3.0 BYTES.
+  Wasm/CoreArtifact.lean --- diagnostic amended-Core ABI-shape bytes.
 
   ## What this file is for
 
@@ -10,24 +10,25 @@
   `Wasm/Core/Profile.lean` builds `Wasm.Core.releaseBaselineModule` as abstract
   syntax and proves it admitted, and `Wasm/Core/ProfileAmendment.lean` proves it
   valid under every profile, but no byte string in this repository was ever
-  shown to *be* that module under the pinned decoder.
+  shown to *be* that module under the release decoder.
 
   This file supplies exactly that missing link, as a checked literal:
 
-      Wasm.decode Wasm.Core.releaseArtifactBytes = .ok Wasm.Core.releaseBaselineModule
+      Wasm.decode Wasm.Core.releaseArtifactBytes = .ok Wasm.Core.releaseArtifactModule
 
-  `Wasm.decode` here is the decoder of the complete pinned Core 3.0 binary
+  `Wasm.decode` here is the decoder of the complete amended Core 3.0 binary
   format (`Wasm/CoreFrontEnd.lean`), so the equation above is a fact about the
-  pinned grammar and not about any encoder written here --- there is no encoder
-  written here.  `releaseArtifactBytes` is 53 hand-written bytes; the decoder
-  either accepts them and returns that exact module or it does not, and the
-  kernel decides which.
+  release grammar and its proof does not route through an encoder.
+  `releaseArtifactBytes` is 53 hand-written bytes; the decoder either accepts
+  them and returns that exact module or it does not, and the kernel decides
+  which.
 
   ## What follows from it
 
   * `releaseArtifactBytes_declarative` --- through `Wasm.decode_sound`, the
-    bytes are DERIVABLE in `Wasm.Core.Binary.Bmodule`, the transcription of
-    `5.*-binary.*.spectec`.  So this is a statement about the pinned grammar,
+    bytes are DERIVABLE in `Wasm.Core.Binary.BmoduleA`, the exact release
+    interpretation of `5.*-binary.*.spectec`.  So this is a statement about
+    the amended grammar,
     reached through a theorem that was checked for reflection independence.
   * `releaseArtifactBytes_validUnder` --- the module those bytes denote is valid
     under every lawful profile in the sense `Wasm/Core/ProfileAmendment.lean`
@@ -39,30 +40,34 @@
 
   A byte literal that decoded to *anything* admitted would prove nothing about
   admission, so `releaseArtifactBytes_mutated_not_admitted` takes the same
-  literal with ONE byte changed --- `gemm` becomes `gemn` --- shows the pinned
+  literal with ONE byte changed --- `gemm` becomes `gemn` --- shows the amended
   decoder still accepts it, and shows the released profile then REJECTS the
   module, because the required `gemm` export is gone.  Admission is therefore
   doing work on these bytes rather than passing everything the decoder returns.
 
   ## What this file does NOT claim
 
-  * Not that these are the bytes the release path SELECTS.  `Release.artifactBytes`
-    does not exist, `Artifact.baselineBytes` is the subset codec's output, and
-    `Artifact.core_rejects_baselineBytes` in `Artifact/Baseline.lean` proves the
-    pinned decoder rejects it.  Which byte string the release path commits to is
-    the selection layer's business and is still open.
+  * Not that these are the bytes the release path SELECTS.  No selected or
+    committed release byte literal exists.  `Artifact/Baseline.lean` retains
+    only module-level facts about the legacy subset compiler output and defines
+    no emitted bytes.  The public Core backend does exist:
+    `Wasm.Module.encodable`, `Wasm.encode_declarative` and
+    `Artifact.decode_emit` prove that every representable public module has an
+    amended Core encoding which decodes back to it.  That generic round trip
+    neither selects this diagnostic literal nor proves a release score.
   * Not that `Wasm.Core.releaseBaselineModule` computes a GEMM.  Its body is
     `local.get 0`.  It is the released ABI SHAPE, and every theorem here is
     about that shape.
-  * Not that `Universal.ProfileValid` ranges over these bytes.  It does not:
-    that predicate still decodes with `Wasm.Subset.decode`, and moving it is
-    blocked on the Core execution layer, not on this file.
+  * Not that the release competitor and evaluation layers are closed over these
+    bytes.  Connecting a selected compiler artifact to exact execution,
+    resource and objective evidence remains outside this diagnostic file.
 
   Every declaration in this file is proved.  Nothing is assumed, and no
   declaration here carries a Core 3.0 coverage marker: this file transcribes no
   pinned rule.
 -/
 import WasmGemmGnaf.Wasm.CoreFrontEnd
+import WasmGemmGnaf.Wasm.Core.EncodeSound
 import WasmGemmGnaf.Wasm.Core.ProfileAmendment
 
 set_option autoImplicit false
@@ -74,7 +79,7 @@ open WasmGemmGnaf.Foundation
 
 /-! ## The byte literal
 
-The pinned Core 3.0 module encoding of `Wasm.Core.releaseBaselineModule`, laid
+The amended Core 3.0 module encoding of `Wasm.Core.releaseBaselineModule`, laid
 out section by section.  Nothing here is generated: the bytes are written down
 and the decoder is asked what they mean.
 
@@ -90,8 +95,8 @@ and the decoder is asked what they mean.
 ```
 -/
 
-/-- **The released Core 3.0 artifact bytes.**  53 bytes of the pinned binary
-format. -/
+/-- A 53-byte diagnostic amended-Core ABI-shape literal.  It is neither selected
+nor committed as a release artifact. -/
 def releaseArtifactBytes : ByteArray :=
   Bytes.pack
     [ 0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00
@@ -110,7 +115,7 @@ theorem releaseArtifactBytes_size : releaseArtifactBytes.size = 53 := by
 /-! ## The decode
 
 The only step that is not a computation is turning the `ByteArray` into the
-grammar's `Bytes`; after that the kernel runs the pinned decoder. -/
+grammar's `Bytes`; after that the kernel runs the amended decoder. -/
 
 theorem releaseArtifactBytes_toBytes :
     ByteArray.toBytes releaseArtifactBytes =
@@ -126,22 +131,38 @@ theorem releaseArtifactBytes_toBytes :
   simp [ByteArray.toBytes, releaseArtifactBytes, bytesOf]
 
 /-- **The link the release path was missing.**  The decoder of the complete
-pinned Core 3.0 binary format accepts `releaseArtifactBytes` and returns exactly
+amended Core 3.0 binary format accepts `releaseArtifactBytes` and returns exactly
 `Wasm.Core.releaseBaselineModule` --- the module `Wasm/Core/Profile.lean` proves
 the released profile admits. -/
-theorem decode_releaseArtifactBytes :
-    Wasm.decode releaseArtifactBytes = .ok releaseBaselineModule := by
-  show Decode.decModule (ByteArray.toBytes releaseArtifactBytes) = _
+theorem core_decode_releaseArtifactBytes :
+    decodeA releaseArtifactBytes = .ok releaseBaselineModule := by
+  show Decode.decModuleA (ByteArray.toBytes releaseArtifactBytes) = _
   rw [releaseArtifactBytes_toBytes]
   rfl
 
-/-- **The bytes are derivable in the pinned grammar.**  Through
+/-- The public representable carrier for the released Core module.  The source
+bytes occur only as the erased witness of representability. -/
+def releaseArtifactModule : Wasm.Module :=
+  { core := releaseBaselineModule
+    representable :=
+      ⟨ByteArray.toBytes releaseArtifactBytes,
+       decode_soundA core_decode_releaseArtifactBytes⟩ }
+
+@[simp] theorem releaseArtifactModule_core :
+    releaseArtifactModule.core = releaseBaselineModule := rfl
+
+/-- **The link the release path was missing.**  The public decoder accepts the
+released bytes and returns their exact representable Core carrier. -/
+theorem decode_releaseArtifactBytes :
+    Wasm.decode releaseArtifactBytes = .ok releaseArtifactModule :=
+  Wasm.decode_complete (decode_soundA core_decode_releaseArtifactBytes)
+
+/-- **The bytes are derivable in the amended grammar.**  Through
 `Wasm.decode_sound`, which `xtask independence` checks is not a statement about
-an encoder, `releaseArtifactBytes` is a `Bmodule` derivation of
-`releaseBaselineModule` --- a fact about `5.*-binary.*.spectec` at the pinned
-commit. -/
+an encoder, `releaseArtifactBytes` is a `BmoduleA` derivation of
+`releaseBaselineModule` under the identity-bound release interpretation. -/
 theorem releaseArtifactBytes_declarative :
-    Wasm.DeclarativeBinaryRelation releaseArtifactBytes releaseBaselineModule :=
+    Wasm.DeclarativeBinaryRelation releaseArtifactBytes releaseArtifactModule :=
   Wasm.decode_sound decode_releaseArtifactBytes
 
 /-! ## Validity under the released profile -/
@@ -161,18 +182,18 @@ theorem releaseArtifactBytes_admitted (P : Wasm.Profile) :
   releaseBaselineModule_admitted P
 
 /-- Decode and admission in one statement over the bytes, which is the shape a
-profile-validity predicate stated over the pinned decoder would need. -/
+profile-validity predicate stated over the release decoder would need. -/
 theorem releaseArtifactBytes_decode_and_validUnder (P : Wasm.Profile) :
-    ∃ m : Module,
+    ∃ m : Wasm.Module,
       Wasm.decode releaseArtifactBytes = .ok m ∧
-        Module.ValidUnder P m ∧ m.imports = [] :=
-  ⟨releaseBaselineModule, decode_releaseArtifactBytes,
+        Module.ValidUnder P m.core ∧ m.core.imports = [] :=
+  ⟨releaseArtifactModule, decode_releaseArtifactBytes,
    releaseBaselineModule_validUnder P, rfl⟩
 
 /-! ## Anti-vacuity: admission is not passing everything the decoder returns
 
 One byte differs --- `0x6D` (`m`) becomes `0x6E` (`n`) in the `gemm` export
-name.  The pinned decoder still accepts the result, so this is a live module of
+name.  The amended decoder still accepts the result, so this is a live module of
 the same format; the released profile rejects it, because SPEC section 7.2's
 required `gemm` export is no longer present. -/
 
@@ -214,13 +235,29 @@ def mutatedArtifactModule : Module :=
                , { name := asciiName [0x67, 0x65, 0x6D, 0x6E],
                    externidx := .func idx0 } ] }
 
-/-- The pinned decoder accepts the mutated bytes too: the rejection below is the
+/-- The amended decoder accepts the mutated bytes too: the rejection below is the
 PROFILE's, not the format's. -/
-theorem decode_mutatedArtifactBytes :
-    Wasm.decode mutatedArtifactBytes = .ok mutatedArtifactModule := by
-  show Decode.decModule (ByteArray.toBytes mutatedArtifactBytes) = _
+theorem core_decode_mutatedArtifactBytes :
+    decodeA mutatedArtifactBytes = .ok mutatedArtifactModule := by
+  show Decode.decModuleA (ByteArray.toBytes mutatedArtifactBytes) = _
   rw [mutatedArtifactBytes_toBytes]
   rfl
+
+/-- The mutated Core module as a public representable carrier. -/
+def mutatedPublicArtifactModule : Wasm.Module :=
+  { core := mutatedArtifactModule
+    representable :=
+      ⟨ByteArray.toBytes mutatedArtifactBytes,
+       decode_soundA core_decode_mutatedArtifactBytes⟩ }
+
+@[simp] theorem mutatedPublicArtifactModule_core :
+    mutatedPublicArtifactModule.core = mutatedArtifactModule := rfl
+
+/-- The public decoder accepts the mutated bytes too: profile admission, not
+binary representability, rejects their Core AST. -/
+theorem decode_mutatedArtifactBytes :
+    Wasm.decode mutatedArtifactBytes = .ok mutatedPublicArtifactModule :=
+  Wasm.decode_complete (decode_soundA core_decode_mutatedArtifactBytes)
 
 /-- **The released profile rejects the mutated module.**  So
 `releaseArtifactBytes_admitted` is not a property of every byte string the
@@ -235,5 +272,27 @@ even though it is a perfectly ordinary Core 3.0 module. -/
 theorem mutatedArtifactModule_not_validUnder (P : Wasm.Profile) :
     ¬ Module.ValidUnder P mutatedArtifactModule :=
   fun h => mutatedArtifactModule_not_admitted P h.2
+
+/-! ## Canonical reproduction of this diagnostic artifact
+
+These facts are release-specific and therefore live beside the literal rather
+than in the generic encoder/decoder composition. -/
+
+theorem encodable_releaseBaselineModule :
+    Binary.encodable releaseBaselineModule = true := by
+  decide
+
+theorem encode_releaseBaselineModule :
+    Binary.encode releaseBaselineModule = releaseArtifactBytes := by
+  rfl
+
+theorem decode_encode_releaseBaselineModule :
+    decode (Binary.encode releaseBaselineModule) = .ok releaseBaselineModule :=
+  decode_encode releaseBaselineModule encodable_releaseBaselineModule
+
+theorem decode_encode_eq_releaseArtifactBytes :
+    decode releaseArtifactBytes = .ok releaseBaselineModule := by
+  rw [← encode_releaseBaselineModule]
+  exact decode_encode_releaseBaselineModule
 
 end WasmGemmGnaf.Wasm.Core

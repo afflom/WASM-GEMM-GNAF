@@ -1,18 +1,18 @@
 /-
-  GNAF/CoreGap.lean --- BI-002 as a theorem: `GNAF.compile` emits instructions
-  the pinned Core 3.0 syntax cannot hold.
+  GNAF/CoreGap.lean --- BI-009: `GNAF.compile` reaches an instruction the
+  pinned Core 3.0 syntax cannot hold.
 
   ## Why this file exists
 
   The migration brief for the release path says: move `GNAF/Compile.lean` and
-  everything downstream from `Wasm.Module` to `Wasm.Core.Module`; and it says
+  everything downstream from `Wasm.Subset.Module` to `Wasm.Core.Module`; and it says
   that if `GNAF.compile` cannot emit Core modules without a real compiler
   change, report that rather than invent a bridge.  `Wasm/CoreGap.lean` already
-  settled the module level --- no total map `Wasm.Module -> Wasm.Core.Module`
-  exists, because the release path spells indices as `Nat` and names as raw
-  `List UInt8`.  This file settles the INSTRUCTION level, which is where the
-  compiler actually lives, and it settles it about the compiler's own output
-  rather than about an arbitrary term of the syntax.
+  proves that no total map preserves all subset function type indices or export
+  name bytes.  It does not deny arbitrary total functions between the carrier
+  types.  This file settles the instruction-level preservation obstruction,
+  which is where the compiler actually lives, and does so on the compiler's own
+  output rather than an arbitrary syntax term.
 
   ## The obstruction
 
@@ -61,7 +61,9 @@
   does not have and which `GNAF.envOf` cannot manufacture from a `Sig`, because
   `Sig.mem`, `Sig.scratch` and `Sig.tables` are unbounded `Nat`s.  That is a
   change to the compiler and its address lemmas, not a translation of its
-  output.  It is obligation BI-002 and it is open.
+  output.  This is the discharged negative result `BI-009`; the direct bounded
+  public-Core compiler remains open as `BI-010`, and full arithmetic-mode
+  support remains separately open as `BI-002`.
 
   Every declaration in this file is proved.  Nothing is assumed.
 -/
@@ -157,9 +159,9 @@ theorem compile_gapChecked_emits_two_pow_32 :
   rw [gapChecked_statusAddr] at h
   exact h
 
-/-! ## 4. BI-002 -/
+/-! ## 4. BI-009 -/
 
-/-- **BI-002.**  No total map from the release path's instructions to the pinned
+/-- **BI-009.**  No total map from the release path's instructions to the pinned
 Core 3.0 instructions preserves `i32` constants.
 
 The witness is not hypothetical: `compile_gapChecked_emits_two_pow_32` shows

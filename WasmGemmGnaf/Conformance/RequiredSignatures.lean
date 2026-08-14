@@ -102,7 +102,7 @@ set_option autoImplicit false
 
 namespace WasmGemmGnaf.Conformance
 
-/-! ## 1. Wasm (SPEC §15, eleven declarations) -/
+/-! ## 1. Wasm (SPEC §15, thirteen declarations) -/
 
 /--
 **SPEC §7.3**, quoted verbatim:
@@ -118,8 +118,9 @@ and explicit implicits here.
 
 TYPE OF `module`, disclosed because it MOVED.  SPEC leaves `module` auto-bound
 and states no type for it; §7.2 fixes the reading — "The decoder SHALL recognize
-the complete pinned Core 3.0 binary grammar" — so `module` is a
-`Wasm.Core.Module` and `Wasm.decode` is the Core 3.0 decoder of
+the complete pinned Core 3.0 binary grammar" — so `module` is the public
+representable carrier `Wasm.Module`, whose `.core` field is a `Wasm.Core.Module`,
+and `Wasm.decode` is the Core 3.0 decoder of
 `Wasm/Core/Decode.lean`.  Until this tranche both denoted the SUBSET codec of
 `Wasm/Binary.lean`, and `xtask independence` demoted this name as CIRCULAR
 because the subset proof routed through the subset encoder.  The subset codec
@@ -128,7 +129,7 @@ contains an encoder.
 -/
 -- spec-signature: Wasm.decode_sound
 theorem decode_sound_signature :
-    ∀ {bytes : ByteArray} {module : Wasm.Core.Module},
+    ∀ {bytes : ByteArray} {module : Wasm.Module},
       Wasm.decode bytes = .ok module → Wasm.DeclarativeBinaryRelation bytes module :=
   @Wasm.decode_sound
 
@@ -141,32 +142,74 @@ theorem decode_complete
   Wasm.decode bytes = .ok module
 ```
 
-No deviation.  `module` is a `Wasm.Core.Module` for the reason recorded on
+No deviation.  `module` is a `Wasm.Module` for the reason recorded on
 `decode_sound_signature` above.
 -/
 -- spec-signature: Wasm.decode_complete
 theorem decode_complete_signature :
-    ∀ {bytes : ByteArray} {module : Wasm.Core.Module},
+    ∀ {bytes : ByteArray} {module : Wasm.Module},
       Wasm.DeclarativeBinaryRelation bytes module → Wasm.decode bytes = .ok module :=
   @Wasm.decode_complete
 
 /--
-**SPEC §15** requires `Wasm.validate_iff_declarative`.  SPEC states no theorem of
-that name; the proposition is §7.3's, under the name `validate_bool_iff`:
+**SPEC §7.3 and §15**, quoted verbatim:
 
-> ```lean
-> theorem validate_bool_iff (module : Wasm.Module) :
->   Wasm.validate module = true ↔ Wasm.DeclarativelyValid module
-> ```
+```lean
+theorem encode_decode_roundtrip (module : Wasm.Module) :
+  Wasm.decode (Wasm.encode module) = .ok module
+```
 
-DEVIATION (naming only): SPEC §15 and SPEC §7.3 disagree about the NAME of this
-theorem.  The repository uses the §15 name.  The proposition is §7.3's, verbatim.
+EXACT. The public encoder is computational and complete on the representable
+amended-Core carrier; the theorem uses the independent amended binary grammar.
 -/
--- spec-signature: Wasm.validate_iff_declarative
-theorem validate_iff_declarative_signature :
+-- spec-signature: Wasm.encode_decode_roundtrip
+theorem encode_decode_roundtrip_signature :
     ∀ (module : Wasm.Module),
+      Wasm.decode (Wasm.encode module) = .ok module :=
+  @Wasm.encode_decode_roundtrip
+
+/-!
+**SPEC §7.3 and §15**, quoted verbatim:
+
+```lean
+theorem validate_bool_iff (module : Wasm.Module) :
+  Wasm.validate module = true ↔ Wasm.DeclarativelyValid module
+```
+
+WEAKER CARRIER: the existing theorem uses `Wasm.Subset.Module` and the legacy
+subset validator/declarative judgment. It is pinned here so its proposition
+cannot drift, but it receives no public amended-Core credit.
+-/
+-- spec-signature-weaker: Wasm.validate_bool_iff
+theorem validate_bool_iff_signature :
+    ∀ (module : Wasm.Subset.Module),
       Wasm.validate module = true ↔ Wasm.DeclarativelyValid module :=
-  @Wasm.validate_iff_declarative
+  @Wasm.validate_bool_iff
+
+/--
+**SPEC §7.3 and §15** require public-Core validation preservation. The existing
+declaration is weaker in two independent ways: it uses the legacy
+`Wasm.Subset.Module`/runtime, and it adds an initial `ConfigWellTyped` premise.
+The public proof-carrying configuration theorem remains open.
+
+```lean
+theorem validation_preservation
+    (hvalid : Wasm.DeclarativelyValid module)
+    (hstep : Wasm.Step config event next)
+    (hconfig : Wasm.ConfigInstantiates module config) :
+  Wasm.ConfigWellTyped next
+```
+-/
+-- spec-signature-weaker: Wasm.validation_preservation
+theorem validation_preservation_signature :
+    ∀ {module : Wasm.Subset.Module} {config : Wasm.Config}
+      {event : Wasm.Event} {next : Wasm.Config},
+      Wasm.DeclarativelyValid module →
+      Wasm.Step config event next →
+      Wasm.ConfigInstantiates module config →
+      Wasm.ConfigWellTyped config →
+      Wasm.ConfigWellTyped next :=
+  @Wasm.validation_preservation
 
 /--
 **SPEC §7.3**, quoted verbatim:
@@ -182,11 +225,14 @@ theorem validation_progress
   (Wasm.successors config).Nonempty
 ```
 
-No deviation.
+WEAKER CARRIER: SPEC §7.3's auto-bound `module` is the public amended-Core
+`Wasm.Module`.  The declaration below quantifies over `Wasm.Subset.Module`, and
+its `Config`, instantiation relation, typing invariant, and successor machine
+are the legacy subset runtime.  No public-Core progress theorem is present.
 -/
--- spec-signature: Wasm.validation_progress
+-- spec-signature-weaker: Wasm.validation_progress
 theorem validation_progress_signature :
-    ∀ {module : Wasm.Module} {config : Wasm.Config},
+    ∀ {module : Wasm.Subset.Module} {config : Wasm.Config},
       Wasm.DeclarativelyValid module →
       Wasm.ConfigInstantiates module config →
       Wasm.ConfigWellTyped config →
@@ -204,11 +250,12 @@ theorem mem_successors_iff_step :
   (event, next) ∈ M.successors config ↔ M.Step config event next
 ```
 
-DEVIATION (naming only): SPEC writes the concrete machine as an abstract `M`.
-The repository has exactly one concrete machine, so `M.successors` is
-`Wasm.successors` and `M.Step` is `Wasm.Step`.
+WEAKER MACHINE: SPEC's `M` is the complete pinned amended-Core machine.  The
+current `Wasm.Config`, `Wasm.successors`, and `Wasm.Step` execute only the
+legacy i32 subset (their source files state that scope explicitly).  The exact
+successor theorem for the public Core machine remains open.
 -/
--- spec-signature: Wasm.mem_successors_iff_step
+-- spec-signature-weaker: Wasm.mem_successors_iff_step
 theorem mem_successors_iff_step_signature :
     ∀ (config : Wasm.Config) (event : Wasm.Event) (next : Wasm.Config),
       (event, next) ∈ Wasm.successors config ↔ Wasm.Step config event next :=
@@ -221,12 +268,13 @@ theorem mem_successors_iff_step_signature :
 > Completeness SHALL prove that every relational branch of length at most the
 > bound occurs in the tree, and that `complete` contains every maximal branch.
 
-The repository's proposition is stronger than the quoted sentence in one
-respect and is recorded here in full: when `exploreAll` answers `complete`, the
-returned list contains EVERY finite execution from the initial configuration,
-not only every maximal one.
+Within the legacy subset machine, the proposition below is stronger than the
+quoted sentence in one respect: when `exploreAll` answers `complete`, the list
+contains every finite execution, not only every maximal one.  Its execution
+carrier is nevertheless the subset `Wasm.Config`, not the public amended-Core
+machine, so it does not discharge the SPEC obligation.
 -/
--- spec-signature: Wasm.bounded_tree_covers_every_branch
+-- spec-signature-weaker: Wasm.bounded_tree_covers_every_branch
 theorem bounded_tree_covers_every_branch_signature :
     ∀ {bound : Nat} {initial : Wasm.Config}
       {obs : List Wasm.ExecutionObservation}
@@ -244,9 +292,11 @@ theorem runFuel_sound
   Wasm.FiniteExecution initial observation
 ```
 
-No deviation.
+WEAKER MACHINE: this theorem is sound for the legacy subset execution tree over
+`Wasm.Config`; the public amended-Core execution tree required by SPEC §7.4 has
+not been joined to these names.
 -/
--- spec-signature: Wasm.runFuel_sound
+-- spec-signature-weaker: Wasm.runFuel_sound
 theorem runFuel_sound_signature :
     ∀ {bound : Nat} {initial : Wasm.Config} {observation : Wasm.ExecutionObservation},
       Wasm.TreeContains (Wasm.exploreAll bound initial) observation →
@@ -263,9 +313,11 @@ theorem runFuel_complete_with_bound
   Wasm.TreeContains (Wasm.exploreAll bound initial) observation
 ```
 
-No deviation.
+WEAKER MACHINE: this theorem is complete within the explicit bound for the
+legacy subset execution tree.  It does not quantify over the public amended-Core
+machine required by SPEC §7.4.
 -/
--- spec-signature: Wasm.runFuel_complete_with_bound
+-- spec-signature-weaker: Wasm.runFuel_complete_with_bound
 theorem runFuel_complete_with_bound_signature :
     ∀ {bound : Nat} {initial : Wasm.Config} {observation : Wasm.ExecutionObservation},
       Wasm.FiniteExecution initial observation →
@@ -283,9 +335,10 @@ theorem costed_erase_iff_plain_run :
      Wasm.CostedLabelling module invocation costedTrace)
 ```
 
-EXACT.  This binding was `spec-signature-amended` under `DEV-001` while SPEC
-stated the bare biconditional.  SPEC has since been corrected: the literal text
-was **proved false**, for every profile, by `Wasm.not_costed_erase_iff_plain_run`
+The FORMULA amendment is exact.  This binding was `spec-signature-amended`
+under `DEV-001` while SPEC stated the bare biconditional.  SPEC has since been
+corrected: the literal text was **proved false**, for every profile, by
+`Wasm.not_costed_erase_iff_plain_run`
 in `Wasm/Erasure.lean`.  The witness is a module that passes `Wasm.validate`
 together with a costed trace whose erasure is exactly the plain trace of a
 maximal run of that module, and which differs from the machine's own labelling
@@ -303,12 +356,15 @@ labelling is machine-produced), and SPEC §7.5 additionally requires
 `Wasm.costed_run_iff_plain_run`, which carries the intent with no side condition
 at all.
 
-`DEV-001` stays on file with its refutation theorems cited, recorded there as
-adopted into SPEC.
+The CARRIER is still weaker: `module` is `Wasm.Subset.Module`, and `Run`,
+`CostedRun`, and their events belong to the legacy subset machine.  The amended
+formula is therefore pinned here without crediting the corresponding public
+amended-Core obligation.  `DEV-001` stays on file with its refutation theorems
+cited, recorded there as adopted into SPEC.
 -/
--- spec-signature: Wasm.costed_erase_iff_plain_run
+-- spec-signature-weaker: Wasm.costed_erase_iff_plain_run
 theorem costed_erase_iff_plain_run_signature :
-    ∀ {P : Wasm.Profile} {module : Wasm.Module} {invocation : Wasm.RawInvocation}
+    ∀ {P : Wasm.Profile} {module : Wasm.Subset.Module} {invocation : Wasm.RawInvocation}
       {costedTrace : List Wasm.CostedEvent} {observation : Wasm.ExecutionObservation},
       Wasm.CostedRun P module invocation costedTrace observation ↔
         (Wasm.Run module invocation (Wasm.eraseCosts costedTrace) observation ∧
@@ -325,7 +381,7 @@ theorem costed_initialization_erase
   Wasm.initialGemmInvocation P module invocation = .ok initialization.initial
 ```
 
-DEVIATION (spelling only), two of them, both disclosed:
+The spelling differs in two ways, both disclosed:
 
 * SPEC passes the profile explicitly to `initialGemmInvocationCosted` and
   `initialGemmInvocation`; the repository infers it from the type of
@@ -333,10 +389,14 @@ DEVIATION (spelling only), two of them, both disclosed:
 * SPEC names the result type `Wasm.InitializationObservation P`; the repository
   places it in the `Universal` namespace.  SPEC §15 permits a name to gain a
   namespace.
+
+WEAKER CARRIER: the declaration initializes `Wasm.Subset.Module`, not the
+public amended-Core `Wasm.Module`.  Exact public-Core initialization and its
+cost-erasure law remain open.
 -/
--- spec-signature: Wasm.costed_initialization_erase
+-- spec-signature-weaker: Wasm.costed_initialization_erase
 theorem costed_initialization_erase_signature :
-    ∀ {P : Wasm.Profile} {m : Wasm.Module} {invocation : Wasm.Invocation P}
+    ∀ {P : Wasm.Profile} {m : Wasm.Subset.Module} {invocation : Wasm.Invocation P}
       {initialization : Universal.InitializationObservation P},
       Wasm.initialGemmInvocationCosted m invocation = .ok initialization →
       Wasm.initialGemmInvocation m invocation = .ok initialization.initial :=
@@ -356,13 +416,16 @@ tree; existence and uniqueness of a Lean declaration, adequacy row and vendor
 anchor for every ENABLED rule; and the absence of all three for every rule that
 is not enabled.
 
-SCOPE, stated because the sentence above is easy to over-read: the identity half
-binds Lean LITERALS (`core3VendorManifestSha256`, `core3VendoredTree.fileCount`,
-`core3RevisionCommit`).  Lean cannot read `vendor/wasm-spec/`.  What stops a
-drifted literal is `xtask vendor`, recomputing from content, with `M13` as its
-falsifier.
+WEAKER MAP: the identity half binds Lean literals
+(`core3VendorManifestSha256`, `core3VendoredTree.fileCount`,
+`core3RevisionCommit`), and `xtask vendor` recomputes them from content with
+`M13` as its falsifier.  But `PinnedCoreRuleId` is a declared subset of the
+vendored rules, and all but the binary-module row still map to legacy subset
+declarations; `Wasm/Adequacy.lean` records both gaps.  This proposition pins the
+current map's internal one-to-one property.  It is not the exhaustive
+public-Core correspondence SPEC §7.1 names.
 -/
--- spec-signature: Wasm.profile_matches_pinned_revision
+-- spec-signature-weaker: Wasm.profile_matches_pinned_revision
 theorem profile_matches_pinned_revision_signature :
     ∀ (profile : Wasm.Profile),
       (profile.body.revisionCommit = Wasm.core3AdequacyMap.revisionCommit ∧
@@ -650,13 +713,13 @@ whose conjuncts tie `decodeSteps`, `validationSteps` and `staticDataBytes` to
 `Wasm.decodeCost`, `Wasm.validationCost` and `Wasm.instantiatedStaticBytes` of
 that exact profile and module.  The repository's predicate takes those three
 quantities, and the decodability of `bytes`, as PARAMETERS instead.  It is
-therefore a weaker predicate, which makes this theorem — whose hypothesis it is —
-strictly stronger than SPEC's.  The weakening lands on
-`Universal.SystemEvaluation.costExact`, not here, and it is recorded in this
-docstring so that it is on the record where a reader of the SPEC §15 ledger will
-meet it.
+therefore a different, weaker predicate.  Although the equality below is a
+projection from that predicate, there is no proved bridge constructing it from
+SPEC's public-Core `ExactAggregateCost`; reusing the same predicate name does not
+make the definitions coincide.  This binding pins the current theorem but does
+not credit the public aggregate-cost obligation.
 -/
--- spec-signature: Cost.module_bytes_exact
+-- spec-signature-weaker: Cost.module_bytes_exact
 theorem module_bytes_exact_signature :
     ∀ {Raw : Type} [Foundation.Fintype Raw] {bytes : ByteArray} {decodes : Prop}
       {decodeSteps validationSteps staticDataBytes repetitions : Nat}
@@ -750,27 +813,15 @@ theorem normalize_cost_le_signature :
 theorem decode_emit : Wasm.decode (Artifact.emit m) = .ok m
 ```
 
-WEAKER, and this is a DEMOTION recorded rather than repaired.  `m` is auto-bound
-in SPEC's spelling and universally quantified here.  The gap is `Wasm.decode`:
-SPEC §7.2 fixes it as the decoder of the complete pinned Core 3.0 binary
-grammar, and since this tranche `Wasm.decode` IS that decoder.  `Artifact.emit`
-is `Wasm.Subset.encode`, a canonical encoder for the SUBSET syntax of
-`Wasm/Syntax.lean`, so the equation this file can bind is the one about
-`Wasm.Subset.decode`.
-
-Why not repair it here: `Wasm.decode (Artifact.emit m) = .ok m` over the Core
-decoder needs a Core 3.0 ENCODER with a `Bmodule` derivation for every module,
-and this repository has none — `Wasm/Core/` contains no encoder at all, which is
-also what makes `Wasm.decode_sound` and `Wasm.decode_complete` non-circular.
-`Wasm/CoreGap.lean` proves in addition that no total map
-`Wasm.Module → Wasm.Core.Module` exists, so the subset emitter cannot be
-transported along one either.  Writing that encoder is the next step; asserting
-the equation without it, or quietly rebinding SPEC's `Wasm.decode` to the subset
-decoder, would be the padding this binding exists to prevent.
+EXACT.  `m` is auto-bound in SPEC's spelling and universally quantified here.
+`Wasm.Module` is the carrier of amended Core 3.0 ASTs that have a declarative
+binary derivation.  `Artifact.emit` uses the independently verified amended
+Core encoder, and `Artifact.decode_emit` composes its grammar soundness with
+the public decoder's grammar completeness.
 -/
--- spec-signature-weaker: Artifact.decode_emit
+-- spec-signature: Artifact.decode_emit
 theorem decode_emit_signature :
-    ∀ (m : Wasm.Module), Wasm.Subset.decode (Artifact.emit m) = .ok m :=
+    ∀ (m : Wasm.Module), Wasm.decode (Artifact.emit m) = .ok m :=
   @Artifact.decode_emit
 
 /-! ## 5. Universal (SPEC §15, twelve declarations) -/
@@ -805,8 +856,11 @@ DEVIATIONS, all disclosed:
   here rather than hidden.
 * Binder ORDER differs from SPEC's listing.  Every SPEC hypothesis appears, none
   is added beyond the instance named above, and the conclusion is unchanged.
+* This remains a weaker, non-creditable binding because `ProfileValid` and
+  `SystemEvaluation` still use `Wasm.Subset.Module`; SPEC §10.1 quantifies over
+  the public amended-Core `Wasm.Module`.
 -/
--- spec-signature: Universal.possible_winner_within_sublevel
+-- spec-signature-weaker: Universal.possible_winner_within_sublevel
 theorem possible_winner_within_sublevel_signature :
     ∀ {P : Wasm.Profile} [Foundation.Fintype (Gemm.RawInvocation P)]
       {S : Universal.Setting P} {D : Universal.Decider S}
@@ -878,9 +932,11 @@ explicitly, universally quantified.
 
 This is the third of SPEC §10.1's three reflection theorems.  The other two,
 `system_evaluation_rel_sound` and `system_evaluation_rel_complete`, are NOT in
-the environment and are reported outstanding.
+the environment and are reported outstanding.  This existing functionality
+theorem is also non-creditable at SPEC scope because its `SystemEvaluation`
+carrier is still `Wasm.Subset.Module`, not public amended Core.
 -/
--- spec-signature: Universal.system_evaluation_rel_functional
+-- spec-signature-weaker: Universal.system_evaluation_rel_functional
 theorem system_evaluation_rel_functional_signature :
     ∀ {P : Wasm.Profile} {S : Universal.Setting P} {D : Universal.Decider S}
       {bytes : ByteArray} {a b : Universal.SystemEvaluation S bytes},

@@ -6,11 +6,11 @@
   grammatically valid and then fail profile validation".  This file is the
   second half of that sentence, stated over `Wasm.Core.Module` --- the syntax
   the pinned decoder of `Wasm/Core/Decode.lean` actually produces --- rather
-  than over the older `Wasm.Module` of `Wasm/Syntax.lean`.  `Module.admittedBy`
+  than over the older `Wasm.Subset.Module` of `Wasm/Syntax.lean`.  `Module.admittedBy`
   is the decidable predicate "the released profile admits this module".
 
-  WHY IT IS NOT THE VALIDATOR.  Core validity (`Module_ok'` of
-  `Core/Validation/ModulesAmended.lean`, and the algorithm of
+  WHY IT IS NOT THE VALIDATOR.  Core validity (`Module_okA` of
+  `Core/Validation/ModulesCombinedAmended.lean`, and the algorithm of
   `Core/ValidateModule.lean`) asks whether a module is a well-typed Core 3.0
   module.  Profile admission asks the separate question SPEC section 7.2 poses:
   whether the module stays inside the RELEASED profile --- its feature matrix,
@@ -970,6 +970,15 @@ theorem standardSimdModule_admitted (P : Profile) :
     Module.AdmittedBy P standardSimdModule := by
   rw [Module.admittedBy_iff_release]
   decide
+
+/-- No admitted module can observe any of the implementation-fixed relaxed
+numeric selectors: admission rejects the relaxed family at every nesting
+depth collected by `Module.requiredFeatures`. -/
+theorem admitted_module_has_no_relaxed_simd {P : Profile} {m : Module}
+    (h : Module.AdmittedBy P m) :
+    FeatureFamily.relaxedSimd ∉ Module.requiredFeatures m := by
+  intro hrelaxed
+  exact (Module.not_admittedBy_of_rejected P m hrelaxed (by decide)) h
 
 /-! ### The other admission conjuncts bite too
 

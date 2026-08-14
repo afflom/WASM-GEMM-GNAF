@@ -1,6 +1,6 @@
 /-
-  Wasm/Core/Runtime.lean --- the execution configurations of the pinned
-  WebAssembly Core 3.0 semantics.
+  Wasm/Core/Runtime.lean --- the single authority-selected runtime hierarchy
+  for WebAssembly Core 3.0.
 
   NORMATIVE SOURCE.  Every declaration below transcribes a production or
   definition of
@@ -11,7 +11,9 @@
 
   at the pinned commit.  The coverage marker beside a rule names the SpecTec rule
   it discharges; `xtask core` extracts the checklist from the vendored files and
-  rejects a marker naming anything they do not define.
+  rejects a marker naming anything they do not define.  The default selector is
+  the byte-identical pinned transcription.  The explicit `*A` endpoints apply
+  AMD-011 to the subtyping-sensitive premises and are the release semantics.
 
   WHY A SECOND INSTRUCTION SORT.  `4.0` extends `syntax instr` with the
   administrative forms `addrref`, `LABEL_`, `FRAME_`, `HANDLER_` and `TRAP`.
@@ -36,11 +38,82 @@
 -/
 import WasmGemmGnaf.Wasm.Core.Numerics
 import WasmGemmGnaf.Wasm.Core.Modules
-import WasmGemmGnaf.Wasm.Core.Validation.Types
+import WasmGemmGnaf.Wasm.Core.Validation.SubtypingAmended
 
 set_option autoImplicit false
 
 namespace WasmGemmGnaf.Wasm.Core.Exec
+
+/-! ## Authority selection
+
+AMD-011 changes the subtyping premises used by runtime value typing.  The
+runtime remains one inductive hierarchy: this finite selector chooses either
+the byte-identical pinned premises or the exact amended premises.  The sole
+global instance is pinned for audit compatibility; release consumers select
+`amendedExecutionAuthority` explicitly.
+-/
+
+/-- The two exact Core execution authorities carried by this repository. -/
+inductive ExecutionAuthorityRevision where
+  /-- The byte-identical transcription of the pinned Core 3.0 SpecTec tree. -/
+  | pinned
+  /-- The pinned tree with AMD-011 applied to subtyping-sensitive premises. -/
+  | amended
+deriving DecidableEq
+
+/-- A finite selector threaded through the single runtime/execution hierarchy. -/
+class ExecutionAuthority where
+  revision : ExecutionAuthorityRevision
+
+/-- The default, byte-identical pinned execution authority. -/
+@[reducible] def pinnedExecutionAuthority : ExecutionAuthority :=
+  { revision := .pinned }
+
+/-- The exact release execution authority after AMD-011. -/
+@[reducible] def amendedExecutionAuthority : ExecutionAuthority :=
+  { revision := .amended }
+
+/-- Existing unqualified execution-relation uses remain pinned. -/
+instance : ExecutionAuthority := pinnedExecutionAuthority
+
+/-- Heap-type subtyping selected by the current execution authority. -/
+def HeaptypeSubFor [authority : ExecutionAuthority]
+    (C : Context) (ht₁ ht₂ : HeapType) : Prop :=
+  match authority.revision with
+  | .pinned => Heaptype_sub C ht₁ ht₂
+  | .amended => Heaptype_subA C ht₁ ht₂
+
+/-- Reference-type subtyping selected by the current execution authority. -/
+def ReftypeSubFor [authority : ExecutionAuthority]
+    (C : Context) (rt₁ rt₂ : RefType) : Prop :=
+  match authority.revision with
+  | .pinned => Reftype_sub C rt₁ rt₂
+  | .amended => Reftype_subA C rt₁ rt₂
+
+/-- External-type subtyping selected by the current execution authority. -/
+def ExterntypeSubFor [authority : ExecutionAuthority]
+    (C : Context) (xt₁ xt₂ : ExternType) : Prop :=
+  match authority.revision with
+  | .pinned => Externtype_sub C xt₁ xt₂
+  | .amended => Externtype_subA C xt₁ xt₂
+
+@[simp] theorem HeaptypeSubFor_pinned :
+    @HeaptypeSubFor pinnedExecutionAuthority = Heaptype_sub := rfl
+
+@[simp] theorem HeaptypeSubFor_amended :
+    @HeaptypeSubFor amendedExecutionAuthority = Heaptype_subA := rfl
+
+@[simp] theorem ReftypeSubFor_pinned :
+    @ReftypeSubFor pinnedExecutionAuthority = Reftype_sub := rfl
+
+@[simp] theorem ReftypeSubFor_amended :
+    @ReftypeSubFor amendedExecutionAuthority = Reftype_subA := rfl
+
+@[simp] theorem ExterntypeSubFor_pinned :
+    @ExterntypeSubFor pinnedExecutionAuthority = Externtype_sub := rfl
+
+@[simp] theorem ExterntypeSubFor_amended :
+    @ExterntypeSubFor amendedExecutionAuthority = Externtype_subA := rfl
 
 /-! ## Sequence helpers
 
@@ -581,8 +654,9 @@ inductive Nondefaultable : ValType → Prop where
 /-! ## Runtime typing of values
 
 `relation Num_ok`, `Vec_ok`, `Ref_ok`, `Val_ok` of `4.1`.  The subtyping premises
-are the relations of `2.2-validation.subtyping.spectec`, transcribed in
-`Core/Validation/Types.lean`, at the empty context `{}` the source writes. -/
+are selected from the byte-identical transcription in `Validation/Types.lean`
+or its exact AMD-011 repair in `Validation/SubtypingAmended.lean`, at the empty
+context `{}` the source writes. -/
 
 /-- `relation Num_ok: store |- num : numtype`. -/
 inductive Num_ok : Store → NumVal → NumType → Prop where
@@ -596,13 +670,15 @@ inductive Vec_ok : Store → VecVal → VecType → Prop where
   -- core-exec: Vec_ok
   | mk {s : Store} {vt : VecType} {c : VecLit vt.toVnn} : Vec_ok s ⟨vt, c⟩ vt
 
-/-- `relation Ref_ok: store |- ref : reftype`. -/
+variable [authority : ExecutionAuthority]
+
+/-- `relation Ref_ok: store |- ref : reftype`, under the selected authority. -/
 inductive Ref_ok : Store → Ref → RefType → Prop where
   /-- `rule Ref_ok/null: s |- REF.NULL ht : (REF NULL ht')
       -- Heaptype_sub: {} |- ht' <: ht`. -/
   -- core-exec: Ref_ok/null
   | null {s : Store} {ht ht' : HeapType} :
-      Heaptype_sub Context.empty ht' ht →
+      HeaptypeSubFor Context.empty ht' ht →
       Ref_ok s (.null ht) (.ref (some .null) ht')
   /-- `rule Ref_ok/i31: s |- REF.I31_NUM i : (REF I31)`. -/
   -- core-exec: Ref_ok/i31
@@ -645,7 +721,7 @@ inductive Ref_ok : Store → Ref → RefType → Prop where
       -- Reftype_sub: {} |- rt' <: rt`. -/
   -- core-exec: Ref_ok/sub
   | sub {s : Store} {r : Ref} {rt rt' : RefType} :
-      Ref_ok s r rt' → Reftype_sub Context.empty rt' rt → Ref_ok s r rt
+      Ref_ok s r rt' → ReftypeSubFor Context.empty rt' rt → Ref_ok s r rt
 
 /-- `relation Val_ok: store |- val : valtype`. -/
 inductive Val_ok : Store → Val → ValType → Prop where
@@ -694,8 +770,66 @@ inductive Externaddr_ok : Store → ExternAddr → ExternType → Prop where
       -- Externtype_sub: {} |- xt' <: xt`. -/
   -- core-exec: Externaddr_ok/sub
   | sub {s : Store} {xa : ExternAddr} {xt xt' : ExternType} :
-      Externaddr_ok s xa xt' → Externtype_sub Context.empty xt' xt →
+      Externaddr_ok s xa xt' → ExterntypeSubFor Context.empty xt' xt →
       Externaddr_ok s xa xt
+
+/-- The explicit byte-identical pinned runtime reference-typing relation. -/
+abbrev Ref_okPinned := @Ref_ok pinnedExecutionAuthority
+
+/-- The exact AMD-011 runtime reference-typing relation. -/
+abbrev Ref_okA := @Ref_ok amendedExecutionAuthority
+
+/-- The explicit byte-identical pinned runtime value-typing relation. -/
+abbrev Val_okPinned := @Val_ok pinnedExecutionAuthority
+
+/-- The exact AMD-011 runtime value-typing relation. -/
+abbrev Val_okA := @Val_ok amendedExecutionAuthority
+
+/-- The explicit byte-identical pinned external-address typing relation. -/
+abbrev Externaddr_okPinned := @Externaddr_ok pinnedExecutionAuthority
+
+/-- The exact AMD-011 external-address typing relation. -/
+abbrev Externaddr_okA := @Externaddr_ok amendedExecutionAuthority
+
+/-! ## Coverage-neutral inclusion
+
+The amended runtime relations only remove the bad AMD-011 bottom-collapse
+derivations.  Every amended derivation therefore remains a derivation of the
+byte-identical pinned transcription.
+-/
+
+def Ref_okA.to_pinned {s : Store} {r : Ref} {rt : RefType}
+    (h : Ref_okA s r rt) : Ref_okPinned s r rt := by
+  letI : ExecutionAuthority := pinnedExecutionAuthority
+  induction h with
+  | null hs => exact .null hs.to_pinned
+  | i31 => exact .i31
+  | «struct» h₁ h₂ => exact .struct h₁ h₂
+  | array h₁ h₂ => exact .array h₁ h₂
+  | func h₁ h₂ => exact .func h₁ h₂
+  | exn h => exact .exn h
+  | host => exact .host
+  | «extern» _ ih => exact .extern ih
+  | sub _ hs ih => exact .sub ih hs.to_pinned
+
+def Val_okA.to_pinned {s : Store} {v : Val} {t : ValType}
+    (h : Val_okA s v t) : Val_okPinned s v t := by
+  letI : ExecutionAuthority := pinnedExecutionAuthority
+  cases h with
+  | num h => exact .num h
+  | vec h => exact .vec h
+  | ref h => exact .ref (Ref_okA.to_pinned h)
+
+def Externaddr_okA.to_pinned {s : Store} {xa : ExternAddr} {xt : ExternType}
+    (h : Externaddr_okA s xa xt) : Externaddr_okPinned s xa xt := by
+  letI : ExecutionAuthority := pinnedExecutionAuthority
+  induction h with
+  | tag h => exact .tag h
+  | global h => exact .global h
+  | mem h => exact .mem h
+  | table h => exact .table h
+  | func h => exact .func h
+  | sub _ hs ih => exact .sub ih hs.to_pinned
 
 /-! ## Type instantiation
 

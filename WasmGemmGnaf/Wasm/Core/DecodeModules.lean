@@ -184,12 +184,13 @@ theorem decCustoms_sound : ∀ (n : Nat) (bs r : Bytes), decCustoms n bs = .ok r
 /-! ## Section payloads -/
 
 /-- `grammar Btype : type`. -/
-def decType (bs : Bytes) : Except Fault (TypeDef × Bytes) :=
+def decType [authority : BinaryAuthority]
+    (bs : Bytes) : Except Fault (TypeDef × Bytes) :=
   match decRectype bs with
   | .error e => .error e
   | .ok (qt, r) => .ok ({ rectype := qt }, r)
 
-theorem decType_sound : Sound Btype decType := by
+theorem decType_sound [authority : BinaryAuthority] : Sound Btype decType := by
   intro bs t r h
   rw [decType] at h
   split at h
@@ -200,7 +201,8 @@ theorem decType_sound : Sound Btype decType := by
     exact ⟨b, by rw [hb, hr], by rw [← hv]; exact Btype.mk b qt hd⟩
 
 /-- `grammar Bimport : import`. -/
-def decImport (bs : Bytes) : Except Fault (Import × Bytes) :=
+def decImport [authority : BinaryAuthority]
+    (bs : Bytes) : Except Fault (Import × Bytes) :=
   match decName bs with
   | .error e => .error e
   | .ok (nm₁, r₁) =>
@@ -212,7 +214,8 @@ def decImport (bs : Bytes) : Except Fault (Import × Bytes) :=
           | .ok (xt, r₃) =>
               .ok ({ moduleName := nm₁, itemName := nm₂, externtype := xt }, r₃)
 
-theorem decImport_sound : Sound Bimport decImport := by
+theorem decImport_sound [authority : BinaryAuthority] :
+    Sound Bimport decImport := by
   intro bs im r h
   rw [decImport] at h
   split at h
@@ -235,7 +238,8 @@ theorem decImport_sound : Sound Bimport decImport := by
 /-- `grammar Btable : table`.  The `0x40 0x00` form carries an explicit
 initialiser; otherwise the table type's own element type supplies
 `REF.NULL ht`. -/
-def decTable (d : Nat) (bs : Bytes) : Except Fault (Table × Bytes) :=
+def decTable [authority : BinaryAuthority]
+    (d : Nat) (bs : Bytes) : Except Fault (Table × Bytes) :=
   match bs with
   | [] => .error .eof
   | b :: r =>
@@ -256,7 +260,8 @@ def decTable (d : Nat) (bs : Bytes) : Except Fault (Table × Bytes) :=
              match tt.elem with
              | .ref _ ht => .ok ({ tabletype := tt, init := .cons (.refNull ht) .nil }, r₁))
 
-theorem decTable_sound (d : Nat) : Sound Btable (decTable d) := by
+theorem decTable_sound [authority : BinaryAuthority]
+    (d : Nat) : Sound Btable (decTable d) := by
   intro bs tab r h
   cases bs with
   | nil => cases h
@@ -326,7 +331,8 @@ theorem decTag_sound : Sound Btag decTag := by
     exact ⟨b, by rw [hb, hr], by rw [← hv]; exact Btag.mk b jt hd⟩
 
 /-- `grammar Bglobal : global`. -/
-def decGlobal (d : Nat) (bs : Bytes) : Except Fault (Global × Bytes) :=
+def decGlobal [authority : BinaryAuthority]
+    (d : Nat) (bs : Bytes) : Except Fault (Global × Bytes) :=
   match decGlobaltype bs with
   | .error e => .error e
   | .ok (gt, r₁) =>
@@ -334,7 +340,8 @@ def decGlobal (d : Nat) (bs : Bytes) : Except Fault (Global × Bytes) :=
       | .error e => .error e
       | .ok (e, r₂) => .ok ({ globaltype := gt, init := e }, r₂)
 
-theorem decGlobal_sound (d : Nat) : Sound Bglobal (decGlobal d) := by
+theorem decGlobal_sound [authority : BinaryAuthority]
+    (d : Nat) : Sound Bglobal (decGlobal d) := by
   intro bs g r h
   rw [decGlobal] at h
   split at h
@@ -424,7 +431,8 @@ theorem decElemkind_sound : Sound Belemkind decElemkind := by
     exact ⟨[tb 0x00], by simp [h0, hr], by rw [← hv]; exact Belemkind.funcref⟩
 
 /-- `grammar Belem : elem`, all eight tag forms. -/
-def decElem (d : Nat) (bs : Bytes) : Except Fault (Elem × Bytes) :=
+def decElem [authority : BinaryAuthority]
+    (d : Nat) (bs : Bytes) : Except Fault (Elem × Bytes) :=
   match decU32 bs with
   | .error e => .error e
   | .ok (t, r) =>
@@ -507,7 +515,8 @@ def decElem (d : Nat) (bs : Bytes) : Except Fault (Elem × Bytes) :=
       | _ => Except.error Fault.opcode
 
 /-- `grammar Bdata : data`. -/
-def decData (d : Nat) (bs : Bytes) : Except Fault (Data × Bytes) :=
+def decData [authority : BinaryAuthority]
+    (d : Nat) (bs : Bytes) : Except Fault (Data × Bytes) :=
   match decU32 bs with
   | .error e => .error e
   | .ok (t, r) =>
@@ -539,7 +548,8 @@ def decData (d : Nat) (bs : Bytes) : Except Fault (Data × Bytes) :=
 /-! ## Code -/
 
 /-- `grammar Blocals : local*`: a run length and one value type. -/
-def decLocals (bs : Bytes) : Except Fault (List Local × Bytes) :=
+def decLocals [authority : BinaryAuthority]
+    (bs : Bytes) : Except Fault (List Local × Bytes) :=
   match decU32 bs with
   | .error e => .error e
   | .ok (n, r₁) =>
@@ -547,7 +557,8 @@ def decLocals (bs : Bytes) : Except Fault (List Local × Bytes) :=
       | .error e => .error e
       | .ok (t, r₂) => .ok (List.replicate n.val { valtype := t }, r₂)
 
-theorem decLocals_sound : Sound Blocals decLocals := by
+theorem decLocals_sound [authority : BinaryAuthority] :
+    Sound Blocals decLocals := by
   intro bs ls r h
   rw [decLocals] at h
   split at h
@@ -564,7 +575,8 @@ theorem decLocals_sound : Sound Blocals decLocals := by
       exact Blocals.mk bn bt n t hdn hdt
 
 /-- `grammar Bfunc : code`. -/
-def decFunc (d : Nat) (bs : Bytes) : Except Fault (Code × Bytes) :=
+def decFunc [authority : BinaryAuthority]
+    (d : Nat) (bs : Bytes) : Except Fault (Code × Bytes) :=
   match decList decLocals bs with
   | .error e => .error e
   | .ok (locss, r₁) =>
@@ -574,7 +586,8 @@ def decFunc (d : Nat) (bs : Bytes) : Except Fault (Code × Bytes) :=
          | .ok (e, r₂) => .ok ((locss.flatten, e), r₂))
       else .error .side
 
-theorem decFunc_sound (d : Nat) : Sound Bfunc (decFunc d) := by
+theorem decFunc_sound [authority : BinaryAuthority]
+    (d : Nat) : Sound Bfunc (decFunc d) := by
   intro bs c r h
   rw [decFunc] at h
   split at h
@@ -594,7 +607,8 @@ theorem decFunc_sound (d : Nat) : Sound Bfunc (decFunc d) := by
     · cases h
 
 /-- `grammar Bcode : code = | len:Bu32 code:Bfunc => code  -- if len = ||Bfunc||`. -/
-def decCode (d : Nat) (bs : Bytes) : Except Fault (Code × Bytes) :=
+def decCode [authority : BinaryAuthority]
+    (d : Nat) (bs : Bytes) : Except Fault (Code × Bytes) :=
   match decU32 bs with
   | .error e => .error e
   | .ok (len, r₁) =>
@@ -605,7 +619,8 @@ def decCode (d : Nat) (bs : Bytes) : Except Fault (Code × Bytes) :=
              if rest.isEmpty then .ok (c, r₁.drop len.val) else .error .section_)
       else .error .section_
 
-theorem decCode_sound (d : Nat) : Sound Bcode (decCode d) := by
+theorem decCode_sound [authority : BinaryAuthority]
+    (d : Nat) : Sound Bcode (decCode d) := by
   intro bs c r h
   rw [decCode] at h
   split at h
@@ -636,7 +651,8 @@ theorem decCode_sound (d : Nat) : Sound Bcode (decCode d) := by
 
 /-! ## Element and data segments -/
 
-theorem decElem_sound (d : Nat) : Sound Belem (decElem d) := by
+theorem decElem_sound [authority : BinaryAuthority]
+    (d : Nat) : Sound Belem (decElem d) := by
   intro bs el r h
   rw [decElem] at h
   split at h
@@ -771,7 +787,8 @@ theorem decElem_sound (d : Nat) : Sound Belem (decElem d) := by
           exact Belem.declareExpr bt br bl rt es hlit hdr hdl
     · cases h
 
-theorem decData_sound (d : Nat) : Sound Bdata (decData d) := by
+theorem decData_sound [authority : BinaryAuthority]
+    (d : Nat) : Sound Bdata (decData d) := by
   intro bs da r h
   rw [decData] at h
   split at h
@@ -928,7 +945,8 @@ def finishModule (types : List TypeDef) (imports : List Import) (typeidxs : List
   | _, _ => .error .section_
 
 /-- `grammar Bmodule : module`, the whole pinned production. -/
-def decModule (bs : Bytes) : Except Fault Module :=
+def decModule [authority : BinaryAuthority]
+    (bs : Bytes) : Except Fault Module :=
   match expectBytes [0x00, 0x61, 0x73, 0x6D] bs with
   | .error e => .error e
   | .ok a₀ =>
@@ -984,6 +1002,14 @@ def decModule (bs : Bytes) : Except Fault Module :=
                                                                       cnts codes datas
                                                                   else .error .trailing
 
+/-- The pinned module decoder, exposed explicitly for compatibility consumers. -/
+abbrev decModulePinned : Bytes → Except Fault Module :=
+  @decModule pinnedBinaryAuthority
+
+/-- The exact AMD-007/008/010 module decoder. -/
+abbrev decModuleA : Bytes → Except Fault Module :=
+  @decModule amendedBinaryAuthority
+
 /-! ## Soundness of the module decoder -/
 
 theorem finishModule_sound {types : List TypeDef} {imports : List Import}
@@ -1029,7 +1055,8 @@ theorem finishModule_sound {types : List TypeDef} {imports : List Import}
     · cases h
   · cases h
 
-theorem decModule_sound (bs : Bytes) (m : Module) (h : decModule bs = .ok m) :
+theorem decModule_sound [authority : BinaryAuthority]
+    (bs : Bytes) (m : Module) (h : decModule bs = .ok m) :
     Bmodule bs m := by
   rw [decModule] at h
   split at h
@@ -1143,6 +1170,11 @@ theorem decModule_sound (bs : Bytes) (m : Module) (h : decModule bs = .ok m) :
                                     rw [hbs, hm]
                                     exact Bmodule.mk _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ Bmagic.mk Bversion.mk hu₀ hdbty hu₁ hdbim hu₂ hdbfu hu₃ hdbta hu₄ hdbme hu₅ hdbtg hu₆ hdbgl hu₇ hdbex hu₈ hstart hu₉ hdbel hu₁₀ hdcnt hu₁₁ hdbco hu₁₂ hdbda hu₁₃ hs1 hs2 hlen rfl
                                   · cases h
+
+/-- Soundness of the amended decoder against the amended grammar instantiation. -/
+theorem decModule_soundA (bs : Bytes) (m : Module)
+    (h : decModuleA bs = .ok m) : BmoduleA bs m :=
+  @decModule_sound amendedBinaryAuthority bs m h
 
 
 end WasmGemmGnaf.Wasm.Core.Decode

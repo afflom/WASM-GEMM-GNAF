@@ -2,24 +2,24 @@
 //! be defined through, or proved through, the executable side.
 //!
 //! SPEC section 7.3 asks for `decode_sound`, `decode_complete` and
-//! `validate_iff_declarative` as REFLECTION theorems: an executable procedure
+//! `validate_bool_iff` as REFLECTION theorems: an executable procedure
 //! agrees with an independently stated declarative relation. The whole content
 //! is the independence. If the declarative relation is the executable one in
 //! disguise, the theorem degenerates -- at best to `Bool = true <-> Bool = true`,
 //! at worst to `rfl` -- and proves nothing about the pinned format.
 //!
-//! Four external audits said the repository's three front-end theorems were
-//! circular. They were right, and nothing in the gate could see it: the
-//! STATEMENTS match SPEC exactly, so `xtask signature` binds them, and the axiom
-//! closure is clean, so `xtask axioms` passes them. An adversarial review
-//! finally traced it through the proof terms:
+//! Four external audits found that the repository's former three front-end
+//! theorems were circular, and nothing in the gate could see it. The public
+//! decoder theorems have since been repaired against the independent amended
+//! Core grammar; the legacy subset validator remains circular and uncredited.
+//! The audit originally traced the defects through these proof terms:
 //!
 //! * `Wasm.DeclarativelyValid` is a conjunction of the executable checker's own
 //!   booleans -- `Module.checkClosed m = true`, `checkMems`, `checkGlobal`,
 //!   `checkTag`, `exportsMemory`, `checkGemmExport`, `checkStart`, `checkTypes`,
 //!   `checkExports` -- with only the function-body conjunct stated inductively.
-//!   `Wasm.validate_iff_declarative` is therefore very nearly a tautology.
-//! * `Wasm.decode_sound` is proved as
+//!   `Wasm.validate_bool_iff` is therefore very nearly a tautology.
+//! * the former subset `Wasm.decode_sound` was proved as
 //!   `(declarativeBinaryRelation_iff_encode ..).mpr (decode_is_encode h)`, and
 //!   that lemma equates the "declarative" relation with `bytes = encode module`.
 //!   A decoder proved inverse to its own encoder says nothing about Core 3.0.
@@ -59,7 +59,7 @@ pub struct Entry {
 const ENTRIES: &[Entry] = &[
     // The subset codec that made these two circular is now `Wasm.Subset.*`,
     // and `Wasm.decode` / `Wasm.DeclarativeBinaryRelation` are the Core 3.0
-    // decoder and the pinned grammar `Wasm.Core.Binary.Bmodule`. Every
+    // decoder and the amended grammar `Wasm.Core.Binary.BmoduleA`. Every
     // forbidden name below is spelled at its CURRENT fully qualified spelling:
     // a stale spelling would make the obligation pass for want of a match,
     // which is how `declarativeBinaryRelation_iff_encode` -- written here
@@ -76,7 +76,7 @@ const ENTRIES: &[Entry] = &[
             "WasmGemmGnaf.Wasm.Subset.encode_decode_roundtrip",
             "WasmGemmGnaf.Wasm.Subset.declarativeBinaryRelation_iff_encode",
         ],
-        why: "a decoder proved inverse to its own encoder says nothing about the pinned \
+        why: "a decoder proved inverse to its own encoder says nothing about the amended \
               binary format",
     },
     Entry {
@@ -94,7 +94,7 @@ const ENTRIES: &[Entry] = &[
               statement about Core 3.0",
     },
     Entry {
-        required: "WasmGemmGnaf.Wasm.validate_iff_declarative",
+        required: "WasmGemmGnaf.Wasm.validate_bool_iff",
         declarative: "WasmGemmGnaf.Wasm.DeclarativelyValid",
         // `WasmGemmGnaf.Wasm.validate` is deliberately NOT here. A reflection
         // theorem's STATEMENT necessarily names the executable procedure it is
@@ -104,15 +104,15 @@ const ENTRIES: &[Entry] = &[
         // checker's INTERNALS appearing in the declarative side, which is what
         // the rest of this list is, and which `DeclarativelyValid` trips.
         forbidden: &[
-            "WasmGemmGnaf.Wasm.Module.checkClosed",
-            "WasmGemmGnaf.Wasm.Module.checkMems",
-            "WasmGemmGnaf.Wasm.Module.checkGlobal",
-            "WasmGemmGnaf.Wasm.Module.checkTag",
-            "WasmGemmGnaf.Wasm.Module.checkTypes",
-            "WasmGemmGnaf.Wasm.Module.checkExports",
-            "WasmGemmGnaf.Wasm.Module.checkStart",
-            "WasmGemmGnaf.Wasm.Module.exportsMemory",
-            "WasmGemmGnaf.Wasm.Module.checkGemmExport",
+            "WasmGemmGnaf.Wasm.Subset.Module.checkClosed",
+            "WasmGemmGnaf.Wasm.Subset.Module.checkMems",
+            "WasmGemmGnaf.Wasm.Subset.Module.checkGlobal",
+            "WasmGemmGnaf.Wasm.Subset.Module.checkTag",
+            "WasmGemmGnaf.Wasm.Subset.Module.checkTypes",
+            "WasmGemmGnaf.Wasm.Subset.Module.checkExports",
+            "WasmGemmGnaf.Wasm.Subset.Module.checkStart",
+            "WasmGemmGnaf.Wasm.Subset.Module.exportsMemory",
+            "WasmGemmGnaf.Wasm.Subset.Module.checkGemmExport",
         ],
         why: "if the declarative judgment is the checker's own booleans, the biconditional \
               is `Bool = true <-> Bool = true`",
@@ -229,7 +229,7 @@ pub fn report_over(root: &Path, entries: &[Entry]) -> Result<Report> {
 /// A plain substring test is wrong here and was wrong in the first version, in a
 /// way that made one obligation permanently unpassable rather than merely
 /// noisy: `WasmGemmGnaf.Wasm.validate` is a PREFIX of
-/// `WasmGemmGnaf.Wasm.validate_iff_declarative`, so the check fired on the
+/// `WasmGemmGnaf.Wasm.validate_bool_iff`, so the check fired on the
 /// theorem's own name and would have gone on firing after the circularity was
 /// repaired. Adversarial review caught it.
 ///
@@ -283,11 +283,11 @@ mod tests {
     #[test]
     fn a_prefix_is_not_a_mention() {
         // The bug this test exists for: `...Wasm.validate` is a prefix of
-        // `...Wasm.validate_iff_declarative`, so a substring test fired on the
+        // `...Wasm.validate_bool_iff`, so a substring test fired on the
         // theorem's own name and made the obligation permanently unpassable.
-        let block = "theorem WasmGemmGnaf.Wasm.validate_iff_declarative : ...";
+        let block = "theorem WasmGemmGnaf.Wasm.validate_bool_iff : ...";
         assert!(!mentions(block, "WasmGemmGnaf.Wasm.validate"));
-        assert!(mentions(block, "WasmGemmGnaf.Wasm.validate_iff_declarative"));
+        assert!(mentions(block, "WasmGemmGnaf.Wasm.validate_bool_iff"));
     }
 
     #[test]

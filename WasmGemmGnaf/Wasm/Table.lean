@@ -28,20 +28,20 @@
   ## Declared scope, and what this file does NOT establish
 
   SPEC section 7.2 enables the "bulk memory, multiple memories, tables" family,
-  so a table is a Core-valid and chargeable construct.  The *released validator*
-  of `Wasm/Validate.lean` is nevertheless stricter than the family:
+  so a table is a Core-valid and chargeable construct.  The legacy subset
+  validator of `Wasm/Validate.lean` is stricter than that family:
 
-  * `Module.checkClosed` requires a validating module to declare no table and no
+  * `Subset.Module.checkClosed` requires a validating module to declare no table and no
     element segment at all (`validate_tables_empty` below), and
   * `checkInstr` types no table instruction (`checkInstr_table_rejected`), while
     `Wasm/Step.lean` enumerates no successor for one
     (`successorsOfInstr_table_empty`).
 
   All three facts are machine-checked at the end of this file.  The table
-  semantics below are therefore **unreachable** in a released execution: this
-  file is a model of table structure and of the Core access laws, and it is
-  *not* evidence that the released artifact executes table instructions.  No
-  theorem here may be read that way.
+  semantics below are therefore unreachable in the legacy subset execution.
+  This file models table structure and access laws but does not wire them into
+  the public amended-Core execution layer.  No theorem here establishes that a
+  release artifact executes table instructions.
 
   Every declaration in this file is proved.  Nothing is assumed.
 -/
@@ -105,7 +105,7 @@ theorem getElem?_spliceAt_ge {α : Type} {l : List α} {i j : Nat} {xs : List α
 
 /-! ## Reference values
 
-A table element is a reference.  The released profile enables reference types,
+A table element is a reference.  The intended Core profile enables reference types,
 typed function references and GC, so the element of a table is a null
 reference, a function reference, or an external reference. -/
 
@@ -115,8 +115,8 @@ inductive Ref
   | null (heapType : HeapType)
   /-- A reference to the function at the given index. -/
   | func (index : Nat)
-  /-- An external reference, identified by its opaque index.  The released
-  profile is closed, so no external reference is ever created by the machine;
+  /-- An external reference, identified by its opaque index.  The legacy
+  machine is closed, so no external reference is ever created by it;
   the constructor exists because the *type* `externref` is expressible. -/
   | extern (index : Nat)
   deriving DecidableEq, Repr, Inhabited
@@ -1069,28 +1069,29 @@ end TableInst
 The two theorems below are the machine-checked form of the scope statement in
 this file's header.  They say what this module does **not** establish. -/
 
-/-- The released validator accepts only modules that declare no table and no
-element segment: `Module.checkClosed` is one of its conjuncts. -/
-theorem validate_checkClosed {m : Module} (h : validate m = true) :
-    Module.checkClosed m = true := by
-  cases hc : Module.checkClosed m with
+/-- The legacy subset validator accepts only modules that declare no table and no
+element segment: `Subset.Module.checkClosed` is one of its conjuncts. -/
+theorem validate_checkClosed {m : Subset.Module} (h : validate m = true) :
+    Subset.Module.checkClosed m = true := by
+  cases hc : Subset.Module.checkClosed m with
   | true => rfl
   | false =>
     rw [validate, hc] at h
     simp at h
 
-/-- **A validating released module declares no table and no element segment.** -/
-theorem validate_tables_empty {m : Module} (h : validate m = true) :
+/-- **A module accepted by the legacy subset validator declares no table and no
+element segment.** -/
+theorem validate_tables_empty {m : Subset.Module} (h : validate m = true) :
     m.tables = [] ∧ m.elems = [] := by
   have hc := validate_checkClosed h
-  unfold Module.checkClosed at hc
+  unfold Subset.Module.checkClosed at hc
   simp only [Bool.and_eq_true, List.isEmpty_iff] at hc
   obtain ⟨⟨⟨_, ht⟩, he⟩, _⟩ := hc
   exact ⟨ht, he⟩
 
-/-- The released validator types no table instruction: a module containing one
-fails validation, so the table semantics above are never reached by a released
-execution. -/
+/-- The legacy subset validator types no table instruction: a module containing
+one fails that validation, so the table semantics above are never reached by a
+legacy subset execution. -/
 theorem checkInstr_table_rejected (C : Ctx) (h : Nat) (n m : Nat) :
     checkInstr C h (.tableGet n) = none ∧
     checkInstr C h (.tableSet n) = none ∧
@@ -1102,7 +1103,7 @@ theorem checkInstr_table_rejected (C : Ctx) (h : Nat) (n m : Nat) :
     checkInstr C h (.elemDrop n) = none :=
   ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
-/-- The released reduction relation enumerates no successor for a table
+/-- The legacy subset reduction relation enumerates no successor for a table
 instruction: `Wasm/Step.lean` owns every reduction rule and has none for this
 family. -/
 theorem successorsOfInstr_table_empty (c : Config) (rest : List Instr) (n m : Nat) :

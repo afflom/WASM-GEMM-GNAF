@@ -4,22 +4,26 @@ import WasmGemmGnaf.Wasm.Validate
 set_option autoImplicit false
 
 /-!
-# GNAF: the verified compiler to Core Wasm (SPEC §11.4)
+# GNAF: the verified compiler to the legacy Wasm subset
 
-`GNAF.compile` translates a `CheckedPlan` into a `Wasm.Module`.  It is a total,
+`GNAF.compile` translates a `CheckedPlan` into a `Wasm.Subset.Module`.  It is a total,
 structurally recursive function on the plan datatype of `GNAF/Plan.lean`, and
 every plan constructor has a real translation clause.
 
-## The target
+## The target and its non-release scope
 
-The target is *not* the whole Core grammar of `Wasm/Syntax.lean`: it is the
-released executable subset that `Wasm/Validate.lean` accepts — `i32` only, one
+The target is `Wasm.Subset.Module` and the legacy validator in
+`Wasm/Validate.lean` — `i32` only, one
 memory, no imports, no tables, no element or data segments, structured control
 (`block`/`loop`/`if`), `br`/`br_if`, full-width `i32` loads and stores on
 memory 0, locals, and the wrapping/unsigned `i32` operators.  The main theorem
 of this file, `GNAF.compile_validates`, proves that the emitted module really
-is in that subset, so the emitted module is not merely syntactically
-well-formed: it passes the released profile validator.
+passes that legacy checker.
+
+This is not the public amended-Core compiler required by SPEC §11.4.  The
+public artifact emitter takes `Wasm.Module` and uses `Wasm.encode`, while
+`GNAF.compile` returns `Wasm.Subset.Module`; no bridge or compiler
+correctness theorem connects those carriers.
 
 ## The machine model of the translation
 
@@ -44,11 +48,11 @@ and an output region.  The translation fixes the following representation.
   file proves nothing about execution (see `GNAF/CompileCorrect.lean` for what
   the current state of the Wasm layer does support).
 
-## The honest domain: `Plan.inReleasedSubset`
+## The honest legacy domain: `Plan.inReleasedSubset`
 
-Two plan constructs cannot be expressed by the released profile at all:
+Two plan constructs cannot be expressed by this legacy target:
 
-* `vectorOp` — the released profile has no SIMD, so no v128 instruction is
+* `vectorOp` — the legacy validator has no SIMD, so no v128 instruction is
   admitted by `Wasm.validate`;
 * `reduce` under an arithmetic contract that is not modular with a `u32`
   accumulator — every other contract needs an accumulator wider than `i32`,
@@ -147,7 +151,7 @@ end CompileEnv
 
 /-! ## Instruction shorthands
 
-Every shorthand below is a member of the released executable subset of
+Every shorthand below is a member of the legacy executable subset of
 `Wasm/Validate.lean`. -/
 
 /-- The memory immediate of every emitted access: memory 0, natural alignment,
@@ -336,22 +340,22 @@ def tableStores (base : Nat) : Nat → List Nat → List Wasm.Instr
   | _, [] => []
   | j, v :: vs => [constI (base + 4 * j), constI v, storeW] ++ tableStores base (j + 1) vs
 
-/-! ## The released arithmetic subset -/
+/-! ## The legacy target's arithmetic subset -/
 
-/-- The arithmetic contracts the released `i32` profile evaluates exactly: the
+/-- The arithmetic contracts the legacy `i32` target evaluates exactly: the
 modular mode with a `u32` accumulator, whose step `(acc + a * b) % 2 ^ 32` is
 precisely wrapping `i32` multiply-accumulate. -/
 def ArithmeticContract.releasedB (c : ArithmeticContract) : Bool :=
   c.mode == .modular && c.accumulator == .u32
 
-/-- A released contract really has accumulator modulus `2 ^ 32`. -/
+/-- A contract selected by `releasedB` has accumulator modulus `2 ^ 32`. -/
 theorem ArithmeticContract.accModulus_of_releasedB {c : ArithmeticContract}
     (h : c.releasedB = true) : c.accModulus = 4294967296 := by
   unfold releasedB at h
   simp only [Bool.and_eq_true, beq_iff_eq] at h
   simp [accModulus, h.2, ScalarKind.modulus, ScalarKind.byteWidth]
 
-/-- A released contract's step is exactly wrapping `i32` multiply-accumulate. -/
+/-- Such a contract's step is exactly wrapping `i32` multiply-accumulate. -/
 theorem ArithmeticContract.step_of_releasedB {c : ArithmeticContract}
     (h : c.releasedB = true) (acc a b : Nat) :
     c.step acc a b = (acc + a * b) % 4294967296 := by
@@ -361,7 +365,7 @@ theorem ArithmeticContract.step_of_releasedB {c : ArithmeticContract}
     exact h.1
   simp [step, hm, accModulus_of_releasedB h]
 
-/-- A released contract never reports a checked overflow. -/
+/-- Such a contract never reports a checked overflow. -/
 theorem ArithmeticContract.overflows_of_releasedB {c : ArithmeticContract}
     (h : c.releasedB = true) (acc a b : Nat) : c.overflows acc a b = false := by
   have hm : c.mode = .modular := by
@@ -370,13 +374,14 @@ theorem ArithmeticContract.overflows_of_releasedB {c : ArithmeticContract}
     exact h.1
   simp [overflows, hm]
 
-/-! ## The plan subset the released profile expresses -/
+/-! ## The plan subset the legacy target expresses -/
 
 namespace Plan
 
-/-- The decidable predicate carving out exactly the plans the released profile
-can express: no vector operation (there is no SIMD in the profile) and only
-released arithmetic contracts. -/
+/-- The decidable predicate carving out the plans this legacy compiler target
+handles without inserting `unreachable`: no vector operation and only the
+wrapping-`u32` arithmetic contracts selected by `releasedB`.  The
+historical identifier is retained, but this is not the public release carrier. -/
 def inReleasedSubset : Plan → Bool
   | nop => true
   | seq a b => a.inReleasedSubset && b.inReleasedSubset
@@ -458,25 +463,25 @@ def tableWords : Plan → Nat
 
 end Plan
 
-/-- **A register store is inside the released subset.**  Its translation is one
+/-- **A register store is inside the legacy target subset.**  Its translation is one
 full-width `i32` store on memory 0 and a handful of `i32` arithmetic
-instructions, all of which the released profile of `Wasm/Validate.lean`
+instructions, all of which the legacy checker of `Wasm/Validate.lean`
 admits. -/
 @[simp] theorem storeReg_inReleasedSubset (dst : RegionRef) (map : IndexMap)
     (width src : Nat) :
     (Plan.storeReg dst map width src).inReleasedSubset = true := rfl
 
-/-- **A register load is inside the released subset.**  Its translation is one
+/-- **A register load is inside the legacy target subset.**  Its translation is one
 full-width `i32` load on memory 0, a `local.set` and a handful of `i32`
-arithmetic instructions, all of which the released profile of
+arithmetic instructions, all of which the legacy checker of
 `Wasm/Validate.lean` admits. -/
 @[simp] theorem loadReg_inReleasedSubset (dst : Nat) (src : RegionRef)
     (map : IndexMap) (width : Nat) :
     (Plan.loadReg dst src map width).inReleasedSubset = true := rfl
 
-/-- **A register-driven loop is inside the released subset exactly when its body
+/-- **A register-driven loop is inside the legacy target subset exactly when its body
 is.**  The node itself needs only `block`/`loop`/`br_if`, `local.get` and
-`i32` comparison, all of which the released profile admits; it adds no new
+`i32` comparison, all of which the legacy checker admits; it adds no new
 refusal point. -/
 @[simp] theorem loopReg_inReleasedSubset (ir er : Nat) (map : IndexMap)
     (body : Plan) :
@@ -485,7 +490,7 @@ refusal point. -/
 /-- A plan typed at a *scalar* interface — one admitting no vector lane at all
 — contains no vector operation.  The `lanes = 0` restriction on `CheckedPlan`
 is therefore exactly a restriction to the plans whose vector fragment the
-released profile does not have to express. -/
+legacy target does not express. -/
 theorem hasType_no_vector {s : Sig} {p : Plan} {t : Sig} (h : HasType s p t)
     (hl : s.lanes = 0) : p.usesVector = false := by
   induction h with
@@ -523,7 +528,7 @@ theorem hasType_no_vector {s : Sig} {p : Plan} {t : Sig} (h : HasType s p t)
 `code e d scr p` is the operand-stack-neutral instruction sequence of plan `p`
 at loop-nesting depth `d` with statically declared scratch extent `scr`. -/
 
-/-- The translation of a plan into the released executable subset. -/
+/-- The translation of a plan into the legacy executable subset. -/
 def code (e : CompileEnv) : Nat → Nat → Plan → List Wasm.Instr
   | _, _, .nop => []
   | d, scr, .seq a b => code e d scr a ++ code e d scr b
@@ -633,7 +638,7 @@ def gemmRecType : Wasm.RecType :=
   { types := [{ final := true, supertypes := [], body := .func Wasm.gemmFuncType }] }
 
 /-- The module emitted from a layout and a function body. -/
-def moduleOf (e : CompileEnv) (body : List Wasm.Instr) : Wasm.Module :=
+def moduleOf (e : CompileEnv) (body : List Wasm.Instr) : Wasm.Subset.Module :=
   { types := [gemmRecType]
     imports := []
     funcs :=
@@ -661,12 +666,13 @@ def envOf (s : Sig) (p : Plan) : CompileEnv :=
     tableStride := p.tableWords
     depthBound := p.depth }
 
-/-- **SPEC §11.4.**  The GNAF-to-Wasm compiler. -/
-def compile {s t : Sig} (c : CheckedPlan s t) : Wasm.Module :=
+/-- The GNAF-to-legacy-subset compiler.  This is not the public amended-Core
+compiler required by SPEC §11.4. -/
+def compile {s t : Sig} (c : CheckedPlan s t) : Wasm.Subset.Module :=
   moduleOf (envOf s c.plan) (bodyCode (envOf s c.plan) s.scratch c.plan)
 
-/-- **SPEC §11.4, `compile_deterministic`.**  Compilation is a function: one
-checked plan has exactly one emitted module. -/
+/-- Determinism of the legacy subset compiler: one checked plan has exactly one
+emitted subset module. -/
 theorem compile_deterministic {s t : Sig} (c c' : CheckedPlan s t) (h : c = c') :
     compile c = compile c' := by rw [h]
 
@@ -684,7 +690,7 @@ theorem compile_plan_congr {s t : Sig} (c c' : CheckedPlan s t)
 and the lemmas below build up to `checkList_code`: the translation of *any*
 well-typed plan is operand-stack neutral in every context with enough locals. -/
 
-/-- The release checker on an instruction list. -/
+/-- The legacy subset checker on an instruction list. -/
 def checkList (C : Wasm.Ctx) (h : Nat) (l : List Wasm.Instr) : Option Nat :=
   Wasm.checkExpr C h (Wasm.Expr.ofList l)
 
@@ -927,7 +933,7 @@ theorem checkList_condCode (e : CompileEnv) (C : Wasm.Ctx) (h scr : Nat) (co : C
 
 /-- **The translation is well typed.**  For every well-typed plan, in every
 context declaring enough locals, the emitted instruction sequence is accepted by
-the release checker and is operand-stack neutral. -/
+the legacy subset checker and is operand-stack neutral. -/
 theorem checkList_code {s : Sig} {p : Plan} {t : Sig} (hp : HasType s p t) :
     ∀ (e : CompileEnv) (d scr : Nat) (C : Wasm.Ctx) (h : Nat),
       e.regs = s.regs → 2 + e.regs + d + p.depth + 1 ≤ C.numLocals →
@@ -1180,20 +1186,19 @@ theorem exports_eq :
 
 end CompiledModule
 
-/-- **SPEC §11.4, structural invariant.**  The emitted module declares no
-imports: it is closed. -/
+/-- Structural fact about the emitted legacy module: it declares no imports. -/
 theorem compile_isClosed {s t : Sig} (c : CheckedPlan s t) :
     (compile c).IsClosed := rfl
 
-/-- **SPEC §11.4, structural invariant.**  The emitted module exports the
-required `gemm` function and the required memory, in that order. -/
+/-- Structural fact about the emitted legacy module: it exports `gemm`
+and memory, in that order. -/
 theorem compile_exports {s t : Sig} (c : CheckedPlan s t) :
     (compile c).exports =
       [{ name := Wasm.gemmExportName, desc := .func 0 },
        { name := Wasm.memoryExportName, desc := .mem 0 }] := rfl
 
 /-- The emitted module has exactly one function, one memory, and no other
-definitions: its section contents are exactly what the released profile
+definitions: its section contents are exactly what the legacy subset checker
 admits. -/
 theorem compile_sections {s t : Sig} (c : CheckedPlan s t) :
     (compile c).types.length = 1 ∧ (compile c).imports = [] ∧
@@ -1207,18 +1212,18 @@ theorem compile_sections {s t : Sig} (c : CheckedPlan s t) :
 /-! ## Validity of the emitted module -/
 
 theorem all_replicate_isI32 (n : Nat) :
-    (List.replicate n (Wasm.ValType.num .i32)).all Wasm.Module.isI32 = true := by
+    (List.replicate n (Wasm.ValType.num .i32)).all Wasm.Subset.Module.isI32 = true := by
   induction n with
   | zero => rfl
-  | succ k ih => simpa [List.replicate, Wasm.Module.isI32] using ih
+  | succ k ih => simpa [List.replicate, Wasm.Subset.Module.isI32] using ih
 
 theorem funcTypeAt_zero (e : CompileEnv) (b : List Wasm.Instr) :
-    Wasm.Module.funcTypeAt (moduleOf e b) 0 = some Wasm.gemmFuncType := rfl
+    Wasm.Subset.Module.funcTypeAt (moduleOf e b) 0 = some Wasm.gemmFuncType := rfl
 
 theorem funcCtx_numLocals (e : CompileEnv) (b : List Wasm.Instr) :
-    (Wasm.Module.funcCtx (moduleOf e b) Wasm.gemmFuncType
+    (Wasm.Subset.Module.funcCtx (moduleOf e b) Wasm.gemmFuncType
       (moduleOf e b).funcs[0]!).numLocals = e.numLocals := by
-  simp [Wasm.Module.funcCtx, moduleOf, Wasm.gemmFuncType, CompileEnv.numLocals]
+  simp [Wasm.Subset.Module.funcCtx, moduleOf, Wasm.gemmFuncType, CompileEnv.numLocals]
 
 /-- The pinned export list carries the required memory export. -/
 theorem exportsMemory_gemmExports :
@@ -1229,52 +1234,52 @@ theorem exportsMemory_gemmExports :
 
 /-- The pinned export list names function 0 as `gemm`. -/
 theorem gemmIndex_gemmExports (e : CompileEnv) (b : List Wasm.Instr) :
-    Wasm.Module.gemmIndex? (moduleOf e b) = some 0 := by
-  simp [Wasm.Module.gemmIndex?, CompiledModule.exports_eq]
+    Wasm.Subset.Module.gemmIndex? (moduleOf e b) = some 0 := by
+  simp [Wasm.Subset.Module.gemmIndex?, CompiledModule.exports_eq]
 
-/-- The emitted module passes release validation whenever its single function
+/-- The emitted module passes legacy subset validation whenever its single function
 body is accepted at the ABI arity. -/
 theorem validate_moduleOf (e : CompileEnv) (b : List Wasm.Instr)
     (hbody : Wasm.checkExpr
       { numLocals := e.numLocals, globals := [], numTags := 0, labels := [1] } 0
       (Wasm.Expr.ofList b) = some 1) :
     Wasm.validate (moduleOf e b) = true := by
-  have hfunc : Wasm.Module.checkFunc (moduleOf e b)
+  have hfunc : Wasm.Subset.Module.checkFunc (moduleOf e b)
       { type := 0
         locals := List.replicate e.declaredLocals (Wasm.ValType.num .i32)
         body := Wasm.Expr.ofList b } = true := by
     have hctx :
-        Wasm.Module.funcCtx (moduleOf e b) Wasm.gemmFuncType
+        Wasm.Subset.Module.funcCtx (moduleOf e b) Wasm.gemmFuncType
           { type := 0
             locals := List.replicate e.declaredLocals (Wasm.ValType.num .i32)
             body := Wasm.Expr.ofList b } =
         { numLocals := e.numLocals, globals := [], numTags := 0, labels := [1] } := by
-      simp [Wasm.Module.funcCtx, moduleOf, Wasm.gemmFuncType, CompileEnv.numLocals]
-    simp only [Wasm.Module.checkFunc, funcTypeAt_zero, hctx, hbody]
-    simp [Wasm.gemmFuncType, Wasm.Module.isI32, all_replicate_isI32]
-  have hclosed : Wasm.Module.checkClosed (moduleOf e b) = true := rfl
-  have hmems : Wasm.Module.checkMems (moduleOf e b) = true := by
+      simp [Wasm.Subset.Module.funcCtx, moduleOf, Wasm.gemmFuncType, CompileEnv.numLocals]
+    simp only [Wasm.Subset.Module.checkFunc, funcTypeAt_zero, hctx, hbody]
+    simp [Wasm.gemmFuncType, Wasm.Subset.Module.isI32, all_replicate_isI32]
+  have hclosed : Wasm.Subset.Module.checkClosed (moduleOf e b) = true := rfl
+  have hmems : Wasm.Subset.Module.checkMems (moduleOf e b) = true := by
     have h1 : decide (e.pages ≤ Wasm.Memory.hardMaxPages) = true :=
       decide_eq_true e.pages_le_hard
-    simp [Wasm.Module.checkMems, moduleOf, h1]
-  have hglobals : (moduleOf e b).globals.all Wasm.Module.checkGlobal = true := rfl
-  have htags : (moduleOf e b).tags.all Wasm.Module.checkTag = true := rfl
-  have hfuncs : (moduleOf e b).funcs.all (Wasm.Module.checkFunc (moduleOf e b)) = true := by
+    simp [Wasm.Subset.Module.checkMems, moduleOf, h1]
+  have hglobals : (moduleOf e b).globals.all Wasm.Subset.Module.checkGlobal = true := rfl
+  have htags : (moduleOf e b).tags.all Wasm.Subset.Module.checkTag = true := rfl
+  have hfuncs : (moduleOf e b).funcs.all (Wasm.Subset.Module.checkFunc (moduleOf e b)) = true := by
     simpa [moduleOf] using hfunc
-  have hexpmem : Wasm.Module.exportsMemory (moduleOf e b) = true :=
+  have hexpmem : Wasm.Subset.Module.exportsMemory (moduleOf e b) = true :=
     exportsMemory_gemmExports
-  have hgemm : Wasm.Module.checkGemmExport (moduleOf e b) = true := by
-    have hidx : Wasm.Module.gemmIndex? (moduleOf e b) = some 0 := gemmIndex_gemmExports e b
-    simp only [Wasm.Module.checkGemmExport, hidx, CompiledModule.funcs_eq,
+  have hgemm : Wasm.Subset.Module.checkGemmExport (moduleOf e b) = true := by
+    have hidx : Wasm.Subset.Module.gemmIndex? (moduleOf e b) = some 0 := gemmIndex_gemmExports e b
+    simp only [Wasm.Subset.Module.checkGemmExport, hidx, CompiledModule.funcs_eq,
       List.getElem?_cons_zero, funcTypeAt_zero]
     rfl
-  have hstart : Wasm.Module.checkStart (moduleOf e b) = true := rfl
-  have htypes : Wasm.Module.checkTypes (moduleOf e b) = true := rfl
+  have hstart : Wasm.Subset.Module.checkStart (moduleOf e b) = true := rfl
+  have htypes : Wasm.Subset.Module.checkTypes (moduleOf e b) = true := rfl
   -- The two pinned export names are distinct.  `nameOfString` goes through
   -- `String.toByteArray`, which the kernel will not unfold, so this is proved
   -- from `Wasm.gemmExportName_ne_memoryExportName` rather than by `decide`;
   -- that keeps the closure free of `Classical.choice`.
-  have hnames : Wasm.Module.checkExports (moduleOf e b) = true := by
+  have hnames : Wasm.Subset.Module.checkExports (moduleOf e b) = true := by
     have hne : Wasm.memoryExportName ≠ Wasm.gemmExportName :=
       fun h => Wasm.gemmExportName_ne_memoryExportName h.symm
     have hb : (Wasm.memoryExportName == Wasm.gemmExportName) = false :=
@@ -1287,8 +1292,8 @@ theorem validate_moduleOf (e : CompileEnv) (b : List Wasm.Instr)
   rw [hclosed, hmems, hglobals, htags, hfuncs, hexpmem, hgemm, hstart, htypes, hnames]
   rfl
 
-/-- **SPEC §11.4 / §7.3.**  The compiler emits only modules that pass release
-validation: the artifact is inside the released portable profile. -/
+/-- The compiler emits only modules that pass the legacy subset validator.
+This does not place the result in the public amended-Core release carrier. -/
 theorem compile_validates {s t : Sig} (c : CheckedPlan s t) :
     Wasm.validate (compile c) = true := by
   refine validate_moduleOf (envOf s c.plan) (bodyCode (envOf s c.plan) s.scratch c.plan) ?_
@@ -1302,8 +1307,9 @@ theorem compile_validates {s t : Sig} (c : CheckedPlan s t) :
     0 (by simp [envOf]) hloc
   exact checkList_app2 hcode (checkList_loadAt _ 0 _)
 
-/-- The emitted module is declaratively valid, in the sense of
-`Wasm.DeclarativelyValid` (SPEC §7.3). -/
+/-- The emitted module satisfies the legacy predicate
+`Wasm.DeclarativelyValid`.  This is not amended-Core declarative
+validity. -/
 theorem compile_declarativelyValid {s t : Sig} (c : CheckedPlan s t) :
     Wasm.DeclarativelyValid (compile c) :=
   (Wasm.validate_bool_iff _).mp (compile_validates c)
@@ -1603,7 +1609,7 @@ theorem listSize_code (e : CompileEnv) :
 /-! ## The refusal points are exactly the out-of-subset nodes
 
 The translation emits `unreachable` — a trap — for the two constructs the
-released profile cannot express (`vectorOp`, and `reduce` under a contract that
+legacy target cannot express (`vectorOp`, and `reduce` under a contract that
 is not modular with a `u32` accumulator).  `code_no_unreachable` proves the
 converse claim that makes this a real restriction rather than a slogan: the
 translation of an in-subset plan contains **no** `unreachable` anywhere,
@@ -1772,7 +1778,7 @@ theorem listHasUnreachable_tableStores (base : Nat) :
     simp [tableStores, listHasUnreachable, constI, storeW, ih]
 
 /-- **The refusal points are exactly the out-of-subset nodes.**  The translation
-of a plan inside the released subset emits no `unreachable` at any nesting
+of a plan inside the legacy target subset emits no `unreachable` at any nesting
 depth. -/
 theorem code_no_unreachable (e : CompileEnv) :
     ∀ (d scr : Nat) (p : Plan), p.inReleasedSubset = true →
@@ -1848,7 +1854,7 @@ theorem code_no_unreachable (e : CompileEnv) :
   | buildOutput src => intro _; simp [code, listHasUnreachable, constI, storeW]
   | opaqueProcess spec body ih => intro h; exact ih d scr h
 
-/-- The body emitted for a plan inside the released subset contains no
+/-- The body emitted for a plan inside the legacy target subset contains no
 `unreachable`. -/
 theorem bodyCode_no_unreachable (e : CompileEnv) (scr : Nat) (p : Plan)
     (h : p.inReleasedSubset = true) :
@@ -1857,11 +1863,11 @@ theorem bodyCode_no_unreachable (e : CompileEnv) (scr : Nat) (p : Plan)
     constI, loadW]
 
 /-- The number of instructions of every function body of a module. -/
-def moduleCodeSize (m : Wasm.Module) : Nat :=
+def moduleCodeSize (m : Wasm.Subset.Module) : Nat :=
   m.funcs.foldl (fun acc f => acc + exprSize f.body) 0
 
-/-- **SPEC §11.4, `compile_resources`.**  The emitted module's code fits the
-plan's own static budget: the emitted instruction count is at most a fixed
+/-- Resource fact for the legacy compiler: the emitted subset module's code fits
+the plan's own static budget.  The instruction count is at most a fixed
 multiple of the plan's declared static cost coordinates, plus the two-instruction
 ABI epilogue. -/
 theorem compile_resources {s t : Sig} (c : CheckedPlan s t) :

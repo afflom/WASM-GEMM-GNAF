@@ -1,5 +1,6 @@
 /-
-  Artifact/Release.lean --- the concrete release instantiation, and UV-003.
+  Artifact/Release.lean --- the current legacy-subset release-scope
+  construction and its disclosed open obligations.
 
   Normative sources: SPEC.md sections 1 (`GlobalOptimal`), 7.2 (the release
   profile), 8.3 (the release problem), 9.3 (the release objective), 10.1 (the
@@ -7,10 +8,10 @@
 
   ## WHAT THIS FILE PROVES
 
-  It fixes the release scope — profile, problem, setting, objective — and it
-  *constructs* a `Release.Seam` (§5) whose cost model, validation cost, resource
-  budget and costed machine are all closed terms, with a `Universal.SystemEvaluation`
-  inhabitant on a closed byte literal.
+  It fixes the intended profile, problem, setting, and objective identities and
+  constructs a closed `Release.Seam` (§5).  That seam is explicitly the
+  legacy subset seam described below, not the public amended-Core release
+  instantiation.
 
   ## WHAT THIS FILE NO LONGER PROVES: UV-003 IS OPEN
 
@@ -55,7 +56,7 @@
   no `sorry`, no `admit`, no project axiom, no `native_decide`, no `unsafe`, no
   `partial` and, now, no `noncomputable`.
 
-  ## THE SEAM IS CONSTRUCTED (GO-008)
+  ## THE SUBSET SEAM IS CONSTRUCTED
 
   §5 below builds a `Release.Seam` and proves it is not degenerate.  Items 2, 3
   and 4 of what used to be this file's hypothesis list are now definitions:
@@ -80,9 +81,6 @@
   * `Release.seam_machine_completes` — on `Release.witnessModule` the machine
     initializes and returns a **completed, nonempty, canonically ordered**
     costed frontier at every raw invocation.
-  * `Release.systemEvaluation_inhabited` — `Universal.SystemEvaluation` at
-    `Release.setting Release.seam` is inhabited, on the closed literal
-    `Release.witnessBytes`, which is also `Universal.ProfileValid`.
 
   ## THREE DISCLOSURES THAT TRAVEL WITH THE CONSTRUCTION
 
@@ -110,25 +108,9 @@
      which no `decide` can supply at that fuel.  Everything proved about
      `Release.witnessModule` is about `Release.witnessModule`.
 
-  3. **`Universal.Admissible` is still open.**  `Release.witness_profileValid`
-     proves conjunct (a) and `Release.systemEvaluation_inhabited` proves
-     conjunct (d), both on a closed literal.  `Universal.SemanticCorrect` —
-     conjunct (b) — demands `Gemm.Reference.Accepts` at *every* raw invocation
-     and is **false** for a module whose `gemm` returns the constant `0`; it is
-     not claimed here, and nothing in this file concludes anything from it.
-     `GO-006` is open.
-
-  ## WHAT REMAINS A HYPOTHESIS, AND WHY
-
-  One thing, and it is not faked.
-
-  `[Foundation.Fintype (Gemm.RawInvocation Release.wasmProfile)]` — SPEC §8.4's
-  `problem_input_fintype`.  `Universal/Competitor.lean` already takes it as a
-  hypothesis; `Theorems/GemmTotal.lean` records it as **omitted** under `O-3`
-  (the carrier is mathematically finite, but no duplicate-free covering `List`
-  with its `Nodup` and coverage proofs exists here).  It is carried here as an
-  instance-implicit argument, exactly as upstream, and §5.12 — including
-  `Release.systemEvaluation_inhabited` — carries it.
+  3. **`Universal.Admissible` is still open.**  No emitted byte sequence in this
+     file carries the public Core module, semantic-correctness, resource and
+     system-evaluation evidence that proposition requires.  `GO-006` is open.
 
   ## A DISCLOSED DEVIATION IN THE PROFILE
 
@@ -136,10 +118,12 @@
   `Wasm.Profile.checked (Wasm.canonicalCore3Wasm32ProfileBody … Release.wasmCostTableBody)`,
   and SPEC §7.5 builds `Release.wasmCostTableBody` with
   `Wasm.buildCanonicalCostTable` from the vendored Core 3.0 conformance map.
-  `Wasm.buildCanonicalCostTable`, `Release.core3RuleConformanceMap`,
+  `Wasm.buildCanonicalCostTable`,
   `Release.canonicalRuleContribution` and
-  `Release.canonicalInitializationContribution` **do not exist** in this
-  repository, and `vendor/wasm-spec` contains no conformance data.
+  `Release.canonicalInitializationContribution` do not exist.  The
+  repository now vendors the authoritative SpecTec sources and has an adequacy
+  map, but that map remains mostly pointed at legacy subset declarations rather
+  than a complete amended-Core execution-rule universe.
 
   `Release.wasmProfile` below is therefore `Wasm.unitWitnessProfile`: the same
   `Wasm.canonicalCore3Wasm32ProfileBody` at the same pinned
@@ -149,22 +133,22 @@
   required exports, resource limits, nondeterminism policy, the three semantics
   identities, and the eight cost *units* — is the canonical release value.
 
-  `ruleRows` and `initializationRows` are **no longer empty** (that was CO-006):
-  `Wasm.canonicalCostTableUnits` now carries one row per `Wasm.RuleId` and one
-  per `Wasm.InitEventId`, proved to be a duplicate-free exact cover
+  `ruleRows` and `initializationRows` are no longer empty:
+  `Wasm.canonicalCostTableUnits` carries one row per legacy
+  `Wasm.RuleId` and one per legacy `Wasm.InitEventId`, proved to be a
+  duplicate-free exact cover of those local inductives
   (`Wasm.canonicalCostTable_exact_cover`,
   `Wasm.canonicalCostTable_ruleRows_nodup`,
   `Wasm.canonicalCostTable_covers_every_rule`) and proved to charge exactly what
   the contribution law charges (`Wasm.canonicalCostTable_charges_exactly`).
 
-  What still differs from SPEC §7.2 is the *provenance* of those rows: they are
-  written here and checked against this repository's own `eventContribution`,
-  not derived by `Wasm.buildCanonicalCostTable` from a vendored Core 3.0
-  conformance map, which does not exist here.  This is disclosed, not hidden:
-  the profile below is **not** SPEC §7.2's release literal, and no theorem in
-  this file should be cited as if it were.  When the conformance-map layer
-  lands, exactly one definition — `Release.wasmProfile` — changes, and nothing
-  else in this file does.
+  This repairs the earlier empty-table defect only for the legacy subset
+  machine.  It does not prove that every amended-Core execution rule has a
+  canonical row, so CO-006 remains open at release scope; the gap is coverage
+  as well as provenance.  The rows are checked against this repository's legacy
+  `eventContribution` rather than derived from a complete source-bound
+  amended-Core rule map.  Consequently the profile below is not SPEC §7.2's
+  release literal and no theorem here should be cited as if it were.
 -/
 import WasmGemmGnaf.Universal.Argmin
 import WasmGemmGnaf.Cost.CanonicalObjective
@@ -199,8 +183,8 @@ def wasmProfileBody : Wasm.ProfileBody :=
   Wasm.canonicalCore3Wasm32ProfileBody Wasm.core3RevisionCommit
     Wasm.canonicalCostTableUnits
 
-/-- The checked release profile: `Release.wasmProfileBody` above, together with
-its lawfulness proof.
+/-- The checked profile currently used by the legacy subset seam:
+`Release.wasmProfileBody` above, together with its lawfulness proof.
 
 This used to read `:= Wasm.unitWitnessProfile`, and an external audit was right
 to object to a release line whose profile is spelled as somebody else's
@@ -213,14 +197,14 @@ disclosed cost-table deviation of the file header — SPEC §7.5's
 def wasmProfile : Wasm.Profile :=
   Wasm.Profile.checked wasmProfileBody Wasm.unitWitnessProfileBody_lawful
 
-/-- **The disclosure, as a theorem.**  The release profile and the witness
+/-- **The disclosure, as a theorem.**  The current profile and the witness
 profile of `Wasm/Profile.lean` are the same record.  Renaming the definition
 strengthened nothing, and this equation is here so that no reader has to take
 that on trust. -/
 theorem wasmProfile_eq_unitWitnessProfile :
     wasmProfile = Wasm.unitWitnessProfile := rfl
 
-/-- **SPEC §7.2**, `Release.wasmProfile_body`. -/
+/-- The body of the current profile. -/
 theorem wasmProfile_body : wasmProfile.body = wasmProfileBody := rfl
 
 /-- The cost table actually carried by the profile above.  Stated so the
@@ -228,11 +212,9 @@ deviation is checkable, not merely described. -/
 theorem wasmProfile_costTableBody :
     wasmProfile.costTableBody = Wasm.canonicalCostTableUnits := rfl
 
-/-- **SPEC §7.5, the audit rows.**  The profile's cost table carries an exact,
-duplicate-free cover of every pinned Core rule identifier and of every harness
-initialization event identifier.  This was CO-006: the rows used to be empty,
-so `rowFor?` returned `none` for every rule and every per-rule charge collapsed
-to the uniform `ruleStepUnit`. -/
+/-- The current profile's cost table exactly covers the legacy
+`Wasm.RuleId` and `Wasm.InitEventId` inductives.  This does not
+assert coverage of every amended-Core execution rule. -/
 theorem wasmProfile_ruleRows_exact_cover :
     wasmProfile.costTableBody.ruleRows.map Wasm.CostRuleRow.ruleId =
         Wasm.RuleId.all.map Wasm.RuleId.name ∧
@@ -241,7 +223,7 @@ theorem wasmProfile_ruleRows_exact_cover :
   ⟨Wasm.canonicalCostTable_exact_cover_ids,
    Wasm.canonicalCostTable_init_exact_cover_ids⟩
 
-/-- Every pinned Core rule identifier resolves to a row on the release
+/-- Every legacy subset rule identifier resolves to a row on the current
 profile. -/
 theorem wasmProfile_covers_every_rule (r : Wasm.RuleId) :
     (wasmProfile.costTableBody.rowFor? r.name).isSome :=
@@ -265,81 +247,79 @@ theorem wasmProfile_decodeCost (bytes : ByteArray) :
     wasmProfile.costTableBody.decodeCost bytes = bytes.size + 1 :=
   wasmProfile.decodeCost_eq bytes
 
-/-! ### 1.1a The released module over the PINNED Core 3.0 front end (SPEC §7.2)
+/-! ### 1.1a Diagnostic public-Core ABI witness (non-release-applicable)
 
-Everything else in this file is stated over `Wasm.Module`, the subset syntax of
+Everything else in this file is stated over `Wasm.Subset.Module`, the subset syntax of
 `Wasm/Syntax.lean`, because the costed machine, the configuration, the reduction
-relation and `Universal.SystemEvaluation` all are.  This section is the part of
-the release scope that is **not**: a concrete byte string, the module the pinned
-Core 3.0 decoder returns for it, and the released profile's verdict on that
-module.
+relation and `Universal.SystemEvaluation` all are.  This section instead records
+a concrete diagnostic byte string, the public module the amended Core decoder
+returns for it, and admission by the current `Release.wasmProfile` value.  It is
+not a released GEMM artifact or evidence for the subset release predicates.
 
 Read the scope carefully, because the honesty of the whole file depends on it:
 
-* `Wasm.decode` here is the decoder of the complete pinned Core 3.0 binary
-  format (`Wasm/CoreFrontEnd.lean`), and `coreArtifact_declarative` reaches the
-  pinned grammar `Bmodule` through `Wasm.decode_sound`, which `xtask
+* `Wasm.decode` here is the amended decoder `Wasm.Core.decodeA`
+  (`Wasm/CoreFrontEnd.lean`), and `coreArtifact_declarative` reaches the amended
+  grammar `Wasm.Core.Binary.BmoduleA` through `Wasm.decode_sound`, which `xtask
   independence` checks is not a statement about an encoder.
-* `Wasm.Core.Module.ValidUnder` is the conjunction SPEC §7.2 asks for:
-  well-typedness in the amended Core 3.0 judgment, AND admission by the
-  profile's own feature matrix, limit table, closed import policy and exported
-  ABI.
+* `Wasm.Core.Module.ValidUnder` combines well-typedness in the amended Core 3.0
+  judgment with the profile's feature, limit, import, and exported-ABI checks.
+  This local diagnostic conjunction is not the release predicate.
 * **`Universal.ProfileValid` does not range over these bytes.**  That predicate
   still decodes with `Wasm.Subset.decode`; it is the competitor universe, and
   moving it needs the Core execution layer (`Wasm.Config`, `Wasm.Step`,
   `Wasm.initialGemmInvocationCosted`), which `Wasm/Core/` does not have.
-  `coreArtifact_profileValid_spec_reading` below therefore states SPEC §10.1's
-  *own* reading — the one whose decoder is `Wasm.decode` — and discharges it on
-  this artifact, without claiming it of `Universal.ProfileValid`.
-* Nothing here says these are the bytes the release path SELECTS.
+  `coreArtifact_profileValid_spec_reading` below records only the analogous
+  public-Core diagnostic conjunction; it does not discharge SPEC §10.1's
+  release predicate.
+* Nothing here says these are the bytes the release path selects.
   `Release.artifactBytes` does not exist; selection is open. -/
 
-/-- **The released Core 3.0 artifact bytes.**  A 53-byte literal of the pinned
-binary format (`Wasm/CoreArtifact.lean`). -/
+/-- A 53-byte diagnostic public-Core ABI witness
+(`Wasm/CoreArtifact.lean`).  It is not selected release bytes. -/
 def coreArtifactBytes : ByteArray := Wasm.Core.releaseArtifactBytes
 
-/-- The module those bytes denote: the released ABI shape of SPEC §7.2 in the
-pinned Core 3.0 abstract syntax. -/
-def coreArtifactModule : Wasm.Core.Module := Wasm.Core.releaseBaselineModule
+/-- The public representable module those bytes denote.  Its `.core` projection
+has the required ABI export shape, but computes no GEMM and is not a release
+module. -/
+def coreArtifactModule : Wasm.Module := Wasm.Core.releaseArtifactModule
 
-/-- **SPEC §7.3.**  The pinned Core 3.0 decoder accepts the released bytes and
-returns exactly that module. -/
+/-- The amended public-Core decoder accepts the diagnostic bytes and returns
+exactly the diagnostic module. -/
 theorem coreArtifact_decode :
     Wasm.decode coreArtifactBytes = .ok coreArtifactModule :=
   Wasm.Core.decode_releaseArtifactBytes
 
-/-- **SPEC §7.3.**  The released bytes are derivable in the pinned Core 3.0
-binary grammar, with the released module as the derived value. -/
+/-- The diagnostic bytes are derivable in the amended `BmoduleA` grammar, with
+the diagnostic module as the derived value. -/
 theorem coreArtifact_declarative :
     Wasm.DeclarativeBinaryRelation coreArtifactBytes coreArtifactModule :=
   Wasm.Core.releaseArtifactBytes_declarative
 
-/-- **SPEC §7.2.**  The released profile admits the released Core 3.0 module. -/
+/-- The current `Release.wasmProfile` value admits the diagnostic Core module. -/
 theorem coreArtifact_admitted :
-    Wasm.Core.Module.AdmittedBy wasmProfile coreArtifactModule :=
+    Wasm.Core.Module.AdmittedBy wasmProfile coreArtifactModule.core :=
   Wasm.Core.releaseArtifactBytes_admitted wasmProfile
 
-/-- **SPEC §7.2.**  The released Core 3.0 module is valid under the released
-profile: well typed in the amended Core 3.0 judgment, and admitted. -/
+/-- The diagnostic module is well typed in the amended Core judgment and
+admitted by the current profile value. -/
 theorem coreArtifact_validUnder :
-    Wasm.Core.Module.ValidUnder wasmProfile coreArtifactModule :=
+    Wasm.Core.Module.ValidUnder wasmProfile coreArtifactModule.core :=
   Wasm.Core.releaseArtifactBytes_validUnder wasmProfile
 
-/-- The released Core 3.0 module declares no import: the release profile is
-closed and the module obeys it. -/
-theorem coreArtifact_imports : coreArtifactModule.imports = [] := rfl
+/-- The diagnostic Core module declares no import. -/
+theorem coreArtifact_imports : coreArtifactModule.core.imports = [] := rfl
 
-/-- The released Core 3.0 module carries exactly the two exports SPEC §7.2
-requires, and no others. -/
+/-- The diagnostic Core module carries exactly the required memory and `gemm`
+exports, and no others. -/
 theorem coreArtifact_exports :
-    coreArtifactModule.exports =
+    coreArtifactModule.core.exports =
       [ { name := Wasm.Core.memoryExportName, externidx := .mem Wasm.Core.idx0 }
       , { name := Wasm.Core.gemmExportName, externidx := .func Wasm.Core.idx0 } ] :=
   rfl
 
 /--
-  **SPEC §10.1's `ProfileValid`, in SPEC's own spelling, discharged on the
-  released Core 3.0 artifact.**
+  **Diagnostic public-Core profile-admission conjunction.**
 
   SPEC §10.1 writes the predicate as
 
@@ -347,24 +327,23 @@ theorem coreArtifact_exports :
                 Wasm.validateUnder P module = true ∧
                 module.imports = [] ∧ HasExactGemmExports P module
 
-  and `Wasm.decode` is the pinned Core 3.0 decoder.  This theorem is that
-  conjunction, with `Wasm.Core.Module.ValidUnder` for the validity clause and
-  `Module.exportsAdmittedBy` for the ABI clause — the Core 3.0 readings of the
-  two, from `Wasm/Core/ProfileAmendment.lean` and `Wasm/Core/Profile.lean`.
+  Here `Wasm.decode` is the amended public decoder.  This theorem records a
+  similarly shaped conjunction using `Wasm.Core.Module.ValidUnder` for the
+  validity clause and `Module.exportsAdmittedBy` for the ABI clause.
 
   It is **not** `Universal.ProfileValid`, and it is not offered as a discharge
   of it: that definition decodes with `Wasm.Subset.decode` and is the predicate
   the competitor universe and `GlobalOptimal` actually quantify over.  What this
-  theorem establishes is that SPEC's reading is *satisfiable by a concrete byte
-  string in this repository* — which, before `Wasm/CoreArtifact.lean`, no
-  declaration here could say.
+  This theorem establishes only that this diagnostic public-Core conjunction is
+  inhabited.  The module computes no GEMM, is not selected, and has no
+  release-scoped `Universal.SystemEvaluation`.
 -/
 theorem coreArtifact_profileValid_spec_reading :
-    ∃ m : Wasm.Core.Module,
+    ∃ m : Wasm.Module,
       Wasm.decode coreArtifactBytes = .ok m ∧
-        Wasm.Core.Module.ValidUnder wasmProfile m ∧
-        m.imports = [] ∧
-        Wasm.Core.Module.exportsAdmittedBy wasmProfile m = true :=
+        Wasm.Core.Module.ValidUnder wasmProfile m.core ∧
+        m.core.imports = [] ∧
+        Wasm.Core.Module.exportsAdmittedBy wasmProfile m.core = true :=
   ⟨coreArtifactModule, coreArtifact_decode, coreArtifact_validUnder,
    coreArtifact_imports, by
      have h := coreArtifact_admitted
@@ -429,7 +408,7 @@ def semanticsFor (costEvent : Wasm.Event → Cost.Event) :
 /-- The validation counter of `Release.semanticsFor` is SPEC §7.5's
 `Wasm.validationCost`, and it is never zero. -/
 theorem semanticsFor_validationSteps (costEvent : Wasm.Event → Cost.Event)
-    (m : Wasm.Module) :
+    (m : Wasm.Subset.Module) :
     (semanticsFor costEvent).validationSteps m =
         Wasm.validationCost wasmProfile.costTableBody m ∧
       0 < (semanticsFor costEvent).validationSteps m :=
@@ -438,7 +417,7 @@ theorem semanticsFor_validationSteps (costEvent : Wasm.Event → Cost.Event)
 /-- The static-data counter of `Release.semanticsFor` is SPEC §7.5's
 `Wasm.instantiatedStaticBytes`. -/
 theorem semanticsFor_staticDataBytes (costEvent : Wasm.Event → Cost.Event)
-    (m : Wasm.Module) :
+    (m : Wasm.Subset.Module) :
     (semanticsFor costEvent).staticDataBytes m =
       Wasm.instantiatedStaticBytes wasmProfile m := rfl
 
@@ -561,18 +540,17 @@ forbade that too.  The obligation is to *implement* SPEC §10.1's explorer as a
 `Universal.Decider` and prove `Universal.DeciderAnswersAdmissible` of it.  Until
 that exists, the honest state of this file is the absence below.
 
-What survives is everything that never needed a decider: the scope objects of
-§1 and §2, the constructed seam of §5, and the `Universal.SystemEvaluation`
-inhabitant of §5.14 — which is decider-independent data. -/
+What survives is everything that never needed a decider or a subset-emission
+bridge: the scope objects of §1 and §2, the constructed subset seam of §5,
+and its module-level explorer and per-input evaluation support. -/
 
 end Parametric
 
-/-! ## 5. The seam, constructed (GO-008)
+/-! ## 5. The subset seam, constructed
 
-Everything above is universally quantified over `(seam : Seam)`, so every
-release theorem is an implication whose antecedent may be unsatisfiable.  This
-section removes that possibility by *building* a `Seam` and proving it is not
-degenerate.
+This section builds a `Seam` and proves its subset machine is not degenerate.
+It does not discharge GO-008, which requires an emitted, semantically correct
+public Core GEMM module under the released costed harness.
 
 ### 5.1 The event charge (SPEC §7.5)
 
@@ -682,10 +660,10 @@ def semantics : Universal.Semantics wasmProfile := semanticsFor costEvent
 
 @[simp] theorem semantics_costEvent : semantics.costEvent = costEvent := rfl
 
-@[simp] theorem semantics_validationSteps (m : Wasm.Module) :
+@[simp] theorem semantics_validationSteps (m : Wasm.Subset.Module) :
     semantics.validationSteps m = Wasm.validationCost wasmProfile.costTableBody m := rfl
 
-@[simp] theorem semantics_staticDataBytes (m : Wasm.Module) :
+@[simp] theorem semantics_staticDataBytes (m : Wasm.Subset.Module) :
     semantics.staticDataBytes m = Wasm.instantiatedStaticBytes wasmProfile m := rfl
 
 /-! ### 5.3 The released costed machine -/
@@ -694,7 +672,7 @@ def semantics : Universal.Semantics wasmProfile := semanticsFor costEvent
 `Wasm.exploreAllCosted`, from `Wasm/CostedExplore.lean`. -/
 def machine : Universal.CostedMachine semantics := Wasm.releaseCostedMachine semantics
 
-@[simp] theorem machine_initial (m : Wasm.Module) (inv : Wasm.Invocation wasmProfile) :
+@[simp] theorem machine_initial (m : Wasm.Subset.Module) (inv : Wasm.Invocation wasmProfile) :
     machine.initialGemmInvocationCosted m inv =
       Wasm.initialGemmInvocationCosted m inv := rfl
 
@@ -803,7 +781,7 @@ theorem limit_pos (dc : Cost.DynamicCoordinate) : 0 < dc.value limit := by
 
 /-! ### 5.5 The seam -/
 
-/-- **GO-008.**  The constructed release seam: the costed semantics of §5.2, the
+/-- The constructed subset seam: the costed semantics of §5.2, the
 costed machine of §5.3 and the resource limit of §5.4.  It is a closed term:
 every field is a definition of this repository, none is a parameter. -/
 def seam : Seam where
@@ -845,7 +823,7 @@ theorem seam_costEvent_charge_pos (e : Wasm.Event) :
 /-- **Non-degeneracy (ii): validation is not free.**  Every module, and in
 particular every module that validates, is charged at least one validation
 step by the constructed seam. -/
-theorem seam_validationSteps_pos (m : Wasm.Module) :
+theorem seam_validationSteps_pos (m : Wasm.Subset.Module) :
     0 < seam.semantics.validationSteps m :=
   Wasm.validationCost_pos wasmProfile m
 
@@ -948,7 +926,7 @@ Every branch of it terminates in at most three reduction steps: install the raw
 bytes and cross the harness boundary (or trap out of bounds), push the status
 word, return it.
 
-So the machine below is discharged on a real, profile-valid, decoding module,
+So the machine below is discharged on a real, validating subset module,
 and **not** on a GEMM implementation.  `Release.witnessModule` computes no
 product; it is a witness that the costed machine completes, and it is cited as
 nothing else. -/
@@ -974,18 +952,11 @@ def witnessBody : List Wasm.Instr := [Wasm.Instr.i32Const 0]
 
 /-- **The module the costed machine is discharged on.**  See the section header
 for what it is and, emphatically, what it is not. -/
-def witnessModule : Wasm.Module := GNAF.moduleOf witnessEnv witnessBody
+def witnessModule : Wasm.Subset.Module := GNAF.moduleOf witnessEnv witnessBody
 
-/-- The canonical encoding of `Release.witnessModule`: a closed `ByteArray`. -/
-def witnessBytes : ByteArray := Artifact.emit witnessModule
-
-/-- **SPEC §7.3.**  The witness module passes the release validator. -/
+/-- The witness subset module passes the legacy subset validator. -/
 theorem witnessModule_validate : Wasm.validate witnessModule = true :=
   GNAF.validate_moduleOf witnessEnv witnessBody rfl
-
-/-- The witness bytes decode back to the witness module. -/
-theorem witness_decode : Wasm.Subset.decode witnessBytes = .ok witnessModule :=
-  Artifact.decode_emit witnessModule
 
 /-- **SPEC §7.2.**  Every index-space population of the witness module is inside
 the release profile's limit table. -/
@@ -1022,14 +993,6 @@ theorem witnessModule_hasExactGemmExports :
   rcases he with rfl | rfl
   · exact Or.inl rfl
   · exact Or.inr rfl
-
-/-- **SPEC §10.1.**  The witness bytes are profile valid: they decode, the
-module validates under the profile's limit table, it imports nothing, and it
-carries exactly the two required exports.  Hypothesis-free, on a closed
-literal. -/
-theorem witness_profileValid : Universal.ProfileValid wasmProfile witnessBytes :=
-  ⟨witnessModule, witness_decode, witnessModule_validateUnder,
-    witnessModule_imports, witnessModule_hasExactGemmExports⟩
 
 /-! ### 5.10 Every branch of the witness module terminates in three steps -/
 
@@ -1210,7 +1173,7 @@ theorem witness_finiteExecution_length (raw : Wasm.RawInvocation)
 
 /-! ### 5.11 The costed machine completes on the witness module
 
-This is the conjunct GO-008 exists to establish.  `Release.machine` is
+This establishes module-level explorer non-degeneracy.  `Release.machine` is
 `Wasm.releaseCostedMachine`, an honest all-branch explorer: it answers
 `.initializationFailure` exactly when the plain explorer finds no observation at
 all (`Wasm.exploreAllCosted_initializationFailure_iff`) and `.nonterminalPrefix`
@@ -1319,7 +1282,7 @@ def witnessCompleteWitness (raw : Gemm.RawInvocation wasmProfile) :
       (witnessInitial raw))
     (seam_not_nonterminal raw) (seam_not_initializationFailure raw)
 
-/-! ### 5.12 The per-input and system evaluations -/
+/-! ### 5.12 The per-input evaluations -/
 
 /-- One `Universal.InputEvaluation` of the witness module, assembled from a
 completed costed exploration. -/
@@ -1389,19 +1352,16 @@ states the remainder as two named propositions rather than assuming them.
 
 **What is discharged here, unconditionally.**
 
-* `Release.gemmKernelModule` — the module `GNAF.compile` emits from
+* `Release.gemmKernelModule` — the subset module `GNAF.compile` produces from
   `GNAF.gemmKernelChecked` — validates, stays inside the profile limit table,
-  imports nothing and carries exactly the two required exports, so
-  `Release.gemmKernel_profileValid` holds on the closed byte literal
-  `Release.gemmKernelBytes`.
+  imports nothing and carries exactly the two required exports.
 * `GNAF.gemmKernel_stepBound_le_maxSteps` (proved in `GNAF/CompileCorrect.lean`)
   puts the plan's static step bound — `792281624699921518248014643209`, about
   `2 ^ 99`, the three clamped `loopReg` loops — strictly inside the released
   costed step budget `2 ^ 320`.  `Release.gemmKernel_stepBound_lt_maxSteps`
   restates it against `(setting seam).problem.maxSteps` itself.
-* Given the two propositions below, the *whole* machine chain closes:
-  `Release.gemmKernel_machine_completes_of`, and the evaluation
-  `Release.gemmKernelSystemEvaluationOf` in §5.14.
+* Given the two propositions below, the *whole* module-level machine chain
+  closes through `Release.gemmKernel_machine_completes_of`.
 
 **What does not close, stated exactly.**  `Plan.stepBound` bounds the step count
 of the *GNAF* interpreter `Plan.eval`.  Nothing in this repository relates it to
@@ -1424,26 +1384,18 @@ The two missing facts are exactly:
   `Theorems/Status.lean`; no progress theorem exists for the modelled subset.
 
 Neither is assumed anywhere: they appear only as explicit hypotheses of the
-theorems that need them.  `Release.seam_machine_completes` and
-`Release.systemEvaluation_inhabited` continue to be discharged on
-`Release.witnessModule` alone. -/
+theorems that need them.  `Release.seam_machine_completes` continues to be
+discharged on `Release.witnessModule` alone. -/
 
 /-- **The compiled input-dependent GEMM kernel.**  Unlike
 `Artifact.baselineModule` (compiled from the fixed-extent `GNAF.gemmWitness`),
 this is compiled from the plan whose loop bounds are the header's declared
 extents. -/
-def gemmKernelModule : Wasm.Module := GNAF.compile GNAF.gemmKernelChecked
+def gemmKernelModule : Wasm.Subset.Module := GNAF.compile GNAF.gemmKernelChecked
 
-/-- The canonical encoding of `Release.gemmKernelModule`: a closed `ByteArray`. -/
-def gemmKernelBytes : ByteArray := Artifact.emit gemmKernelModule
-
-/-- **SPEC §7.3.**  The compiled kernel passes the release validator. -/
+/-- The compiled subset kernel passes the legacy subset validator. -/
 theorem gemmKernelModule_validate : Wasm.validate gemmKernelModule = true :=
   GNAF.gemmKernel_compiles
-
-/-- The kernel bytes decode back to the kernel module. -/
-theorem gemmKernel_decode : Wasm.Subset.decode gemmKernelBytes = .ok gemmKernelModule :=
-  Artifact.decode_emit gemmKernelModule
 
 /-- **SPEC §7.2.**  Every index-space population of the compiled kernel is
 inside the release profile's limit table. -/
@@ -1481,15 +1433,6 @@ theorem gemmKernelModule_hasExactGemmExports :
   rcases he with rfl | rfl
   · exact Or.inl rfl
   · exact Or.inr rfl
-
-/-- **SPEC §10.1.**  The compiled GEMM kernel's bytes are profile valid: they
-decode, the module validates under the profile's limit table, it imports
-nothing, and it carries exactly the two required exports.  Hypothesis-free, on
-a closed literal, and — unlike `Release.witness_profileValid` — on a module
-compiled from a plan that computes a product. -/
-theorem gemmKernel_profileValid : Universal.ProfileValid wasmProfile gemmKernelBytes :=
-  ⟨gemmKernelModule, gemmKernel_decode, gemmKernelModule_validateUnder,
-    gemmKernelModule_imports, gemmKernelModule_hasExactGemmExports⟩
 
 /-- The initial configuration of the compiled kernel at a plain raw
 invocation. -/
@@ -1670,7 +1613,7 @@ theorem gemmKernel_exploreTree_ne_nil (h₂ : GemmKernelReachesTerminal)
 /-- The seam's machine initializes with `Wasm.initialGemmInvocationCosted`: a
 projection equation, so it holds without unfolding either the module or the
 validator. -/
-theorem machine_initialGemmInvocationCosted (m : Wasm.Module)
+theorem machine_initialGemmInvocationCosted (m : Wasm.Subset.Module)
     (inv : Wasm.Invocation wasmProfile) :
     (setting seam).machine.initialGemmInvocationCosted m inv =
       Wasm.initialGemmInvocationCosted m inv := rfl
@@ -1815,115 +1758,5 @@ theorem gemmKernelPerInput_covers (h₁ : GemmKernelReducesBounded)
     (h₂ : GemmKernelReachesTerminal) (raw : Gemm.RawInvocation wasmProfile) :
     (gemmKernelPerInput h₁ h₂ raw).CoversEveryMaximalExecution :=
   gemmKernelInputEvaluationOf_covers h₁ raw _ _ _
-
-section Evaluation
-
-variable [Foundation.Fintype (Gemm.RawInvocation wasmProfile)]
-
-/-- **SPEC §9.1.**  The complete charged system cost of the witness bytes: the
-four static coordinates read off the profile's own counters, the dynamic sum
-scaled by the released workload multiplicity, and the dynamic maximum over every
-raw invocation. -/
-def witnessCost : Cost.CompleteSystemCost where
-  static :=
-    { moduleBytes := witnessBytes.size
-      decodeSteps := wasmProfile.body.costTableBody.decodeCost witnessBytes
-      validationSteps := (setting seam).semantics.validationSteps witnessModule
-      staticDataBytes := (setting seam).semantics.staticDataBytes witnessModule }
-  dynamicSum :=
-    Cost.scale (setting seam).problem.workloadRepetitions
-      (Cost.fullDomainSum (fun raw => (witnessPerInput raw).resourceVector))
-  dynamicMax := Cost.fullDomainMax (fun raw => (witnessPerInput raw).resourceVector)
-
-/-- **A `Universal.SystemEvaluation` of a real byte sequence at the constructed
-seam.**  Every field is a theorem of this file: the decode equation, one
-completed costed exploration per raw invocation, maximal-execution coverage at
-each of them, and the exact aggregate cost equation of SPEC §9.1. -/
-def witnessSystemEvaluation :
-    Universal.SystemEvaluation (setting seam) witnessBytes where
-  module := witnessModule
-  decodeEq := witness_decode
-  perInput := witnessPerInput
-  observationsComplete := witnessPerInput_covers
-  cost := witnessCost
-  costExact := ⟨Nat.le_refl 1, witness_decode, rfl, rfl, rfl, rfl, rfl, rfl⟩
-
-/--
-  **THE HEADLINE OF GO-008.**
-
-  `Universal.SystemEvaluation` at the constructed release setting is inhabited.
-
-  This is what defeats vacuity.  `Release.exists_globalOptimal_of_nonempty` and
-  every theorem of `Theorems/Release.lean` quantify over `(seam : Seam)` and are
-  gated on nonemptiness of the admissible, *evaluated* set; until now nothing
-  inhabited `Seam` at all, so the whole family was an implication with a
-  possibly-unsatisfiable antecedent.  It is now an implication about a
-  constructed seam whose evaluation type is provably nonempty.
-
-  **What this does not say.**  It does not say the witness bytes are
-  `Universal.Admissible`: `Universal.ProfileValid` is proved
-  (`Release.witness_profileValid`), but `Universal.SemanticCorrect` — which
-  demands `Gemm.Reference.Accepts` at *every* raw invocation — is false for a
-  module whose `gemm` returns the constant `0`, and is not claimed here.  The
-  nonemptiness antecedent of the release theorem needs admissibility as well as
-  evaluation, and that half stays open (`GO-006`, `BI-002`).
--/
-theorem systemEvaluation_inhabited :
-    ∃ bytes : ByteArray, Nonempty (Universal.SystemEvaluation (setting seam) bytes) :=
-  ⟨witnessBytes, ⟨witnessSystemEvaluation⟩⟩
-
-/-! `Release.seam_decider_complete_on_witness` and
-`Release.globalOptimal_of_witness_semantics` stood here.  Both were stated
-against `Release.decider`, the classically chosen evaluator §3 describes and no
-longer defines, so both are deleted.  Nothing weaker replaces them: with no
-`Universal.Decider` implemented at the release scope there is no
-`Universal.GlobalOptimal` statement to make, conditional or otherwise.  The
-witness evaluation above survives because it is decider-independent. -/
-
-/-! ### 5.14 The evaluation of the compiled GEMM kernel, modulo §5.13's two facts -/
-
-/-- **SPEC §9.1.**  The complete charged system cost of the compiled kernel's
-bytes, in the same shape as `Release.witnessCost`. -/
-def gemmKernelCost (h₁ : GemmKernelReducesBounded) (h₂ : GemmKernelReachesTerminal) :
-    Cost.CompleteSystemCost where
-  static :=
-    { moduleBytes := gemmKernelBytes.size
-      decodeSteps := wasmProfile.body.costTableBody.decodeCost gemmKernelBytes
-      validationSteps := (setting seam).semantics.validationSteps gemmKernelModule
-      staticDataBytes := (setting seam).semantics.staticDataBytes gemmKernelModule }
-  dynamicSum :=
-    Cost.scale (setting seam).problem.workloadRepetitions
-      (Cost.fullDomainSum (fun raw => (gemmKernelPerInput h₁ h₂ raw).resourceVector))
-  dynamicMax :=
-    Cost.fullDomainMax (fun raw => (gemmKernelPerInput h₁ h₂ raw).resourceVector)
-
-/-- **BI-006, conditional form.**  A `Universal.SystemEvaluation` at the
-constructed seam of the bytes of a module that really computes a product —
-**given** `Release.GemmKernelReducesBounded` and
-`Release.GemmKernelReachesTerminal`, neither of which is proved anywhere in this
-repository (see §5.13 for exactly what each one needs).
-
-The unconditional inhabitant of `Universal.SystemEvaluation` at this seam
-remains `Release.witnessSystemEvaluation`, on the module whose `gemm` returns
-the constant `0`. -/
-def gemmKernelSystemEvaluationOf (h₁ : GemmKernelReducesBounded)
-    (h₂ : GemmKernelReachesTerminal) :
-    Universal.SystemEvaluation (setting seam) gemmKernelBytes where
-  module := gemmKernelModule
-  decodeEq := gemmKernel_decode
-  perInput := gemmKernelPerInput h₁ h₂
-  observationsComplete := gemmKernelPerInput_covers h₁ h₂
-  cost := gemmKernelCost h₁ h₂
-  costExact := ⟨Nat.le_refl 1, gemmKernel_decode, rfl, rfl, rfl, rfl, rfl, rfl⟩
-
-/-- The same fact in existential form: under §5.13's two facts, the *kernel*
-bytes — not just the witness bytes — carry an evaluation at the constructed
-seam. -/
-theorem gemmKernel_systemEvaluation_of (h₁ : GemmKernelReducesBounded)
-    (h₂ : GemmKernelReachesTerminal) :
-    Nonempty (Universal.SystemEvaluation (setting seam) gemmKernelBytes) :=
-  ⟨gemmKernelSystemEvaluationOf h₁ h₂⟩
-
-end Evaluation
 
 end WasmGemmGnaf.Release

@@ -1,10 +1,11 @@
 /-
   Wasm/CostedExplore.lean --- the costed all-branch explorer.
 
-  Normative source: SPEC.md sections 7.4, 7.5 and 10.1.  This file closes item 3
-  of the seam documented at the head of `Artifact/Release.lean`: SPEC §10.1's
-  `Wasm.initialGemmInvocationCosted` and `Wasm.exploreAllCosted`, i.e. the two
-  fields of `Universal.CostedMachine`.
+  Normative target: SPEC.md sections 7.4, 7.5 and 10.1.  This file supplies the
+  named explorer interface for the legacy `Wasm.Subset` machine.  Its carriers
+  are the legacy `Config`, `Event`, and subset validator, not the public
+  amended-Core execution semantics, so these declarations do not close the
+  corresponding release seam.
 
   `Wasm/Fuel.lean` supplies `Wasm.exploreAll`, whose `complete` constructor
   carries a plain, unordered, possibly empty `List Wasm.ExecutionObservation`.
@@ -597,32 +598,32 @@ def initializationEventCost : List InitEventId → Cost.DynamicVector
 
 /-- The charge of materialising the module's static data: exactly
 `Wasm.instantiatedStaticBytes`. -/
-def staticInitializationCost (P : Profile) (m : Module) : Cost.DynamicVector :=
+def staticInitializationCost (P : Profile) (m : Subset.Module) : Cost.DynamicVector :=
   { Cost.DynamicVector.zero with bytesWritten := instantiatedStaticBytes P m }
 
 /-- **SPEC §7.5.**  The charge of decoding-independent initialization: the
 pinned initialization rows composed with the exact static-byte charge. -/
-def initializationCost (P : Profile) (m : Module) : Cost.DynamicVector :=
+def initializationCost (P : Profile) (m : Subset.Module) : Cost.DynamicVector :=
   Cost.sequentialCompose (initializationEventCost performedInitializationEvents)
     (staticInitializationCost P m)
 
 /-- Every performed initialization event is charged one instantiation step and
 one rule step, so the six rows contribute exactly six of each. -/
-theorem initializationCost_instantiationSteps (P : Profile) (m : Module) :
+theorem initializationCost_instantiationSteps (P : Profile) (m : Subset.Module) :
     (initializationCost P m).instantiationSteps = 6 := rfl
 
-theorem initializationCost_wasmRuleSteps (P : Profile) (m : Module) :
+theorem initializationCost_wasmRuleSteps (P : Profile) (m : Subset.Module) :
     (initializationCost P m).wasmRuleSteps = 6 := rfl
 
-theorem initializationCost_dispatchSteps (P : Profile) (m : Module) :
+theorem initializationCost_dispatchSteps (P : Profile) (m : Subset.Module) :
     (initializationCost P m).dispatchSteps = 0 := rfl
 
 /-- **The static bytes are charged exactly.**  The one extra written byte is
 the `core3/init/allocate-globals` row of the pinned table. -/
-theorem initializationCost_bytesWritten (P : Profile) (m : Module) :
+theorem initializationCost_bytesWritten (P : Profile) (m : Subset.Module) :
     (initializationCost P m).bytesWritten = 1 + instantiatedStaticBytes P m := rfl
 
-theorem instantiatedStaticBytes_le_initializationCost (P : Profile) (m : Module) :
+theorem instantiatedStaticBytes_le_initializationCost (P : Profile) (m : Subset.Module) :
     instantiatedStaticBytes P m ≤ (initializationCost P m).bytesWritten := by
   rw [initializationCost_bytesWritten]
   omega
@@ -630,7 +631,7 @@ theorem instantiatedStaticBytes_le_initializationCost (P : Profile) (m : Module)
 /-- **SPEC §10.1**, `Wasm.initialGemmInvocationCosted`.  It returns `.ok`
 exactly when `Wasm.initialConfig` builds a configuration, and `.error` exactly
 on a real `Wasm.InstantiationFault`. -/
-def initialGemmInvocationCosted {P : Profile} (m : Module)
+def initialGemmInvocationCosted {P : Profile} (m : Subset.Module)
     (invocation : Invocation P) :
     Except Foundation.FailureReport (Universal.InitializationObservation P) :=
   match initialConfig m (rawOfInvocation invocation) with
@@ -639,7 +640,7 @@ def initialGemmInvocationCosted {P : Profile} (m : Module)
 
 /-- **Non-vacuity.**  A module that genuinely initializes is accepted, and the
 returned configuration is exactly `Wasm.initialConfig`'s. -/
-theorem initialGemmInvocationCosted_ok {P : Profile} {m : Module}
+theorem initialGemmInvocationCosted_ok {P : Profile} {m : Subset.Module}
     {invocation : Invocation P} {initial : Config}
     (h : initialConfig m (rawOfInvocation invocation) = .ok initial) :
     initialGemmInvocationCosted m invocation =
@@ -647,7 +648,7 @@ theorem initialGemmInvocationCosted_ok {P : Profile} {m : Module}
   unfold initialGemmInvocationCosted
   rw [h]
 
-theorem initialGemmInvocationCosted_error {P : Profile} {m : Module}
+theorem initialGemmInvocationCosted_error {P : Profile} {m : Subset.Module}
     {invocation : Invocation P} {fault : InstantiationFault}
     (h : initialConfig m (rawOfInvocation invocation) = .error fault) :
     initialGemmInvocationCosted m invocation =
@@ -656,7 +657,7 @@ theorem initialGemmInvocationCosted_error {P : Profile} {m : Module}
   rw [h]
 
 /-- Failure is reported *only* on a real initialization fault. -/
-theorem initialGemmInvocationCosted_error_iff {P : Profile} {m : Module}
+theorem initialGemmInvocationCosted_error_iff {P : Profile} {m : Subset.Module}
     {invocation : Invocation P} {report : Foundation.FailureReport} :
     initialGemmInvocationCosted m invocation = .error report ↔
       ∃ fault : InstantiationFault,
@@ -669,7 +670,7 @@ theorem initialGemmInvocationCosted_error_iff {P : Profile} {m : Module}
 
 /-- Success is reported *only* on a real initial configuration, and the
 observation starts exactly there. -/
-theorem initialGemmInvocationCosted_ok_iff {P : Profile} {m : Module}
+theorem initialGemmInvocationCosted_ok_iff {P : Profile} {m : Subset.Module}
     {invocation : Invocation P} {initial : Config} {cost : Cost.DynamicVector} :
     initialGemmInvocationCosted m invocation = .ok { initial := initial, cost := cost } ↔
       initialConfig m (rawOfInvocation invocation) = .ok initial ∧
@@ -689,7 +690,7 @@ theorem initialGemmInvocationCosted_ok_iff {P : Profile} {m : Module}
 
 /-- An invalid module is rejected before any reduction, and the report names
 the reason. -/
-theorem initialGemmInvocationCosted_invalid {P : Profile} {m : Module}
+theorem initialGemmInvocationCosted_invalid {P : Profile} {m : Subset.Module}
     (invocation : Invocation P) (h : validate m = false) :
     initialGemmInvocationCosted m invocation =
       .error (initializationFailureReport .invalidModule) :=
@@ -709,13 +710,13 @@ theorem about them rather than a definition dressed as one. -/
 entry point.  Same instantiation protocol as `Wasm.initialGemmInvocationCosted`,
 same failure reports, no charge.  It is the cost erasure of the costed entry
 point, which is exactly what `Wasm.costed_initialization_erase` below says. -/
-def initialGemmInvocation {P : Profile} (m : Module) (invocation : Invocation P) :
+def initialGemmInvocation {P : Profile} (m : Subset.Module) (invocation : Invocation P) :
     Except Foundation.FailureReport Config :=
   match initialConfig m (rawOfInvocation invocation) with
   | .error fault => .error (initializationFailureReport fault)
   | .ok initial => .ok initial
 
-theorem initialGemmInvocation_ok_iff {P : Profile} {m : Module}
+theorem initialGemmInvocation_ok_iff {P : Profile} {m : Subset.Module}
     {invocation : Invocation P} {initial : Config} :
     initialGemmInvocation (P := P) m invocation = .ok initial ↔
       initialConfig m (rawOfInvocation invocation) = .ok initial := by
@@ -724,7 +725,7 @@ theorem initialGemmInvocation_ok_iff {P : Profile} {m : Module}
   | error fault => simp
   | ok c => simp [eq_comm]
 
-theorem initialGemmInvocation_error_iff {P : Profile} {m : Module}
+theorem initialGemmInvocation_error_iff {P : Profile} {m : Subset.Module}
     {invocation : Invocation P} {report : Foundation.FailureReport} :
     initialGemmInvocation (P := P) m invocation = .error report ↔
       ∃ fault : InstantiationFault,
@@ -744,7 +745,7 @@ theorem initialGemmInvocation_error_iff {P : Profile} {m : Module}
   because they make the same `Wasm.initialConfig` call, and this theorem is
   what pins that rather than leaving it to inspection.
 -/
-theorem costed_initialization_erase {P : Profile} {m : Module}
+theorem costed_initialization_erase {P : Profile} {m : Subset.Module}
     {invocation : Invocation P}
     {initialization : Universal.InitializationObservation P}
     (h : initialGemmInvocationCosted m invocation = .ok initialization) :
@@ -762,7 +763,7 @@ theorem costed_initialization_erase {P : Profile} {m : Module}
 one, and the charge it carries is the pinned `Wasm.initializationCost`.  With
 `costed_initialization_erase` this makes the two entry points mutually
 determined, not merely compatible. -/
-theorem costed_initialization_of_erase {P : Profile} {m : Module}
+theorem costed_initialization_of_erase {P : Profile} {m : Subset.Module}
     {invocation : Invocation P} {initial : Config}
     (h : initialGemmInvocation (P := P) m invocation = .ok initial) :
     initialGemmInvocationCosted m invocation =
@@ -771,7 +772,7 @@ theorem costed_initialization_of_erase {P : Profile} {m : Module}
 
 /-- Failure erases too: the two entry points fail on the same invocations with
 the same located report. -/
-theorem costed_initialization_erase_error {P : Profile} {m : Module}
+theorem costed_initialization_erase_error {P : Profile} {m : Subset.Module}
     {invocation : Invocation P} {report : Foundation.FailureReport} :
     initialGemmInvocationCosted m invocation = .error report ↔
       initialGemmInvocation (P := P) m invocation = .error report := by
@@ -1298,15 +1299,16 @@ theorem exploreAllCosted_complete_of_exploreTree_ne_nil {P : Profile}
 
 /-! ## The released costed machine (SPEC §10.1) -/
 
-/-- **SPEC §10.1.**  The costed machine: costed initialization and the bounded
-all-branch costed explorer, assembled from the two definitions above. -/
+/-- The legacy subset costed machine: subset initialization and the bounded
+all-branch subset explorer assembled above.  The historical name is retained;
+this is not the public amended-Core machine required by SPEC §10.1. -/
 def releaseCostedMachine {P : Profile} (W : Universal.Semantics P) :
     Universal.CostedMachine W where
   initialGemmInvocationCosted := initialGemmInvocationCosted
   exploreAllCosted := exploreAllCosted W
 
 @[simp] theorem releaseCostedMachine_initial {P : Profile}
-    (W : Universal.Semantics P) (m : Module) (invocation : Invocation P) :
+    (W : Universal.Semantics P) (m : Subset.Module) (invocation : Invocation P) :
     (releaseCostedMachine W).initialGemmInvocationCosted m invocation =
       initialGemmInvocationCosted m invocation := rfl
 
@@ -1317,9 +1319,9 @@ def releaseCostedMachine {P : Profile} (W : Universal.Semantics P) :
 
 /-- **Non-vacuity of the machine.**  On a module that genuinely initializes and
 an initial configuration all of whose branches terminate inside the bound with
-at least one observation, the released machine both starts and completes. -/
+at least one observation, the legacy subset machine both starts and completes. -/
 theorem releaseCostedMachine_completes {P : Profile} (W : Universal.Semantics P)
-    {m : Module} {invocation : Invocation P} {initial : Config} {bound : Nat}
+    {m : Subset.Module} {invocation : Invocation P} {initial : Config} {bound : Nat}
     (hinit : initialConfig m (rawOfInvocation invocation) = .ok initial)
     {obs : List ExecutionObservation}
     {cov : CoversEveryMaximalFiniteBranch bound initial obs}

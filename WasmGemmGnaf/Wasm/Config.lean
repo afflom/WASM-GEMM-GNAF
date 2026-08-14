@@ -123,7 +123,7 @@ inductive Phase
 
 /-! ## Configurations -/
 
-/-- A configuration of the released machine. -/
+/-- A configuration of the legacy subset machine. -/
 structure Config where
   /-- The runtime store. -/
   store : Store
@@ -286,13 +286,13 @@ def Func.code (f : Func) : List Instr := f.body.toList
 static initialization are complete, the harness control frame is built, and the
 module start function is about to run.  The start function, the raw-byte
 installation and the exported call are ordinary `Step` transitions. -/
-def initialConfig (m : Module) (raw : RawInvocation) : Except InstantiationFault Config :=
+def initialConfig (m : Subset.Module) (raw : RawInvocation) : Except InstantiationFault Config :=
   if validate m = false then .error .invalidModule
   else
     match Store.alloc m with
     | none => .error .allocationFailed
     | some store =>
-        match Module.gemmIndex? m with
+        match Subset.Module.gemmIndex? m with
         | none => .error .missingGemmExport
         | some gi =>
             match m.funcs[gi]? with
@@ -323,7 +323,7 @@ def initialConfig (m : Module) (raw : RawInvocation) : Except InstantiationFault
 /-- Initialization stops before the start function: the initial configuration
 is running, has crossed no entry boundary, and has an empty control stack and
 operand stack. -/
-theorem initialConfig_shape {m : Module} {raw : RawInvocation} {c : Config}
+theorem initialConfig_shape {m : Subset.Module} {raw : RawInvocation} {c : Config}
     (h : initialConfig m raw = .ok c) :
     c.status = .running ∧ c.phase = .beforeEntry ∧ c.entry? = none ∧
       c.ctrl = [] ∧ c.stack = [] := by
@@ -344,7 +344,7 @@ theorem initialConfig_shape {m : Module} {raw : RawInvocation} {c : Config}
 
 /-- Initialization rejects exactly the modules that fail release validation,
 before any allocation is attempted. -/
-theorem initialConfig_invalid {m : Module} {raw : RawInvocation}
+theorem initialConfig_invalid {m : Subset.Module} {raw : RawInvocation}
     (h : validate m = false) : initialConfig m raw = .error .invalidModule := by
   simp [initialConfig, h]
 

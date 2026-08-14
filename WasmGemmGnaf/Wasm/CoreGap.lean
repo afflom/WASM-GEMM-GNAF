@@ -10,10 +10,11 @@
   > genuinely necessary, it must be a TOTAL semantics-preserving map with a
   > proof, not a coercion.
 
-  This file settles which of the two is available, by proof rather than by
-  assertion.  It proves that **no such total map exists**: `Wasm.Module` is not
-  a sub-language of `Wasm.Core.Module`, so a bridge cannot be written at all and
-  the migration has to be a replacement of the type.
+  This file proves that no total map preserves all represented function type
+  indices, and no total map preserves all represented export-name bytes.
+  Arbitrary total functions `Wasm.Subset.Module → Wasm.Core.Module` plainly
+  exist (a constant function is one); what the theorems exclude is the
+  index/name-preserving bridge the release migration would need.
 
   ## The two obstructions, and why they are structural
 
@@ -30,10 +31,9 @@
 
   Both are one-directional: the old model admits modules the pinned syntax
   cannot express.  That is the opposite of the situation a bridge needs.  An
-  embedding `Wasm.Module -> Wasm.Core.Module` would have to either fail on those
-  modules (so it is partial, not total) or silently change the index or the name
-  (so it is not semantics preserving, and every theorem transported along it
-  would be about a different module than the one the release path selected).
+  bridge preserving those indices and name bytes would have to either fail on
+  those modules (so it is partial) or silently change the index or name (so it
+  cannot justify transporting the existing semantics).
 
   ## The gap is REACHABLE, not merely present in the type
 
@@ -54,18 +54,18 @@
   ## A third fact the replacement has to plan for
 
   `core_decode_not_injective_in_bytes` is not an obstruction to the migration but
-  a bill it will present: the pinned format is not canonical, so
-  `Artifact.eq_emit_of_decode` --- "the only bytes that decode to `m` are
-  `emit m`" --- is false of the Core decoder and cannot be carried across.  It is
-  stated here so the next step budgets for restating it rather than discovering
-  it when a proof stops closing.
+  a constraint on the public backend: the pinned format is not injective in its
+  byte representation.  The current `Artifact.decode_emit` states the valid
+  one-way round trip — decoding the amended encoder's chosen bytes returns the
+  represented public module.  It deliberately makes no converse claim that all
+  bytes decoding to that module equal the encoder's output.
 
   ## What this file does NOT claim
 
   It does not claim the old model is unsound, nor that `Wasm.Subset.decode` is
-  wrong about any byte string both decoders accept.  It claims exactly one thing: the
-  function `Wasm.Module -> Wasm.Core.Module` that a bridge would need does not
-  exist, so `Wasm.Module` has to go.
+  wrong about any byte string both decoders accept.  It claims exactly that the
+  intended total index/name-preserving bridge does not exist.  It does not deny
+  arbitrary total functions between the two carrier types.
 
   Every declaration in this file is proved.  Nothing is assumed.
 -/
@@ -80,15 +80,15 @@ namespace WasmGemmGnaf.Wasm
 
 /-- A module of the release path's syntax whose single function names the type
 index `2 ^ 32`.  `Wasm.Func.type` is a `Nat`, so this is a perfectly ordinary
-term of `Wasm.Module`. -/
-def gapIndexModule : Module :=
-  { Module.empty with funcs := [{ type := 2 ^ 32, locals := [], body := .nil }] }
+term of `Wasm.Subset.Module`. -/
+def gapIndexModule : Subset.Module :=
+  { Subset.Module.empty with funcs := [{ type := 2 ^ 32, locals := [], body := .nil }] }
 
 /-- A module of the release path's syntax with one export whose name is the
 single byte `0xFF`.  `Wasm.Name` is `List UInt8`, so this too is an ordinary
 term. -/
-def gapNameModule : Module :=
-  { Module.empty with exports := [{ name := [(0xFF : UInt8)], desc := .func 0 }] }
+def gapNameModule : Subset.Module :=
+  { Subset.Module.empty with exports := [{ name := [(0xFF : UInt8)], desc := .func 0 }] }
 
 /-! ## 2. The index obstruction -/
 
@@ -96,8 +96,8 @@ def gapNameModule : Module :=
 type indices.  The witness is `gapIndexModule`: its index is `2 ^ 32`, and
 `Wasm.Core.TypeIdx` is `u32`. -/
 theorem no_typeidx_preserving_map :
-    ¬ ∃ f : Module → Core.Module,
-        ∀ m : Module,
+    ¬ ∃ f : Subset.Module → Core.Module,
+        ∀ m : Subset.Module,
           (f m).funcs.map (fun g => g.typeidx.val) = m.funcs.map Func.type := by
   rintro ⟨f, hf⟩
   have h := hf gapIndexModule
@@ -152,8 +152,8 @@ theorem gap_utf8_ne_ff (n : Core.Name) :
 /-- No map from the release path's modules to Core modules preserves export
 names as byte strings.  The witness is `gapNameModule`. -/
 theorem no_name_preserving_map :
-    ¬ ∃ f : Module → Core.Module,
-        ∀ m : Module,
+    ¬ ∃ f : Subset.Module → Core.Module,
+        ∀ m : Subset.Module,
           (f m).exports.map (fun e => (Core.utf8 e.name.val).map (fun b => b.val)) =
             m.exports.map (fun e => e.name.map UInt8.toNat) := by
   rintro ⟨f, hf⟩
@@ -169,31 +169,25 @@ theorem no_name_preserving_map :
 
 /-! ## 4. The gap is reachable through the release decoder -/
 
-/-- **The escape hatch is closed.**  `gapIndexModule` is not a term nobody can
-reach: the release decoder returns it, from bytes the release encoder produces.
-No Core function carries its type index.  A bridge defined only on the decoder's
-image would therefore still have to be partial. -/
+/-- `gapIndexModule` is not a term nobody can reach: the subset decoder returns
+it from bytes the subset encoder produces.  No Core function carries its type
+index, so even on this decoder image no total bridge can preserve every function
+type index. -/
 theorem release_decoder_leaves_core :
     Subset.decode (Subset.encode gapIndexModule) = .ok gapIndexModule ∧
       ∀ g : Core.Func, g.typeidx.val ≠ 2 ^ 32 :=
   ⟨Subset.encode_decode_roundtrip gapIndexModule, fun g => Nat.ne_of_lt g.typeidx.property⟩
 
-/-! ## 5. What the migration costs on the artifact side
+/-! ## 5. Non-injectivity of Core bytes
 
-The release path does not only ask its decoder for soundness and completeness.
-`Artifact/Emit.lean` also proves `eq_emit_of_decode` --- *every* byte string
-that decodes to `m` is `emit m` --- and `Artifact/Baseline.lean` uses it for
-`baseline_bytes_unique`, "the baseline artifact names one byte string and not a
-class of them".
-
-That property is an artefact of the subset codec, which accepts only its own
-canonical output.  The pinned Core 3.0 format is not canonical: `Bu32` admits
-non-minimal LEB128 inside the width bound, and `Bcustom` admits a custom section
-at every one of the fourteen positions.  So the moment `Wasm.decode` becomes the
-Core decoder, `eq_emit_of_decode` becomes false and everything resting on it has
-to be restated --- as "`emit` is *a* canonical encoding", not "the only
-decodable bytes".  This is that fact as a theorem, so the next migration step
-does not discover it by finding a proof that no longer closes. -/
+The public amended Core backend supplies an encoder and proves the exact
+round trip `Wasm.decode (Wasm.encode m) = .ok m` for every representable public
+module.  That is compatible with the pinned Core 3.0 format being
+non-injective: `Bu32` admits non-minimal LEB128 inside the width bound, and
+`Bcustom` admits a custom section at every one of the fourteen positions.
+The encoder therefore chooses a canonical encoding, while the decoder may
+accept other byte strings denoting the same module.  The theorem below records
+that distinction and supports no byte-uniqueness or release-selection claim. -/
 
 /-- The pinned Core 3.0 binary format is not canonical: two different byte
 strings decode to the same module.  The second carries an empty custom section,

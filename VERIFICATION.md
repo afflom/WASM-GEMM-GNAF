@@ -13,7 +13,7 @@ would mean the gate had been weakened.
 | `just build` | the Lean library compiles under the pinned toolchain | — |
 | `just axioms` | every `formalProof` claim's transitive axiom closure is inside the SPEC §4 trust base | `M5` |
 | `just claims` | registry is nonempty, ids unique, no orphan dependencies, no `formalProof` row without a Lean declaration | `M2`, `M3`, `M4` |
-| `just schema` | every `scopeCriticalDefinitions` entry of the frozen `WGG-GO-1` authority is bound to its fully spelled-out body by `Iff.rfl` / `rfl` | `M11` |
+| `just schema` | every `scopeCriticalDefinitions` entry of the frozen `WGG-GO-1` authority is either bound definitionally or marked as an explicit uncredited public-carrier gap; the public schema remains open while any gap exists | `M11` |
 | `just signature` | every SPEC §15 declaration the compiled environment credits is bound to SPEC's **proposition** — restated in full in `Conformance/RequiredSignatures.lean` and closed by `:= @Name`, so the comparison is definitional | `M15` |
 | `just vendor` | the vendored Core 3.0 tree, recomputed from CONTENT, matches the literals `Wasm.profile_matches_pinned_revision` stands on — the digest of `SHA256SUMS`, the per-file digests, the file count, the pinned commit — and every vendored rule anchor the conformance map cites is a label the vendored sources define | `M13` |
 | `just independence` | the declarative side of each reflection theorem is neither DEFINED nor PROVED through its executable side (SPEC §7.3); `just required` demotes what it rejects | `M16` |
@@ -35,11 +35,10 @@ individually as SPEC §4 requires — never as a category. No `sorryAx`, no
 project-declared axiom, no `Lean.ofReduceBool`, no `Lean.trustCompiler`.
 
 `Classical.choice` is permitted by SPEC §4; its one restriction is that it SHALL NOT
-produce an executable witness. Every row whose closure contains it is a `Prop`-level
-theorem and carries an `axiomNote` in `model/claims.json` saying which core lemma
-introduced it. The rule is mechanized, not promised: `xtask claims required` reports a
-choice-tainted executable witness as `TAINTED` and refuses to count it as discharged,
-and `M12` plants exactly that shape to prove the refusal fires.
+produce an executable witness. The rule is mechanized, not promised: `xtask claims
+required` reports a choice-tainted executable witness as `TAINTED` and refuses to
+count it as discharged, and `M12` plants exactly that shape to prove the refusal
+fires. `just axioms` prints the exact closure of every credited formal-proof row.
 
 ## Planted falsifiers
 
@@ -53,16 +52,23 @@ to a **copy**, never to the repository.
 | M3 | CM | orphan claim dependency, on a copy of the registry | `required::registry_violations` |
 | M4 | GO | `open` promoted to `formalProof` with no Lean declaration, on a copy | `required::registry_violations` |
 | M5 | LF | `sorry` on the proof path | forbidden-construct scan |
-| M6 | GO | green gate while `GO-001` is outstanding | release gate step 9 |
-| M7 | AT | citing the seal's cover check as universal coverage | `AT-001` blindness lemma + `AT-002` absence |
-| M8 | CM | a stale `.olean` masking a non-elaborating root | direct `lean WasmGemmGnaf.lean` |
+| M6 | GO | compiled-environment response with the exact final theorem absent, plus a planted-present control | the exact predicate used by release gate step 9 |
+| M7 | AT | the real `CoverageScope.lean` theorem with its required `searchPartitions` equality replaced by an unrelated `declarationBase` equality, plus the unmodified source control | Lean elaboration of `universalCoverCompleteCheck_scope_blind`'s real proof |
+| M8 | CM | an owned Lean module added after root generation alongside a stale root `.olean`, plus a freshly generated control | the real `xtask sources root --check` source-inventory rejector |
 | M9 | UV | a forbidden `Artifact` import into `Universal/Competitor.lean` | dependency firewall (SPEC §10.1) |
-| M10 | CM | a manifest stage containing its own identity | acyclicity check (SPEC §4) |
+| M10 | CM | `sourceManifestCoreIdentity` rebound to the later `generatedProofInputIdentity` in a freshly generated manifest, plus the unmodified control | the real `xtask manifest --check` identity rejector |
 | M11 | GO | `GlobalOptimal` weakened by a competitor scope predicate; a deleted binding; a tactic-proved binding | `Iff.rfl` schema binding in `Conformance/Schema.lean`, and the authority-driven audit in `just schema` |
 | M12 | GO | a required declaration present but choice-tainted | SPEC §15 inventory reports `TAINTED`, not discharged |
 | M13 | WS | a flipped digest, an appended line and a deleted entry in `vendor/wasm-spec/SHA256SUMS`, each on a copy of the vendored tree | `vendor::binding`, the checker `just vendor` and release gate step 1 both call |
-| M15 | CM | a required SPEC §15 **name** carrying the type `Nat`, bound at `:= 0`; plus a deleted marker, a tactic-closed binding, a marker naming something SPEC does not require, and a stale SPEC quotation, each on a copy of the binding source | the `:= @Name` coercion in `Conformance/RequiredSignatures.lean`, and `signature::audit` / `required::apply_signatures`, which `just signature`, `just required` and release gate step 2 all call |
-| M16 | GO | a reflection theorem whose declarative side is its executable side, attacked through the real checker with planted tables, plus a nothing-forbidden control and a direct attack on the demotion rule | `independence::report_over` and `required::apply_independence`, which `just independence`, `just required` and release gate step 2 all call |
+| M14 | CM | fabricated, floating, or unelaborated Core coverage markers | the extracted Core checklist and compiled-environment marker audit |
+| M15 | CM | a required SPEC §15 **name** carrying the type `Nat`, bound at `:= 0`; plus a deleted marker, a tactic-closed binding, a marker naming something SPEC does not require, a stale SPEC quotation, and a theorem-shaped prose decoy hiding a fenced drift | the `:= @Name` coercion in `Conformance/RequiredSignatures.lean`, and the Lean-fence-restricted `signature::audit` / `required::apply_signatures`, which `just signature`, `just required` and release gate step 2 all call |
+| M16 | CM | a reflection theorem whose declarative side is its executable side, attacked through the real checker with planted tables, plus a nothing-forbidden control and a direct attack on the demotion rule | `independence::report_over` and `required::apply_independence`, which `just independence`, `just required` and release gate step 2 all call |
+| M17 | WS | drift in a canonical authority-amendment digest, text operation, Lean declaration, or deviation edge | `amendment::binding` |
+| M18 | WS | restoration of the malformed pinned opcode-275 vector shape | AMD-012 authority binding and kernel regressions |
+| M19 | WS | removal of generalized-supertype validity | AMD-013 authority binding and checker proof |
+| M20 | WS | removal of the non-wrapping Core type-group guard | elaboration of the real validator soundness proof |
+| M21 | WS | lossy exclusivity between overlapping vector lane-store successors | elaboration of exact successor completeness |
+| M22 | WS | separate replacement of public `Wasm.encode` and `Artifact.emit` by empty bytes, each on its full source copy with an unmodified control | elaboration of the actual `Wasm.encode_decode_roundtrip` and `Artifact.decode_emit` proof chains |
 
 ## What a *name* proves, and what it does not
 
@@ -79,27 +85,35 @@ That was accurate. `just required` asked `#print axioms` whether each SPEC §15 
 existed, so **any** type under that name passed. `WasmGemmGnaf/Conformance/RequiredSignatures.lean`
 now restates each required declaration in full and closes it with `:= @Name`. That
 is a definitional coercion: if the declaration's type is not defeq to the stated
-proposition, the module does not elaborate. M15 plants
-`Wasm.m15_planted_validation_progress : Nat := 0` and requires the SPEC §7.3
-`validation_progress` binding closed by `:= @<planted>` to fail with a **type
+proposition, the module does not elaborate. M15 uses the legitimately exact
+public-Core `Wasm.decode_sound` binding as its control, plants
+`Wasm.m15_planted_decode_sound : Nat := 0`, and requires that binding closed by
+`:= @<planted>` to fail with a **type
 mismatch** — not with an unknown identifier, which would mean the plant never
 reached the environment and nothing was rejected — with the real binding as the
-control. It then attacks the wiring, on a copy of the binding source, four ways.
+control. It then attacks the wiring five ways, including a theorem-shaped prose
+decoy before a drifted fenced theorem. Only theorem blocks inside Lean fences are
+authoritative inputs to the quotation audit.
 
-**Applying this check moved the reported ledger from 36 to 34 of 58.** Two names
-are present in the compiled environment but do not carry SPEC's proposition:
-`Wasm.costed_erase_iff_plain_run`, whose right-hand side gains a conjunct
-(`DEV-001` is filed and argues SPEC's literal biconditional is false as written),
-and `Atlas.incremental_eq_full_rebuild`, which gains two hypotheses (no deviation
-is filed). Both are pinned by `-- spec-signature-amended:` / `-- spec-signature-weaker:`
-bindings, so the weaker propositions cannot drift either, and both are reported
-`UNBOUND` by `just required` rather than counted.
+**The current required-declaration ledger reports 24 discharged and 36
+outstanding of 60.** Fourteen present names are intentionally not credited:
+ten Wasm theorems
+still range over the legacy subset machine or its incomplete adequacy map;
+`Cost.module_bytes_exact` projects from a redefined free-parameter predicate
+rather than SPEC §9.1's public-Core aggregate relation; and
+`Universal.possible_winner_within_sublevel` and
+`Universal.system_evaluation_rel_functional` still use the legacy subset
+competitor/evaluation carrier; and `Atlas.incremental_eq_full_rebuild` gains
+hypotheses. They remain pinned by
+`-- spec-signature-weaker:` / `-- spec-signature-amended:` bindings so their
+actual propositions cannot drift, while `just required` reports them `UNBOUND`
+instead of promoting them.
 
-There is a residual, and concealing it would be worse than having it: twenty-nine
-of SPEC §15's fifty-eight names have no fenced statement anywhere in `SPEC.md`, and
-for those no tool can decide that the proposition written in the Lean file is the
-one SPEC means. Where SPEC *does* state the theorem in a fenced block — eighteen of
-the thirty-six bindings — `just signature`
+There is a residual, and concealing it would be worse than having it: some SPEC
+§15 names have no fenced statement anywhere in `SPEC.md`, and for those no tool
+can decide that the proposition written in the Lean file is the one SPEC means.
+Where SPEC *does* state the theorem in a fenced block — currently twenty-three of
+the forty-one recorded bindings — `just signature`
 re-reads `SPEC.md` and requires the docstring to quote it verbatim, so a SPEC
 amendment breaks the binding instead of leaving a stale quotation looking normative.
 For the rest, the docstring quotes the governing prose and a reader closes the gap.
@@ -122,7 +136,7 @@ SPEC §7.1 defines `Wasm.profile_matches_pinned_revision` to mean, in part, that
 model and map are identity-bound to the **vendored** revision — but Lean cannot read
 `vendor/wasm-spec/`. The theorem stands on `Wasm.core3VendorManifestSha256`, the
 digest of `vendor/wasm-spec/SHA256SUMS`, which is itself the list of digests of all
-forty vendored files; a literal that had drifted from the tree would still elaborate.
+374 vendored files; a literal that had drifted from the tree would still elaborate.
 `just vendor` recomputes it from CONTENT, and M13 plants three faults on a **copy** of
 the tree and requires the real checker to reject each. The middle one is the reason
 the digest of digests is recorded at all: an appended line leaves every per-file
@@ -147,21 +161,27 @@ hand-maintained checklist:
   `scopeCriticalDefinitions` — currently fourteen names, not the thirteen quoted in
   review — and fails naming any entry with no binding. Nothing transcribes that
   array, so adding a definition to the frozen authority fails the gate at once.
-* **The Lean elaborator is the comparator.** `WasmGemmGnaf/Conformance/Schema.lean`
-  states each definition against its fully spelled-out body and closes it with
-  `Iff.rfl` (propositions) or `rfl` (data). Narrowing a quantifier, dropping a
-  conjunct, adding a hypothesis, substituting a scoped predicate or editing a field
-  out of a record all stop elaborating. A tactic proof would establish only a
-  *propositional* equivalence — which cannot tell the frozen schema from a weaker
-  paraphrase — so `just schema` rejects any binding not closed definitionally.
+* **The Lean elaborator is the comparator for exact entries.**
+  `WasmGemmGnaf/Conformance/Schema.lean` states each exact definition against its
+  fully spelled-out body and closes it with `Iff.rfl` (propositions) or `rfl`
+  (data). Narrowing a quantifier, dropping a conjunct, adding a hypothesis,
+  substituting a scoped predicate or editing a field out of a record stops that
+  binding from elaborating. Definitions still using the legacy subset carrier are
+  marked `authority-gap`, printed `OPEN`, and receive no public schema credit. The
+  inventory check passes only when every authority name has exactly one exact
+  binding or explicit gap; `PUBLIC WGG-GO-1 SCHEMA` remains open while a gap exists.
 
 M7 and M8 were added after real defects, not hypothetically. M7 answers the audit
 finding that `universalCoverCompleteCheck` verifies bookkeeping only and is
-satisfiable by an empty cover. M8 answers a worse one: `lakefile.lean` used
+satisfiable by an empty cover; its falsifier now mutates the real scope-blindness
+theorem and proof rather than inventing an unrelated false theorem. M8 answers a
+worse one: `lakefile.lean` used
 `globs := #[.submodules ...]`, which never builds the root module, so `lake build`
 reported green for an entire cycle while two modules declared clashing `Fault`
 types and the root did not elaborate at all. **`lake build` success is not evidence
-that the code elaborates**; the gate now checks the root directly.
+that the code elaborates**; M8 generates a disposable control root, adds an owned
+source beside a stale root `.olean`, and requires the production root checker to
+reject the stale source inventory.
 
 M4 and M6 are the ones that matter. SPEC §18 warns that a mutation suite which merely
 expects runtime output differences does not test claim integrity; M4 and M6 attack the
@@ -183,6 +203,13 @@ M2 red and leaves M3 and M4 green. **A falsifier that does not invoke the gate i
 worth less than no falsifier, because it reads as evidence.**
 
 ## What is not yet falsifiable
+
+Full SPEC §17.2 row conformance is open as `CM-007`. The current registry checker
+enforces the four properties listed in the table above; it does not yet recompute
+canonical proposition/scope identities, require complete direct dependency edges,
+link every row to its checker and falsifier, or enforce one planted mutation per
+proof family. Accordingly `just claims` reports only that limited integrity check,
+not complete conformance of every row.
 
 Universal-coverage integrity (partition gaps, overlaps, forged lower bounds, stale
 seals) cannot be falsification-tested until the checkers exist. Those falsifiers are

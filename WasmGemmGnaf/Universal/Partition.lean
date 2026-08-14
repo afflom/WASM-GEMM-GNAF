@@ -341,9 +341,9 @@ def Holds (P : Wasm.Profile) : ByteConstraint → ByteArray → Prop
   | sizeEq n, b => b.size = n
   | byteEq i v, b => b.toList[i]? = some v
   | prefixEq p, b => b.toList.take p.size = p.toList
-  | decodes, b => ∃ m : Wasm.Module, Wasm.Subset.decode b = .ok m
+  | decodes, b => ∃ m : Wasm.Subset.Module, Wasm.Subset.decode b = .ok m
   | validates, b =>
-      ∃ m : Wasm.Module, Wasm.Subset.decode b = .ok m ∧ validateUnder P m = true
+      ∃ m : Wasm.Subset.Module, Wasm.Subset.decode b = .ok m ∧ validateUnder P m = true
 
 /-- The exact Boolean check for `decodes`. -/
 def decodesCheck (b : ByteArray) : Bool :=
@@ -352,14 +352,14 @@ def decodesCheck (b : ByteArray) : Bool :=
   | .error _ => false
 
 theorem decodesCheck_iff (b : ByteArray) :
-    decodesCheck b = true ↔ ∃ m : Wasm.Module, Wasm.Subset.decode b = .ok m := by
+    decodesCheck b = true ↔ ∃ m : Wasm.Subset.Module, Wasm.Subset.decode b = .ok m := by
   cases h : Wasm.Subset.decode b with
   | ok m => simp [decodesCheck, h]
   | error e => simp [decodesCheck, h]
 
 /-- Deciding whether the bytes decode. -/
 instance instDecidableDecodes (b : ByteArray) :
-    Decidable (∃ m : Wasm.Module, Wasm.Subset.decode b = .ok m) :=
+    Decidable (∃ m : Wasm.Subset.Module, Wasm.Subset.decode b = .ok m) :=
   decidable_of_iff _ (decodesCheck_iff b)
 
 /-- The exact Boolean check for `validates`. -/
@@ -370,14 +370,14 @@ def validatesCheck (P : Wasm.Profile) (b : ByteArray) : Bool :=
 
 theorem validatesCheck_iff (P : Wasm.Profile) (b : ByteArray) :
     validatesCheck P b = true ↔
-      ∃ m : Wasm.Module, Wasm.Subset.decode b = .ok m ∧ validateUnder P m = true := by
+      ∃ m : Wasm.Subset.Module, Wasm.Subset.decode b = .ok m ∧ validateUnder P m = true := by
   cases h : Wasm.Subset.decode b with
   | ok m => simp [validatesCheck, h]
   | error e => simp [validatesCheck, h]
 
 /-- Deciding whether the bytes decode and validate. -/
 instance instDecidableValidates (P : Wasm.Profile) (b : ByteArray) :
-    Decidable (∃ m : Wasm.Module, Wasm.Subset.decode b = .ok m ∧ validateUnder P m = true) :=
+    Decidable (∃ m : Wasm.Subset.Module, Wasm.Subset.decode b = .ok m ∧ validateUnder P m = true) :=
   decidable_of_iff _ (validatesCheck_iff P b)
 
 /-- **Every constraint is decidable.**  A partition cell can therefore be

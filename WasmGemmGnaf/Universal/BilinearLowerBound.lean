@@ -10,13 +10,12 @@
   NOT that obligation discharged.  `Universal.universal_sublevel_coverage` and
   `Artifact.released_wasm_gemm_gnaf_global_optimal` remain absent.
 
-  What it does establish is worth stating precisely, because it corrects a natural
-  misreading of the release objective.  One might expect the exact tensor rank of
-  the ⟨3,3,3⟩ matrix-multiplication tensor (open; 19 ≤ R ≤ 23) to gate the release
-  theorem.  It does not.  The objective charges multiplications *and* additions at
-  weight one, and under that accounting a low-rank scheme pays for every combining
-  addition it introduces.  The bound below is uniform in `r`, so it holds under
-  every possible resolution of that open problem.
+  What it establishes is deliberately narrower. The objective charges
+  multiplications *and* additions at weight one, and the theorem below proves
+  `T ≥ r + 18` for every modeled bilinear scheme. The naive scheme witnesses
+  equality at `r = 27`. This does not prove naive minimality across lower-rank
+  schemes and does not show that resolving the open tensor-rank interval is
+  irrelevant to the release theorem.
 -/
 import WasmGemmGnaf.Cost.Objective
 
@@ -68,14 +67,11 @@ def OutputsAreRankThree (s : BilinearScheme) : Prop := 27 ≤ s.uSupport.sum
 **Charged-operation lower bound for bilinear `3 × 3` schemes.**  `T ≥ r + 18`,
 uniformly in the number of multiplications `r`.
 
-Attained exactly by the naive algorithm (`r = 27`, `18` additions, `45` charged
-operations).  Reducing `r` below `27` buys at most `27 − r` operations, and only
-if the scheme spends nothing on input-side additions beyond the minimum.  For
-contrast, Laderman's `23`-multiplication scheme uses `98` additions: `121` charged
-operations against naive's `45`.
-
-This is why the open interval `19 ≤ R(⟨3,3,3⟩) ≤ 23` does not gate the release
-theorem — the bound holds for every `r`, so no resolution of it changes anything.
+The naive algorithm witnesses equality (`r = 27`, `18` additions, `45` charged
+operations), so the formula cannot be uniformly strengthened at rank 27. For
+contrast, Laderman's particular `23`-multiplication scheme uses `98` additions:
+`121` charged operations against naive's `45`. Neither fact excludes a different
+lower-rank scheme with total cost below `45`.
 -/
 theorem chargedOps_lower_bound
     (s : BilinearScheme) (total : Nat)

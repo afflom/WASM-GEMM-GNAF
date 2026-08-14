@@ -1,70 +1,55 @@
 /-
-  Wasm/Core/ValidateComplete.lean --- COMPLETENESS of the executable module
-  validator against the AMENDED declarative module judgment, and the
-  equivalence.
+  Wasm/Core/ValidateComplete.lean --- the currently proved, explicitly
+  fragment-scoped COMPLETENESS direction for the executable module validator
+  against the AMENDED declarative module judgment.
 
-  `Core/ValidateModule.lean` proves `validate_sound` and then names, exactly,
-  what stood between this development and the converse:
+  `Core/ValidateModule.lean` proves unconditional `validate_sound`.
+  This file proves the reverse direction only when grammar well-formedness and
+  the historical syntactic predicate `Module.frag` are supplied.  The
+  substitution and inversion lemmas below discharge that restricted proof; they
+  do not establish completeness outside the explicit fragment.
 
-      `$rolldt`, and then `$expanddt`, carry a function type over numtypes and
-      vectypes to the SAME function type
+  WHAT IS PROVED HERE, EXACTLY.
 
-  together with the chain of inversions --- `Types_ok` back to `rollTypes`,
-  `Globals_ok'` back to `checkGlobals`, `Func_ok'` back to `checkFunc` --- that
-  consumes it.  Both are discharged below: `substValType_nv` is the observation
-  that `$subst_valtype` is the identity on `numtype`s and `vectype`s, and
-  `rollDt_frag` / `expandDt_frag` carry it through `$rollrt`, `$rolldt`,
-  `$unrollrt` and `$expanddt` to `funcTypeOf_rollDt`, which is the fact
-  `Context.frag` needs about the contexts `Module.contexts` builds.
+    `validate_complete` -- from explicit hypotheses
+      `Module.wf m = true`, `Module.frag m = true`, and
+      `Module_okA m mt`, derive `validate m = true`.
 
-  WHAT IS PROVED HERE.
+    `validate_iff_declarative_fragment` -- under the same explicit
+      well-formedness and fragment hypotheses, characterize acceptance by the
+      existence of an amended declarative module type.
 
-    `validate_complete`        -- `Module.frag m = true -> Module_ok' m mt ->
-                                  validate m = true`.
-    `validate_iff_declarative` -- `validate m = true <->
-                                  Module.frag m = true /\ exists mt, Module_ok' m mt`.
-                                  NO hypothesis: the fragment condition is a
-                                  CONJUNCT of the equivalence, not a side
-                                  condition on it, because `validate` decides it
-                                  (`validate m = Module.frag m && ...`).
+  `Module.frag` is a sufficient condition used by this proof.  It is not
+  part of `validate` and not a conjunct of the theorem's right-hand side.
 
-  WHY `Module.frag` IS THERE AT ALL.  It is the checker's own statement of which
-  modules it decides, and it is not a weakening of the equivalence: it appears
-  on BOTH sides.  A module with a table section has a `Module_ok'` derivation and
-  is rejected, so `Module_ok' m mt -> validate m = true` with no further premise
-  is FALSE and is not stated.
+  The legacy fragment excludes the table and element sections and restricts
+  imports, tags, value types, type definitions, and instruction bodies.
+  `imports_complete`, `tags_complete`,
+  `checkExternType_complete`, and `checkTag_complete` establish the
+  reverse direction within those explicit restrictions.  They do not say that
+  modules outside the fragment are rejected by the validator.
 
-  WHAT IT EXCLUDES NOW.  Exactly the TABLE and ELEMENT sections, plus a per-entry
-  admissibility test on the IMPORT and TAG sections.  Imports and tags were
-  excluded outright before and are not now: `imports_complete`, `tags_complete`,
-  `checkExternType_complete` and `checkTag_complete` below are the four theorems
-  that moved them, and `funcsXt_closExternType_mem` together with
-  `closDefTypes_frag` and `globals_closExternType_nv` are what pays for putting
-  the IMPORTED components into the staged contexts --- `$clos_externtype` has to
-  be shown to land inside `Context.frag`, which is a statement about the CLOSED
-  external types and not about the written ones.
+  An executable amended heap-subtyping decision procedure now exists.  The
+  remaining task is to lift completeness through all checker branches and all
+  amended declarative derivations.  Until that proof exists, deleting the
+  hypotheses from the theorem would be unsupported.
 
-  The residual per-entry guard is `ExternType.frag` and `Tag.frag`: a `FUNC` or
-  `TAG` names its function type by a type index rather than by an explicit
-  `deftype` (which would need `Deftype_ok`, hence `Comptype_sub`), a `TABLE`
-  import names its element type by an abstract heap type or a type index, and an
-  imported `GLOBAL` has a value type of the instruction fragment, because the
-  module's own `GLOBAL.GET` reads it.
-
-  What the two remaining sections cost is NOT more of this: a table and an
-  element segment each carry an initialiser of REFERENCE type, so both need the
-  reference instructions, and those need `Heaptype_sub`.
+  PUBLIC EQUIVALENCE STATUS.  There is no declaration named
+  `Wasm.Core.validate_iff_declarative`.  The only Core equivalence here is
+  `validate_iff_declarative_fragment`, and its `hwf` and `hfrag`
+  hypotheses are part of its theorem statement.  It cannot discharge or replace
+  SPEC 15's hypothesis-free public equivalence.  The similarly named theorem in
+  `Wasm/Declarative.lean` remains a circular legacy-subset theorem.
 
   STATED OVER THE AMENDED RELATION, WITH DEV-006 CITED.  As in
   `Core/ValidateModule.lean`: the pinned `Instrs_ok` cannot type
   `i32.const c; i32.add` (`Instrs_ok.const_binop_untypable`), so the same
   statement over the pinned `Module_ok` is FALSE in the soundness direction.
   That is DEV-006, filed upstream as WebAssembly/spec issue #2194 and fixed
-  there in PR #2197 (`bd4633ac...`) nine months after the pin.  `Module_ok'` is
-  an inductive relation of `Core/Validation/ModulesAmended.lean`, a file that
-  does not import this one and cannot mention the checker, so the biconditional
-  below is a reflection theorem and not a restatement of the checker's own
-  booleans.
+  there in PR #2197 (`bd4633ac...`) nine months after the pin.  `Module_okA` is
+  an inductive relation of `Core/Validation/ModulesCombinedAmended.lean`, a file that
+  does not import this one and cannot mention the checker, so the restricted
+  biconditional below is a genuine proof about independent definitions.
 -/
 import WasmGemmGnaf.Wasm.Core.ValidateModule
 
@@ -160,51 +145,107 @@ theorem substValTypes_nvs : ∀ (ts : ValTypes), nvs (ValTypes.toList ts) = true
       show ValTypes.cons (substValType t tvs tus) (substValTypes rest tvs tus) = _
       rw [substValType_nv h.1, substValTypes_nvs rest (by simpa [nvs] using h.2) tvs tus]
 
-/-- The shape of a type definition of the decided fragment: one final,
-supertype-free function type over the fragment's value types. -/
+/-- The shape of a type definition of the decided fragment: one supertype-free
+function type over the fragment's value types, final or not. -/
 theorem frag_rectype {td : TypeDef} (h : TypeDef.frag td = true) :
-    ∃ dom cod : ValTypes,
-      td.rectype = .recr (.cons (.sub (some .final) .nil (.func dom cod)) .nil) ∧
+    ∃ (fin : Option Final) (dom cod : ValTypes),
+      td.rectype = .recr (.cons (.sub fin .nil (.func dom cod)) .nil) ∧
       nvs (ValTypes.toList dom) = true ∧ nvs (ValTypes.toList cod) = true := by
   unfold TypeDef.frag at h
   split at h
-  · rename_i dom cod heq
+  · rename_i fin dom cod heq
     simp only [Bool.and_eq_true] at h
-    exact ⟨dom, cod, heq, h.1, h.2⟩
+    exact ⟨fin, dom, cod, heq, h.1, h.2⟩
   · exact absurd h (by simp)
+
+theorem checkValtypeOkA_of_nv {C : Context} {t : ValType}
+    (h : ValType.nv t = true) : checkValtypeOkA C t = true := by
+  cases t with
+  | num _ => rfl
+  | vec _ => rfl
+  | ref _ => simp [ValType.nv] at h
+  | bot => simp [ValType.nv] at h
+
+theorem type_okA_range_roll {C : Context} {td : TypeDef}
+    {dts : List DefType} (h : Type_okA C td dts) :
+    TypeGroupRangeOk C td ∧
+      dts = rollDt (TypeIdx.ofNat C.types.length) td.rectype := by
+  cases h with
+  | @mk x hrange hx hdts _ =>
+      have hx' : x = TypeIdx.ofNat C.types.length := by
+        apply Subtype.ext
+        simpa [TypeIdx.ofNat, Nat.mod_eq_of_lt hrange.1] using hx
+      subst x
+      exact ⟨hrange, hdts⟩
+
+theorem checkTypeOkA_of_frag {C : Context} {td : TypeDef}
+    (h : TypeDef.frag td = true) (hrange : TypeGroupRangeOk C td) :
+    checkTypeOkA C td = true := by
+  obtain ⟨fin, dom, cod, heq, hd, hc⟩ := frag_rectype h
+  have hd' : (ValTypes.toList dom).all (checkValtypeOkA
+      (Context.append C
+        { types := rollDt (TypeIdx.ofNat C.types.length) td.rectype })) = true :=
+    List.all_eq_true.mpr (fun t ht => checkValtypeOkA_of_nv
+      (List.all_eq_true.mp hd t ht))
+  have hc' : (ValTypes.toList cod).all (checkValtypeOkA
+      (Context.append C
+        { types := rollDt (TypeIdx.ofNat C.types.length) td.rectype })) = true :=
+    List.all_eq_true.mpr (fun t ht => checkValtypeOkA_of_nv
+      (List.all_eq_true.mp hc t ht))
+  rw [heq] at hd' hc'
+  rw [checkTypeOkA, show decide (TypeGroupRangeOk C td) = true by
+      exact decide_eq_true hrange, Bool.true_and, heq, checkRectypeOkA,
+    SubTypes.toList, checkRectypeListA, Bool.or_eq_true]
+  apply Or.inl
+  rw [Bool.and_eq_true]
+  constructor
+  · simp [checkSubtypeOkA, checkComptypeOkA, hd', hc']
+  · rfl
+
+theorem checkTypesOkA_of_frag {C : Context} {tds : List TypeDef}
+    {dts : List DefType} (hfrag : tds.all TypeDef.frag = true)
+    (hok : Types_okA C tds dts) : checkTypesOkA C tds = true := by
+  induction hok with
+  | empty => rfl
+  | @cons C td tds dts₁ dts htype htail ih =>
+      simp only [List.all_cons, Bool.and_eq_true] at hfrag
+      have hinfo := type_okA_range_roll htype
+      rw [checkTypesOkA, checkTypeOkA_of_frag hfrag.1 hinfo.1,
+        Bool.true_and]
+      simpa [hinfo.2] using ih hfrag.2
 
 /-- `$subst_subtype` fixes the single `subtype` of such a definition: its
 supertype list is empty and its component type is a function type over the
 fragment. -/
-theorem substSubTypes_frag {dom cod : ValTypes}
+theorem substSubTypes_frag {fin : Option Final} {dom cod : ValTypes}
     (hd : nvs (ValTypes.toList dom) = true) (hc : nvs (ValTypes.toList cod) = true)
     (tvs : List TypeVar) (tus : List TypeUse) :
-    substSubTypes (.cons (.sub (some .final) .nil (.func dom cod)) .nil) tvs tus =
-      .cons (.sub (some .final) .nil (.func dom cod)) .nil := by
-  show SubTypes.cons (substSubType (.sub (some .final) .nil (.func dom cod)) tvs tus)
+    substSubTypes (.cons (.sub fin .nil (.func dom cod)) .nil) tvs tus =
+      .cons (.sub fin .nil (.func dom cod)) .nil := by
+  show SubTypes.cons (substSubType (.sub fin .nil (.func dom cod)) tvs tus)
       (substSubTypes .nil tvs tus) = _
-  show SubTypes.cons (.sub (some .final) (substTypeUses .nil tvs tus)
+  show SubTypes.cons (.sub fin (substTypeUses .nil tvs tus)
       (substCompType (.func dom cod) tvs tus)) .nil = _
-  show SubTypes.cons (.sub (some .final) .nil
+  show SubTypes.cons (.sub fin .nil
       (.func (substValTypes dom tvs tus) (substValTypes cod tvs tus))) .nil = _
   rw [substValTypes_nvs dom hd, substValTypes_nvs cod hc]
 
 /-- **`$rollrt` IS THE IDENTITY ON THE FRAGMENT.**  It replaces the group's own
 absolute type indices by `REC` variables, and a function type over `numtype`s
 and `vectype`s contains no type index to replace. -/
-theorem rollRt_frag {dom cod : ValTypes}
+theorem rollRt_frag {fin : Option Final} {dom cod : ValTypes}
     (hd : nvs (ValTypes.toList dom) = true) (hc : nvs (ValTypes.toList cod) = true)
     (x : TypeIdx) :
-    rollRt x (.recr (.cons (.sub (some .final) .nil (.func dom cod)) .nil)) =
-      .recr (.cons (.sub (some .final) .nil (.func dom cod)) .nil) := by
+    rollRt x (.recr (.cons (.sub fin .nil (.func dom cod)) .nil)) =
+      .recr (.cons (.sub fin .nil (.func dom cod)) .nil) := by
   show RecType.recr (substSubTypes _ _ _) = _
   rw [substSubTypes_frag hd hc]
 
 /-- **`$unrollrt` IS THE IDENTITY ON THE FRAGMENT**, for the same reason. -/
-theorem unrollRt_frag {dom cod : ValTypes}
+theorem unrollRt_frag {fin : Option Final} {dom cod : ValTypes}
     (hd : nvs (ValTypes.toList dom) = true) (hc : nvs (ValTypes.toList cod) = true) :
-    unrollRt (.recr (.cons (.sub (some .final) .nil (.func dom cod)) .nil)) =
-      .recr (.cons (.sub (some .final) .nil (.func dom cod)) .nil) := by
+    unrollRt (.recr (.cons (.sub fin .nil (.func dom cod)) .nil)) =
+      .recr (.cons (.sub fin .nil (.func dom cod)) .nil) := by
   show RecType.recr (substSubTypes _ _ _) = _
   rw [substSubTypes_frag hd hc]
 
@@ -212,14 +253,14 @@ theorem unrollRt_frag {dom cod : ValTypes}
 selects its only member. -/
 theorem rollDt_frag {td : TypeDef} (h : TypeDef.frag td = true) (x : TypeIdx) :
     rollDt x td.rectype = [DefType.defd td.rectype 0] := by
-  obtain ⟨dom, cod, heq, hd, hc⟩ := frag_rectype h
+  obtain ⟨fin, dom, cod, heq, hd, hc⟩ := frag_rectype h
   rw [heq, rollDt, rollRt_frag hd hc]
   rfl
 
 /-- `$expanddt` of that `deftype` is the function type the definition writes:
 `$unrolldt` reads member `0` back out of a group `$unrollrt` has not changed. -/
-theorem expandDt_frag {td : TypeDef} {dom cod : ValTypes}
-    (heq : td.rectype = .recr (.cons (.sub (some .final) .nil (.func dom cod)) .nil))
+theorem expandDt_frag {td : TypeDef} {fin : Option Final} {dom cod : ValTypes}
+    (heq : td.rectype = .recr (.cons (.sub fin .nil (.func dom cod)) .nil))
     (hd : nvs (ValTypes.toList dom) = true) (hc : nvs (ValTypes.toList cod) = true) :
     expandDt (DefType.defd td.rectype 0) = some (.func dom cod) := by
   rw [expandDt, unrollDt, heq, unrollRt_frag hd hc]
@@ -230,7 +271,7 @@ module of the decided fragment elaborates to is one the checker's `funcTypeOf`
 accepts --- which is exactly what `Context.frag` requires of `C.TYPES`. -/
 theorem funcTypeOf_rollDt {td : TypeDef} (h : TypeDef.frag td = true) (x : TypeIdx) :
     ∀ dt ∈ rollDt x td.rectype, (funcTypeOf dt).isSome = true := by
-  obtain ⟨dom, cod, heq, hd, hc⟩ := frag_rectype h
+  obtain ⟨fin, dom, cod, heq, hd, hc⟩ := frag_rectype h
   rw [rollDt_frag h]
   intro dt hdt
   have hdt' : dt = DefType.defd td.rectype 0 := by
@@ -271,7 +312,7 @@ type over the fragment's value types --- the shape `$rolldt` produces from a
 not read it. -/
 def DefType.frag (dt : DefType) : Bool :=
   match dt with
-  | .defd (.recr (.cons (.sub (some .final) .nil (.func dom cod)) .nil)) _ =>
+  | .defd (.recr (.cons (.sub _ .nil (.func dom cod)) .nil)) _ =>
       nvs (ValTypes.toList dom) && nvs (ValTypes.toList cod)
   | _ => false
 
@@ -281,7 +322,7 @@ theorem substAllDefType_frag {dt : DefType} (h : DefType.frag dt = true)
     (tus : List TypeUse) : substAllDefType dt tus = dt := by
   unfold DefType.frag at h
   split at h
-  · rename_i dom cod i
+  · rename_i fin dom cod i
     simp only [Bool.and_eq_true] at h
     show DefType.defd (substRecType _ _ _) i = _
     show DefType.defd (.recr (substSubTypes _ _ _)) i = _
@@ -311,7 +352,7 @@ theorem closDefTypes_frag {dts : List DefType} (h : dts.all DefType.frag = true)
 fragment. -/
 theorem defTypeFrag_rollDt {td : TypeDef} (h : TypeDef.frag td = true) (x : TypeIdx) :
     (rollDt x td.rectype).all DefType.frag = true := by
-  obtain ⟨dom, cod, heq, hd, hc⟩ := frag_rectype h
+  obtain ⟨fin, dom, cod, heq, hd, hc⟩ := frag_rectype h
   rw [rollDt_frag h]
   simp only [List.all_cons, List.all_nil, Bool.and_true, heq]
   simp [DefType.frag, hd, hc]
@@ -360,31 +401,29 @@ theorem substTypeVar_mem_or : ∀ (tv : TypeVar) (tvs : List TypeVar) (tus : Lis
             · exact Or.inl (by simp [hmem])
             · exact Or.inr heq
 
-/-! ## B. `Types_ok` back to `rollTypes`
+/-! ## B. `Types_okA` back to `rollTypes`
 
 The declarative type-section rule fixes `dt* = $rolldt(x, rectype)` with
 `x = |C.TYPES|`, and its `cons` rule extends the context by exactly what it
 just rolled.  So the relation determines its own right-hand side, and the
 function that computes it is `rollTypes`. -/
 
-/-- The `deftype*` a `Types_ok` derivation produces is the one `rollTypes`
+/-- The `deftype*` a `Types_okA` derivation produces is the one `rollTypes`
 computes. -/
 theorem types_ok_roll : ∀ {C : Context} {tds : List TypeDef} {ds : List DefType},
-    Types_ok C tds ds → rollTypes C.types tds = C.types ++ ds := by
+    Types_okA C tds ds → rollTypes C.types tds = C.types ++ ds := by
   intro C tds ds h
   induction h with
   | empty => simp [rollTypes]
   | @cons C td tds dts₁ dts hty _ ih =>
-      cases hty with
-      | mk hx hdts _ =>
-          subst hx
-          subst hdts
-          show rollTypes (C.types ++ rollDt (TypeIdx.ofNat C.types.length) td.rectype) tds = _
-          have hC : (Context.append C
-              { types := rollDt (TypeIdx.ofNat C.types.length) td.rectype }).types =
-              C.types ++ rollDt (TypeIdx.ofNat C.types.length) td.rectype := rfl
-          rw [hC] at ih
-          rw [ih, List.append_assoc]
+      have hdts := type_okA_range_roll hty
+      rw [hdts.2] at ih ⊢
+      show rollTypes (C.types ++ rollDt (TypeIdx.ofNat C.types.length) td.rectype) tds = _
+      have hC : (Context.append C
+          { types := rollDt (TypeIdx.ofNat C.types.length) td.rectype }).types =
+          C.types ++ rollDt (TypeIdx.ofNat C.types.length) td.rectype := rfl
+      rw [hC] at ih
+      rw [ih, List.append_assoc]
 
 /-! ## C. Contexts of the fragment
 
@@ -415,7 +454,7 @@ theorem frag_append {C D : Context} (hC : Context.frag C = true)
   · show (C.types ++ D.types).all _ = true
     rw [List.all_append, ht, ht']; rfl
 
-/-- The one-global extension of `Globals_ok/cons` and `checkGlobals`. -/
+/-- The one-global extension of `Globals_okA/cons` and `checkGlobals`. -/
 theorem frag_global_ext {gt : GlobalType} (h : ValType.nv gt.valtype = true) :
     Context.frag { globals := [gt] } = true := by
   simp [Context.frag, h]
@@ -456,11 +495,11 @@ theorem frag_mem : ∀ (s : InstrSeq), InstrSeq.frag s = true →
       · exact h.1
       · exact frag_mem rest h.2 i hrest
 
-/-- `Expr_ok_const'` back to `checkConstExpr`: the typing half is
+/-- `Expr_ok_constA` back to `checkConstExpr`: the typing half is
 `checkExpr_complete`, the syntactic half is `isConst_complete`. -/
 theorem checkConstExpr_complete {C : Context} {e : Expr} {t : ValType}
     (hC : Context.frag C = true) (hfrag : InstrSeq.frag e = true)
-    (ht : ValType.nv t = true) (h : Expr_ok_const' C e t) :
+    (ht : ValType.nv t = true) (h : Expr_ok_constA C e t) :
     checkConstExpr C e t = true := by
   cases h with
   | mk hok hconst =>
@@ -487,16 +526,16 @@ theorem checkLimits_complete {C : Context} {lim : Limits} {k : Nat}
           obtain ⟨h1, h2⟩ := hmax mx hm
           simp [h1, h2]
 
-/-- A value type of the fragment has a default, so `Local_ok/unset` cannot
+/-- A value type of the fragment has a default, so `Local_okA/unset` cannot
 apply to it. -/
 theorem noDefault_of_nv {t : ValType} (h : ValType.nv t = true) :
     ValType.noDefault t = false := by
   cases t <;> simp_all [ValType.nv, ValType.noDefault]
 
-/-- `Local_ok` on a local of the fragment gives exactly the `SET` local type the
+/-- `Local_okA` on a local of the fragment gives exactly the `SET` local type the
 checker builds. -/
 theorem local_ok_set {C : Context} {l : Local} {lct : LocalType}
-    (hnv : ValType.nv l.valtype = true) (h : Local_ok C l lct) :
+    (hnv : ValType.nv l.valtype = true) (h : Local_okA C l lct) :
     lct = ⟨Init.set, l.valtype⟩ := by
   cases h with
   | set _ => rfl
@@ -528,11 +567,11 @@ theorem frag_func_ext {dom cod : List ValType} {locals : List Local}
       simpa using List.all_eq_true.mp hl' l hlm
   simp [Context.frag, h1, hc]
 
-/-- `Func_ok'` back to `checkFunc`. -/
+/-- `Func_okA` back to `checkFunc`. -/
 theorem checkFunc_complete {C : Context} {f : Func} {dt : DefType}
     (hC : Context.frag C = true)
     (hlocals : f.locals.all (fun l => ValType.nv l.valtype) = true)
-    (hbody : InstrSeq.frag f.body = true) (h : Func_ok' C f dt) :
+    (hbody : InstrSeq.frag f.body = true) (h : Func_okA C f dt) :
     checkFunc C f = true := by
   cases h with
   | @mk dom cod lcts hty hexp hlen hall hok =>
@@ -555,12 +594,12 @@ theorem checkFunc_complete {C : Context} {f : Func} {dt : DefType}
       exact ⟨hlocals, checkExpr_complete
         (frag_append hC (frag_func_ext hnvd hnvc hlocals)) hbody hok hnvc⟩
 
-/-- `Data_ok'` back to `checkData`. -/
+/-- `Data_okA` back to `checkData`. -/
 theorem checkData_complete {C : Context} {d : Data} (hC : Context.frag C = true)
     (hfrag : (match d.mode with
               | .passive => true
               | .active _ e => InstrSeq.frag e) = true)
-    (h : Data_ok' C d .ok) : checkData C d = true := by
+    (h : Data_okA C d .ok) : checkData C d = true := by
   cases h with
   | mk hm =>
       generalize hmode : d.mode = md at hm hfrag
@@ -572,8 +611,8 @@ theorem checkData_complete {C : Context} {d : Data} (hC : Context.frag C = true)
           simp only [checkData, hmode, hmem]
           exact checkConstExpr_complete hC hfrag' (by cases mt.addr <;> rfl) hconst
 
-/-- `Start_ok` back to `checkStart`. -/
-theorem checkStart_complete {C : Context} {s : Start} (h : Start_ok C s) :
+/-- `Start_okA` back to `checkStart`. -/
+theorem checkStart_complete {C : Context} {s : Start} (h : Start_okA C s) :
     checkStart C s = true := by
   cases h with
   | mk hfun hexp =>
@@ -582,12 +621,12 @@ theorem checkStart_complete {C : Context} {s : Start} (h : Start_ok C s) :
 
 /-! ### The type-use, heap-type, external-type, tag and import checks
 
-Each of these is `Externtype_ok`'s or `Tag_ok`'s premise read backwards.  No
+Each of these is `Externtype_okA`'s or `Tag_okA`'s premise read backwards.  No
 expression and no subtyping is involved, so the only residual hypothesis is the
 syntactic one `ExternType.frag` / `Tag.frag` states: the `typeuse` is a type
 index, and a `TABLE`'s heap type is abstract or a type index. -/
 
-/-- `Expand_use` at a function type, back to `checkFuncTypeUse`.  `Typeuse_ok`
+/-- `Expand_use` at a function type, back to `checkFuncTypeUse`.  `Typeuse_okA`
 is not needed: `Expand_use/typeidx` already carries the lookup. -/
 theorem checkFuncTypeUse_complete {C : Context} {x : TypeIdx} {dom cod : ValTypes}
     (hexp : Expand_use C (.idx x) (.func dom cod)) :
@@ -599,9 +638,9 @@ theorem checkFuncTypeUse_complete {C : Context} {x : TypeIdx} {dom cod : ValType
           rw [checkFuncTypeUse, hlk]
           exact isFuncDt_iff.mpr ⟨dom, cod, he⟩
 
-/-- `Heaptype_ok` back to `checkHeapType`. -/
+/-- `Heaptype_okA` back to `checkHeapType`. -/
 theorem checkHeapType_complete {C : Context} {ht : HeapType}
-    (hfrag : HeapType.frag ht = true) (h : Heaptype_ok C ht) :
+    (hfrag : HeapType.frag ht = true) (h : Heaptype_okA C ht) :
     checkHeapType C ht = true := by
   cases h with
   | abs => rfl
@@ -613,17 +652,17 @@ theorem checkHeapType_complete {C : Context} {ht : HeapType}
           cases htu with
           | typeidx hlk => simp [checkHeapType, hlk]
 
-/-- `Reftype_ok` back to `checkRefType`. -/
+/-- `Reftype_okA` back to `checkRefType`. -/
 theorem checkRefType_complete {C : Context} {nul : Option Null} {ht : HeapType}
-    (hfrag : HeapType.frag ht = true) (h : Reftype_ok C (.ref nul ht)) :
+    (hfrag : HeapType.frag ht = true) (h : Reftype_okA C (.ref nul ht)) :
     checkRefType C (.ref nul ht) = true := by
   cases h with
   | mk hht => exact checkHeapType_complete hfrag hht
 
-/-- `Externtype_ok` back to `checkExternType`, on the external types of the
+/-- `Externtype_okA` back to `checkExternType`, on the external types of the
 fragment. -/
 theorem checkExternType_complete {C : Context} {xt : ExternType}
-    (hfrag : ExternType.frag xt = true) (h : Externtype_ok C xt) :
+    (hfrag : ExternType.frag xt = true) (h : Externtype_okA C xt) :
     checkExternType C xt = true := by
   cases h with
   | @tag jt hjt =>
@@ -655,9 +694,9 @@ theorem checkExternType_complete {C : Context} {xt : ExternType}
           rw [hrt']
           exact checkRefType_complete hfr hrt
 
-/-- `Tag_ok` back to `checkTag`. -/
+/-- `Tag_okA` back to `checkTag`. -/
 theorem checkTag_complete {C : Context} {tg : Tag} {jt : TagType}
-    (hfrag : Tag.frag tg = true) (h : Tag_ok C tg jt) : checkTag C tg = true := by
+    (hfrag : Tag.frag tg = true) (h : Tag_okA C tg jt) : checkTag C tg = true := by
   cases h with
   | mk hjt =>
       unfold Tag.frag at hfrag
@@ -668,9 +707,9 @@ theorem checkTag_complete {C : Context} {tg : Tag} {jt : TagType}
         | mk _ hexp => rw [checkTag, heq]; exact checkFuncTypeUse_complete hexp
       · exact absurd hfrag (by simp)
 
-/-- `Tag_ok` determines the tag types and discharges the tag check. -/
+/-- `Tag_okA` determines the tag types and discharges the tag check. -/
 theorem tags_complete {C : Context} : ∀ (tgs : List Tag) (jts : List TagType),
-    tgs.all Tag.frag = true → tgs.length = jts.length → SeqAll₂ (Tag_ok C) tgs jts →
+    tgs.all Tag.frag = true → tgs.length = jts.length → SeqAll₂ (Tag_okA C) tgs jts →
     jts = tgs.map (fun tg => C.closTagType tg.tagtype) ∧ tgs.all (checkTag C) = true := by
   intro tgs
   induction tgs with
@@ -693,10 +732,10 @@ theorem tags_complete {C : Context} : ∀ (tgs : List Tag) (jts : List TagType),
           simp only [List.all_cons, Bool.and_eq_true]
           exact ⟨checkTag_complete hfrag.1 hhead, hck⟩
 
-/-- `Import_ok` determines the imported external types and discharges the import
+/-- `Import_okA` determines the imported external types and discharges the import
 check. -/
 theorem imports_complete {C : Context} : ∀ (is : List Import) (xts : List ExternType),
-    is.all Import.frag = true → is.length = xts.length → SeqAll₂ (Import_ok C) is xts →
+    is.all Import.frag = true → is.length = xts.length → SeqAll₂ (Import_okA C) is xts →
     xts = is.map (fun i => C.closExternType i.externtype) ∧
       is.all (fun i => checkExternType C i.externtype) = true := by
   intro is
@@ -844,9 +883,9 @@ theorem funcsXt_closExternType_mem (C : Context) : ∀ (is : List Import) (dts :
                         · rw [htu] at heq; exact absurd heq (by simp [TypeVar.toTypeUse])
                       · exact ih rest h.2 hrest dt hrest'
 
-/-- `Externidx_ok` back to `checkExternIdx`. -/
+/-- `Externidx_okA` back to `checkExternIdx`. -/
 theorem checkExternIdx_complete {C : Context} {xi : ExternIdx} {xt : ExternType}
-    (h : Externidx_ok C xi xt) : checkExternIdx C xi = true := by
+    (h : Externidx_okA C xi xt) : checkExternIdx C xi = true := by
   cases h with
   | tag hx => rw [checkExternIdx, hx]; rfl
   | global hx => rw [checkExternIdx, hx]; rfl
@@ -854,9 +893,9 @@ theorem checkExternIdx_complete {C : Context} {xi : ExternIdx} {xt : ExternType}
   | table hx => rw [checkExternIdx, hx]; rfl
   | func hx => rw [checkExternIdx, hx]; rfl
 
-/-- `Globals_ok'` determines the global types: they are the declared ones. -/
+/-- `Globals_okA` determines the global types: they are the declared ones. -/
 theorem globals_types : ∀ {C : Context} {gs : List Global} {gts : List GlobalType},
-    Globals_ok' C gs gts → gts = gs.map Global.globaltype := by
+    Globals_okA C gs gts → gts = gs.map Global.globaltype := by
   intro C gs gts h
   induction h with
   | empty => rfl
@@ -864,11 +903,11 @@ theorem globals_types : ∀ {C : Context} {gs : List Global} {gts : List GlobalT
       cases hg with
       | mk _ _ => rw [List.map_cons, ih]
 
-/-- `Globals_ok'` back to `checkGlobals`, staged context by staged context. -/
+/-- `Globals_okA` back to `checkGlobals`, staged context by staged context. -/
 theorem checkGlobals_complete : ∀ (gs : List Global) (C : Context) (gts : List GlobalType),
     Context.frag C = true →
     gs.all (fun g => ValType.nv g.globaltype.valtype && InstrSeq.frag g.init) = true →
-    Globals_ok' C gs gts → checkGlobals C gs = some gts := by
+    Globals_okA C gs gts → checkGlobals C gs = some gts := by
   intro gs
   induction gs with
   | nil =>
@@ -891,9 +930,9 @@ theorem checkGlobals_complete : ∀ (gs : List Global) (C : Context) (gts : List
                 (frag_append hC (frag_global_ext hfrag.1.1)) hfrag.2 hrest
               rw [checkGlobals, if_pos hcond, hsub]
 
-/-- `Mem_ok` determines the memory types and discharges the limits check. -/
+/-- `Mem_okA` determines the memory types and discharges the limits check. -/
 theorem mems_complete {C : Context} : ∀ (ms : List Mem) (mts : List MemType),
-    ms.length = mts.length → SeqAll₂ (Mem_ok C) ms mts →
+    ms.length = mts.length → SeqAll₂ (Mem_okA C) ms mts →
     mts = ms.map Mem.memtype ∧
       ms.all (fun mem => checkLimits mem.memtype.lim (2 ^ 16)) = true := by
   intro ms
@@ -918,10 +957,10 @@ theorem mems_complete {C : Context} : ∀ (ms : List Mem) (mts : List MemType),
               cases hmt with
               | mk hlim => exact ⟨checkLimits_complete hlim, hck⟩
 
-/-- `Data_ok'` determines the data types and discharges the data check. -/
+/-- `Data_okA` determines the data types and discharges the data check. -/
 theorem datas_complete {C : Context} (hC : Context.frag C = true) :
     ∀ (ds : List Data) (oks : List DataType),
-      ds.length = oks.length → SeqAll₂ (Data_ok' C) ds oks →
+      ds.length = oks.length → SeqAll₂ (Data_okA C) ds oks →
       ds.all (fun d => match d.mode with
                        | .passive => true
                        | .active _ e => InstrSeq.frag e) = true →
@@ -949,11 +988,11 @@ theorem datas_complete {C : Context} (hC : Context.frag C = true) :
               simp only [List.all_cons, Bool.and_eq_true]
               exact ⟨checkData_complete hC hfrag.1 (.mk hm), hck⟩
 
-/-- `Export_ok` determines the exported names and discharges the index check. -/
+/-- `Export_okA` determines the exported names and discharges the index check. -/
 theorem exports_complete {C : Context} :
     ∀ (es : List Export) (nms : List Name) (xts : List ExternType),
       es.length = nms.length → nms.length = xts.length →
-      SeqAll₃ (Export_ok C) es nms xts →
+      SeqAll₃ (Export_okA C) es nms xts →
       nms = es.map Export.name ∧
         es.all (fun e => checkExternIdx C e.externidx) = true := by
   intro es
@@ -985,17 +1024,17 @@ theorem exports_complete {C : Context} :
 /-- The type index every function of a validated module names is the one the
 declarative rule assigns it. -/
 theorem funcs_type_lookup {C : Context} {fs : List Func} {dts : List DefType}
-    (h : SeqAll₂ (Func_ok' C) fs dts) :
+    (h : SeqAll₂ (Func_okA C) fs dts) :
     ∀ (i : Nat) (f : Func) (dt : DefType), fs[i]? = some f → dts[i]? = some dt →
       C.types[f.typeidx.val]? = some dt := by
   intro i f dt hf hdt
   cases h i f dt hf hdt with
   | mk hty _ _ _ _ => exact hty
 
-/-- `Func_ok'` back to `checkFunc`, over the whole function section. -/
+/-- `Func_okA` back to `checkFunc`, over the whole function section. -/
 theorem funcs_complete {C : Context} (hC : Context.frag C = true)
     {fs : List Func} {dts : List DefType} (hlen : fs.length = dts.length)
-    (h : SeqAll₂ (Func_ok' C) fs dts)
+    (h : SeqAll₂ (Func_okA C) fs dts)
     (hfrag : fs.all (fun f =>
       f.locals.all (fun l => ValType.nv l.valtype) && InstrSeq.frag f.body) = true) :
     fs.all (checkFunc C) = true := by
@@ -1009,20 +1048,22 @@ theorem funcs_complete {C : Context} (hC : Context.frag C = true)
   rw [Bool.and_eq_true] at hfr
   exact checkFunc_complete hC hfr.1 hfr.2 hok
 
-/-! ## F. COMPLETENESS OF THE MODULE VALIDATOR -/
+/-! ## F. FRAGMENT-SCOPED COMPLETENESS OF THE MODULE VALIDATOR -/
 
-/-- **`Wasm.Core.validate` IS COMPLETE FOR THE AMENDED DECLARATIVE JUDGMENT.**
-Every module of the decided fragment that the amended judgment `Module_ok'` of
-`Core/Validation/ModulesAmended.lean` gives a module type, the algorithm of
+/-- **Fragment-scoped completeness for the amended declarative judgment.**
+Every module satisfying the explicit legacy fragment hypothesis that the
+amended judgment `Module_okA` of
+`Core/Validation/ModulesCombinedAmended.lean` gives a module type, the algorithm of
 `appendix/algorithm.rst` accepts.
 
-`Module.frag m` is the checker's own statement of which modules it decides ---
-`validate m = Module.frag m && ...` --- so it is not a hypothesis that hides a
-gap: `validate_iff_declarative` below carries it as a CONJUNCT on both sides and
-needs no hypothesis at all.  Stated over `Module_ok'` and not over the pinned
-`Module_ok` for the reason `Core/ValidateModule.lean` gives; that is DEV-006. -/
+Both `Module.wf` and `Module.frag` are genuine hypotheses.  The
+validator does not compute `Module.frag`, and this theorem makes no claim
+outside it.  It is stated over `Module_okA` rather than the defective pinned
+`Module_ok` for the DEV-006 reason given by
+`Core/ValidateModule.lean`. -/
 theorem validate_complete {m : Module} {mt : ModuleType}
-    (hfrag : Module.frag m = true) (h : Module_ok' m mt) : validate m = true := by
+    (hwf : Module.wf m = true) (hfrag : Module.frag m = true)
+    (h : Module_okA m mt) : validate m = true := by
   have hfr := hfrag
   simp only [Module.frag, Bool.and_eq_true] at hfr
   obtain ⟨⟨⟨⟨⟨⟨⟨him, htg⟩, htb⟩, hel⟩, htys⟩, hglob⟩, hfun⟩, hdat⟩ := hfr
@@ -1129,12 +1170,12 @@ theorem validate_complete {m : Module} {mt : ModuleType}
           { types := rollTypes [] m.types,
             globals := ExternType.globals xtsI,
             funcs := dtsI ++ dts,
-            refs := funcidxNonfuncs m.globals m.mems m.tables m.elems } := by
+            refs := funcidxNonfuncs' m.globals m.mems m.tables m.elems } := by
         rw [hC', hdts', ← hgI]
       have hctx : Module.contexts m = some (C', C) := by
         simp only [Module.contexts, hxtsI, hdI, hmapM]
         rw [← hC'eq, hgl, hC, hjI, hmI, htI]
-        simp
+        simp [htb', hel']
       -- the start function
       have hstart : (match m.start with
                      | none => true
@@ -1142,59 +1183,45 @@ theorem validate_complete {m : Module} {mt : ModuleType}
         cases hst : m.start with
         | none => rfl
         | some s => exact checkStart_complete (hs s hst)
-      simp only [validate, hfrag, Bool.true_and, hctx, Bool.and_eq_true]
+      have htypesck : checkTypesOkA Context.empty m.types = true :=
+        checkTypesOkA_of_frag htys hty
+      simp only [validate, hwf, htypesck, Bool.true_and, hctx, htb', hel',
+        List.all_nil, Bool.and_true, Bool.and_eq_true]
       refine ⟨⟨⟨⟨⟨⟨⟨?_, htagck⟩, hmemck⟩, funcs_complete hCfrag hlf hf hfun⟩, hdatack⟩,
         hstart⟩, hexpck⟩, hdis⟩
       rw [htc]
       exact himpck
 
-/-- `validate` decides the fragment condition itself: it is the first
-conjunct of the checker, so every accepted module satisfies it. -/
-theorem frag_of_validate {m : Module} (h : validate m = true) :
-    Module.frag m = true := by
+/-- Every accepted raw module satisfies the grammar-level well-formedness
+predicate that is the first conjunct of the checker. -/
+theorem wf_of_validate {m : Module} (h : validate m = true) :
+    Module.wf m = true := by
   rw [validate, Bool.and_eq_true] at h
-  exact h.1
+  have hfcheck := h.1
+  rw [Bool.and_eq_true] at hfcheck
+  exact hfcheck.1
 
 end Validate
 
-/-- `Wasm.Core.validate_complete`: the completeness of this development's
-executable module validator against the amended declarative judgment. -/
+/-- `Wasm.Core.validate_complete`: the explicitly fragment-scoped
+completeness theorem for the amended declarative judgment. -/
 theorem validate_complete {m : Module} {mt : ModuleType}
-    (hfrag : Validate.Module.frag m = true) (h : Module_ok' m mt) :
+    (hwf : Module.wf m = true) (hfrag : Validate.Module.frag m = true)
+    (h : Module_okA m mt) :
     validate m = true :=
-  Validate.validate_complete hfrag h
+  Validate.validate_complete hwf hfrag h
 
-/-- **`Wasm.Core.validate_iff_declarative`.**  The executable validator of
-`Core/Validate.lean` accepts exactly the modules of its decided fragment to
-which the amended declarative judgment of
-`Core/Validation/ModulesAmended.lean` gives a module type.
+/-- **`Wasm.Core.validate_iff_declarative_fragment`.**  Under the explicit
+`Module.wf` and legacy `Validate.Module.frag` hypotheses, the
+executable validator accepts exactly when the amended declarative judgment
+assigns some module type.
 
-There is NO hypothesis.  `Module.frag` --- the checker's own statement of which
-modules it decides, and the first thing `validate` computes --- is a conjunct of
-the right-hand side, so the biconditional is an equivalence between two
-propositions about an arbitrary module, not an equivalence restricted to a
-subclass by fiat.
-
-`Module_ok'` is an inductive relation declared in a file that does not import
-this one and cannot mention `validate`, so this is a reflection theorem and not
-a restatement of the checker's own booleans.  It is stated over the AMENDED
-relation, with DEV-006 cited: over the pinned `Module_ok` the left-to-right
-direction is FALSE (`Validate.gapModule_not_ok`). -/
-theorem validate_iff_declarative (m : Module) :
-    validate m = true ↔
-      (Validate.Module.frag m = true ∧ ∃ mt : ModuleType, Module_ok' m mt) := by
-  constructor
-  · intro h
-    exact ⟨Validate.frag_of_validate h, validate_sound h⟩
-  · intro h
-    obtain ⟨hfrag, _, hok⟩ := h
-    exact validate_complete hfrag hok
-
-/-- The same equivalence in the form the module rules consume it: on the
-fragment the algorithm decides, acceptance is derivability. -/
-theorem validate_iff_declarative_frag {m : Module}
-    (hfrag : Validate.Module.frag m = true) :
-    validate m = true ↔ ∃ mt : ModuleType, Module_ok' m mt :=
-  ⟨fun h => validate_sound h, fun ⟨_, hok⟩ => validate_complete hfrag hok⟩
+This is not a hypothesis-free `validate_iff_declarative` theorem.
+`Module_okA` is independent of the checker, while `Module.frag` is
+only a sufficient restriction used for the reverse-direction proof. -/
+theorem validate_iff_declarative_fragment {m : Module}
+    (hwf : Module.wf m = true) (hfrag : Validate.Module.frag m = true) :
+    validate m = true ↔ ∃ mt : ModuleType, Module_okA m mt :=
+  ⟨fun h => validate_sound h, fun ⟨_, hok⟩ => validate_complete hwf hfrag hok⟩
 
 end WasmGemmGnaf.Wasm.Core

@@ -18,14 +18,14 @@
         "WasmGemmGnaf.Wasm.Counterexample.minimal_not_costedRun -- the left-hand side FAILS, under any profile",
         "WasmGemmGnaf.Wasm.erase_enterGemm_eq -- erasure discards the payload the two sides disagree about"
       ],
-      "resolution": "RESOLVED BY AMENDING SPEC, not by deviating from it. SPEC 7.5 now states the biconditional with the minimal side condition `Wasm.CostedLabelling module invocation costedTrace` on the right-hand side, states the side-condition-free existential law `costed_run_iff_plain_run` beside it, and defines `CostedLabelling` -- a predicate the clause previously used without defining. The side condition is minimal in the sense that matters: it is a condition on LABELS alone (no observation, no store, no terminal status appears in it), so it cannot smuggle the conclusion into the hypothesis, and it is exactly the payload information `eraseCosts` discards. `Wasm.costed_erase_iff_plain_run` carries the amended proposition verbatim, so the binding in Conformance/RequiredSignatures.lean is now EXACT (`-- spec-signature:`) and the SPEC 15 name is DISCHARGED. This entry stays on file: the refutation is why the text reads as it does.",
+      "resolution": "RESOLVED AT THE FORMULA LEVEL BY AMENDING SPEC, not by deviating from it. SPEC 7.5 now states the biconditional with the minimal side condition `Wasm.CostedLabelling module invocation costedTrace` on the right-hand side, states the side-condition-free existential law `costed_run_iff_plain_run` beside it, and defines `CostedLabelling` -- a predicate the clause previously used without defining. The side condition is minimal in the sense that matters: it is a condition on LABELS alone (no observation, no store, no terminal status appears in it), so it cannot smuggle the conclusion into the hypothesis, and it is exactly the payload information `eraseCosts` discards. The existing `Wasm.costed_erase_iff_plain_run` carries that amended formula only for `Wasm.Subset.Module`; SPEC now fixes the public carrier as amended-Core `Wasm.Module`. Its binding is therefore WEAKER and the SPEC 15 name remains OUTSTANDING until the costed and plain semantics are migrated to the public carrier. This entry stays on file: the refutation is why the formula reads as it does.",
       "intendedContentProvedBy": [
         "WasmGemmGnaf.Wasm.costed_run_iff_plain_run  -- (exists costedTrace, CostedRun ...) <-> Run module invocation observation.trace observation; NO side condition",
         "WasmGemmGnaf.Wasm.costedRun_of_run          -- erasure completeness: every plain run has a costed labelling erasing back to it",
         "WasmGemmGnaf.Wasm.costedRun_erase           -- erasure soundness",
         "WasmGemmGnaf.Wasm.costed_erase_forward      -- the forward direction of SPEC's display, unconditionally"
       ],
-      "ledgerEffect": "MOVED THE COUNT BY ITSELF, ON ZERO NEW PROOF LINES. `xtask claims required` went 34 -> 35 discharged when this amendment landed, and `WasmGemmGnaf/Wasm/Erasure.lean` was NOT modified: the theorem it credits already existed, and only SPEC.md 7.5 and the marker in Conformance/RequiredSignatures.lean changed. Adversarial review found this and it is disclosed rather than absorbed. The release-connected count -- the only one measuring progress toward the release theorem -- does not move for it. A repository cannot discharge an obligation by editing the document that imposes it.",
+      "ledgerEffect": "HISTORICAL COUNT MOVE REVERSED AFTER CARRIER AUDIT. `xtask claims required` went 34 -> 35 discharged when this formula amendment landed, on zero new proof lines. A later audit found that the theorem still ranges over legacy `Wasm.Subset.Module`, not SPEC's public amended-Core `Wasm.Module`, so its binding is now WEAKER and the name is again outstanding. The release-connected count never moved. A repository cannot discharge an obligation by editing the document that imposes it or by proving the formula on a narrower carrier.",
       "strengthEffect": "STRENGTHENING. The forward direction is strictly stronger than the superseded text (CostedRun -> Run AND the labelling is machine-produced). The backward direction is the strongest true form: `not_costed_erase_iff_plain_run` proves no theorem of the superseded shape exists, so there was no strength there to preserve. The existentially quantified form, now required by SPEC 7.5 beside it, carries the clause's full intent with no side condition, so nothing the clause asserted is lost.",
       "specAmendmentRecommended": true,
       "amendmentAdopted": "AMD-002",
@@ -82,32 +82,24 @@
     {
       "id": "DEV-005",
       "specSection": "12.2",
-      "status": "AMENDED INTO SPEC -- THE OBLIGATION SHRANK, AND THAT IS THE DISCLOSURE",
+      "status": "AMENDED INTO SPEC -- THE OBLIGATION SHRANK; PRIOR SUBSET-WITNESS REFUTATION WITHDRAWN; ZERO RELEASE CREDIT",
       "adoptedIntoSpec": "AMD-004",
       "refutedSpecText": "theorem attention_no_optimum_relevant_false_negative (hsealed : Atlas.SealCertificate state core) (hprofile : Wasm.ProfileId profile = core.profileId) (hproblem : Gemm.ProblemId problem = core.problemId) (hobjective : Cost.ObjectiveId objective = core.objectiveId) (hc : Universal.ProfileValid profile candidateBytes) (heval : Universal.SystemEvaluationRel profile problem candidateBytes evaluation) (hscore : objective.score evaluation.cost <= core.baselineScore) : Atlas.AttentionContains core candidateBytes \\/ Atlas.HasSoundExclusionCertificate core candidateBytes evaluation",
       "specText": "theorem attention_no_optimum_relevant_false_negative (hsealed : Atlas.SealCertificate state core) (hprofile : Wasm.ProfileId profile = core.profileId) (hproblem : Gemm.ProblemId problem = core.problemId) (hobjective : Cost.ObjectiveId objective = core.objectiveId) (hc : Universal.ProfileValid profile candidateBytes) (heval : Universal.SystemEvaluationRel profile problem candidateBytes evaluation) (hscore : objective.score evaluation.cost <= core.baselineScore) (hcoherent : Atlas.Coherent state.body) (hdeclared : candidateBytes IN state.body.declarationBase.declarations) : Atlas.OptimumRelevant profile problem objective core candidateBytes /\\ Atlas.AttentionRoutes state.body candidateBytes /\\ Atlas.AttentionContains core candidateBytes",
-      "issue": "The statement is FALSE, and this is PROVED, not argued. `state` and `core` are universally quantified over `Atlas.UnsealedState` and `Atlas.SealCore`, and `Atlas.SealCertificate` is the conjunction of the seven deterministic checkers of Atlas/Certificate.lean. Not one of those checkers mentions a byte string, a decoder, a semantics or a cost: `attentionCompleteCheck` asks only that every object the state RECORDS is routed by some indexed signature, and it is satisfied -- with every root empty -- by a state that recorded nothing at all. The conclusion, by contrast, is about an arbitrary `candidateBytes` whose evaluated score is within the core's baseline. Nothing links the two, so a seal that declared nothing faces a real candidate it neither attends nor holds a retained certificate about. The gap is exactly SPEC 10.5's universal coverage obligation, and SPEC 12.2 gives the seal no way to discharge it. This is the attention counterpart of the fact `Atlas/CoverageScope.lean` already records for the cover check (`universalCoverCompleteCheck_scope_blind`), now with a counterexample instead of a blindness lemma.",
-      "refutedBy": [
-        "WasmGemmGnaf.Atlas.attention_no_optimum_relevant_false_negative_is_false -- not (SPEC's statement), PARAMETRICALLY in the two predicates SPEC names but never defines: it holds for every `Contains` such that an attention root listing no signature contains no candidate, and every `Excluded` such that a certificate root listing no certificate identity supplies no RETAINED exclusion certificate (SPEC 12.2: 'legal only when a retained proof shows'). No choice of `Atlas.AttentionContains` / `Atlas.HasSoundExclusionCertificate` meeting those two conditions makes the statement true.",
-        "WasmGemmGnaf.Atlas.honesty_conditions_satisfiable -- the two conditions are satisfiable: this file's own `AttentionContains` and `HasSoundExclusionCertificate` meet them, so the refutation is not a conditional with an unsatisfiable antecedent",
-        "WasmGemmGnaf.Atlas.undeclared_witness_is_missed -- the witness: at the constructed release scope, `Release.witnessBytes` is optimum-relevant to a sealed core (profile valid, evaluated, scoring exactly at the baseline) whose attention root lists NO signature and whose certificate root lists NO certificate",
-        "WasmGemmGnaf.Atlas.sealCertificateAt -- the counterexample's seal is not weakened: all seven deterministic checkers are discharged by the proved checker results of Atlas/Rebuild.lean, at an arbitrary `baselineScore` (no checker reads it)",
-        "WasmGemmGnaf.Atlas.no_listed_exclusion_ground_for_witness -- and no exclusion certificate could have been sound anyway: of SPEC's three listed grounds, `empty` is contradicted by `Release.witness_profileValid`, `cannotBeatBound` by the candidate TYING the baseline, and `reconstructibleElsewhere` by the core attending nothing",
-        "WasmGemmGnaf.Atlas.attention_no_optimum_relevant_false_negative_is_false_for_listed_grounds -- the same refutation with the retention requirement dropped entirely, under the reading that SPEC's three listed grounds are the legal ones",
-        "WasmGemmGnaf.Atlas.attention_no_optimum_relevant_false_negative_is_false_at_every_evaluator -- and it does not depend on the evaluator the counterexample names: it fails at EVERY `Universal.Decider` that evaluates the witness bytes at all, by `Universal.systemEvaluation_subsingleton`"
-      ],
-      "resolution": "RESOLVED BY AMENDING SPEC, AND THE AMENDMENT SHRINKS AN OBLIGATION. This is the one entry where the correction costs something, so it is stated first and without hedging: SPEC 12.2 previously demanded of the seal a proposition quantified over ALL byte strings, and it now demands it only of candidates the Atlas was given. The residue -- that every profile-valid byte string is declared to the Atlas -- is SPEC 10.5's universal coverage obligation, which is stated there with no coverage hypothesis, is required at SPEC 15 as `Universal.universal_sublevel_coverage`, and is MISSING. Moving the quantifier did not discharge it and did not move it anywhere new; it removed it from a clause that provably could not carry it. SPEC 12.2 also now DEFINES `Atlas.AttentionContains`, `Atlas.AttentionRoutes`, `Atlas.HasSoundExclusionCertificate` and `Atlas.OptimumRelevant`, which it previously used without defining -- that omission is what made a vacuous discharge available to a less careful implementation -- and states the two honesty conditions the refutation is parametric in. Within its reduced scope the amended conclusion is STRONGER than the disjunction it replaces: the left disjunct is proved outright at both the core-level and the strictly stronger `attend`-level reading, so no exclusion certificate is needed and none is offered, and the `Atlas.OptimumRelevant` witness is returned so that no hypothesis is idle. The prose rule that an omitted candidate is legal only against a retained proof is UNCHANGED and still governs SPEC 13's pipeline. `Atlas.attention_no_optimum_relevant_false_negative` is still NOT DECLARED in this repository, under any hypotheses. SPEC 15's name stays outstanding, no declaration wears it, and Conformance/RequiredSignatures.lean carries no binding for it -- a binding must be closed by `:= @<the SPEC name>`, and declaring a theorem of a different shape under that name is exactly what this deviation refuses to do. The AMENDED proposition is proved here, under a different name: `Atlas.attention_no_declared_optimum_relevant_false_negative` carries every hypothesis of the superseded statement plus exactly the two the amendment adds -- `Atlas.Coherent state.body`, the standing well-formedness condition of Atlas/Update.lean (established by every rebuild, preserved by every update, and the same hypothesis DEV-004 found load bearing), and membership of the candidate in `state.body.declarationBase.declarations`, which the refutation proves load bearing -- and returns exactly the amended conjunction. The remaining action is therefore a restatement under the required name in Atlas/AttentionCoverage.lean; it was not made in the amending change, which owned SPEC.md, this file and the signature bindings only.",
+      "issue": "A prior revision claimed a concrete, kernel-checked refutation of the superseded all-byte statement. That proof depended on the legacy `Wasm.Subset` release witness and evaluator cone. The release witness was retired because it did not inhabit the public Core carrier required by SPEC, and the witness-dependent refutation declarations were removed with it. The refutation claim is therefore withdrawn: this entry asserts no current counterexample. The remaining disclosed scope mismatch is that the Atlas-local theorem starts from a coherent declaration base, while SPEC 10.5 separately requires coverage of the public-Core sublevel.",
+      "refutedBy": [],
+      "resolution": "AMD-004 remains adopted, and the obligation shrink remains explicit rather than being credited as proof. SPEC 12.2 defines `Atlas.AttentionContains`, `Atlas.AttentionRoutes`, `Atlas.HasSoundExclusionCertificate` and `Atlas.OptimumRelevant`. Within the amended declared-candidate scope, `Atlas.attention_no_declared_optimum_relevant_false_negative` proves the stronger conjunction of relevance, routing by `attend`, and core-level containment; the routing, containment and empty-root honesty facts also survive as separate checked declarations. No retired `Wasm.Subset` witness supplies release-scope non-vacuity. `Universal.universal_sublevel_coverage` remains open, and the required name `Atlas.attention_no_optimum_relevant_false_negative` remains open with no declaration or signature binding. Release credit for the amendment is zero.",
       "intendedContentProvedBy": [
-        "WasmGemmGnaf.Atlas.attention_no_declared_optimum_relevant_false_negative -- a DECLARED optimum-relevant candidate on a coherent state is routed by `attend` and contained in the sealed core; it also returns the `Atlas.OptimumRelevant` witness, so no hypothesis is idle",
-        "WasmGemmGnaf.Atlas.declared_witness_is_routed -- NON-VACUITY: the same real candidate as the counterexample, declared this time, is actually returned by the index. `Atlas.OptimumRelevant` is inhabited, so the theorem is not about an empty class",
+        "WasmGemmGnaf.Atlas.attention_no_declared_optimum_relevant_false_negative -- a declared optimum-relevant candidate on a coherent state is routed by `attend` and contained in the sealed core",
         "WasmGemmGnaf.Atlas.attentionRoutes_of_indexesCandidate -- the routing mechanism drops nothing it indexes: from an index entry to `attend`'s answer, through the filter, the flatMap and the duplicate removal",
-        "WasmGemmGnaf.Atlas.attentionContains_of_attentionRoutes -- and the seal records the signature of everything `attend` returns, extracted from `attentionCompleteCheck` rather than assumed",
-        "WasmGemmGnaf.Atlas.OptimumRelevant -- relevance is defined from the objective, the candidate bytes and the decider ALONE. It mentions no attention index, no `attend`, no signature and no seal check, so the theorem is not `rfl` and relevance is not defined through the index"
+        "WasmGemmGnaf.Atlas.attentionContains_of_attentionRoutes -- the seal records the signature of everything `attend` returns, extracted from `attentionCompleteCheck`",
+        "WasmGemmGnaf.Atlas.honesty_conditions_satisfiable -- the concrete containment and retained-certificate definitions satisfy both empty-root honesty conditions",
+        "WasmGemmGnaf.Atlas.OptimumRelevant -- relevance is defined without reference to the attention mechanism"
       ],
-      "strengthEffect": "THE OBLIGATION SHRANK. DISCLOSED, AND NOT COUNTED. This is the only amendment in the set that reduces what SPEC demands, and the reduction is real: the superseded clause quantified over every byte string and the amended one does not. It was unavoidable -- `attention_no_optimum_relevant_false_negative_is_false` proves no theorem of the superseded shape exists for ANY reading of the two predicates meeting the two honesty conditions, and `honesty_conditions_satisfiable` proves those conditions are not vacuous -- but unavoidable is not the same as free, and the ledger SHALL reflect the loss rather than absorb it. What moved out of SPEC 12.2 is exactly SPEC 10.5's universal coverage obligation, which is stated there without a coverage hypothesis, required at SPEC 15 as `Universal.universal_sublevel_coverage`, and MISSING. Within the reduced scope nothing was conceded: the added hypothesis is not an assumption that the index already holds the candidate -- it says only that the candidate reached the Atlas as a DECLARATION, and the indexing is then derived (`Atlas.attentionEntryOf`) and the routing PROVED -- and the conclusion is a conjunction strictly stronger than the disjunction it replaces. No SPEC 15 name is declared, no signature binding is added, and `xtask claims required` continues to report `Atlas.attention_no_optimum_relevant_false_negative` MISSING.",
+      "strengthEffect": "THE OBLIGATION SHRANK. DISCLOSED, AND NOT COUNTED. The superseded clause quantified over every byte string; the amended theorem assumes the candidate is in a coherent Atlas declaration base. Within that reduced scope its conjunction is stronger than the former disjunction, and the declaration-base hypothesis does not assume routing. The earlier witness-dependent claim that this shrink was forced by a kernel refutation is withdrawn. The shrink itself remains visible and earns zero release credit. `Universal.universal_sublevel_coverage` and `Atlas.attention_no_optimum_relevant_false_negative` remain open.",
       "specAmendmentRecommended": true,
       "amendmentAdopted": "AMD-004",
-      "amendmentText": "ADOPTED. SPEC 12.2 now states attention completeness relative to what the Atlas was given -- over a state whose body is `Atlas.Coherent` and a candidate in its declaration base -- concludes the strictly stronger conjunction of relevance, `attend`-level routing and core-level containment, leaves the byte-universe half where SPEC 10.5 already states it, defines `Atlas.AttentionContains`, `Atlas.AttentionRoutes`, `Atlas.HasSoundExclusionCertificate` and `Atlas.OptimumRelevant`, states the two honesty conditions, requires the class to be shown inhabited by a real candidate the index returns, and requires `Atlas.OptimumRelevant` to be defined from the objective, the candidate bytes and the decider alone so that relevance is not defined through the mechanism the theorem is about."
+      "amendmentText": "ADOPTED WITH ZERO RELEASE CREDIT. SPEC 12.2 states attention completeness relative to a coherent state and a candidate in its declaration base, concludes the stronger conjunction of relevance, `attend`-level routing and core-level containment, defines all four predicates, and states the two honesty conditions. Release-scope non-vacuity must be earned by a public-Core candidate; the retired `Wasm.Subset` witness is not evidence. The all-byte coverage theorem and the required attention name remain open."
     },
     {
       "id": "DEV-006",
@@ -126,30 +118,139 @@
         "WasmGemmGnaf.Wasm.Core.Validate.Expr_ok.const_const_binop_untypable -- and hence NO context gives that expression a result type, which is what makes the pinned `Module_ok` near-vacuous",
         "WasmGemmGnaf.Wasm.Core.gapModule_not_ok -- THE VACUITY AT MODULE LEVEL: forall mt, not (Module_ok gapModule mt), where gapModule is `(func (result i32) i32.const 0 i32.const 0 i32.add)` and `Wasm.Core.Validate.validate gapModule = true` is checked by evaluation beside it. This is the exact obstruction to SPEC 7.3's biconditional"
       ],
-      "resolution": "The pin is NOT advanced: advancing past bd4633a would change the vendored blob set and the Core 3.0 rule inventory (it adds an `Instrs_ok/instr` rule and carries unrelated deltas). Instead the repository states the amended judgment explicitly, in `WasmGemmGnaf/Wasm/Core/Validation/InstructionsAmended.lean`, and carries this entry as its written justification. THE AMENDMENT IS ONE MODIFIED PREMISE AND NO NEW RULE: `Instrs_ok'/seq` carries the frame `t_0*` INSIDE the composition -- `C |- instr_1 instr_2* : (t_0* t_1*) ->_(x_1* x_2*) t_3*` from `Instr_ok: C |- instr_1 : t_1* ->_(x_1*) t_2*`, `Resulttype_ok: C |- t_0* : OK` and `Instrs_ok: ... |- instr_2* : (t_0* t_2*) ->_(x_2*) t_3*`. `empty`, `sub` and `frame` are unchanged, and `t_0* = eps` is exactly the pinned rule. This is the frame the classic prose rule for instruction sequences already carries ('there is a sequence of value types t_0* such that t_2* = t_0* t*') and the second of the two repairs issue #2194 proposes; upstream took the first (lift the head to `Instrs_ok`, adding a rule and making `seq`'s subject an append that no longer determines the split). Because `Instr_ok/block`, `Instr_ok/loop` and `Instr_ok/if` type their bodies with the sequence judgment, the amendment is propagated through them by a mutual `Instr_ok'` that LIFTS every pinned instruction rule unchanged and re-states only those three; otherwise the vacuity would survive one nesting level down. NO COVERAGE MARKER is attached to any declaration in the amended file, so the Core 3.0 inventory stays at 1288 of 1288 with validation rules 256 of 256. `Wasm.validate_iff_declarative` remains OUTSTANDING and is NOT counted as discharged; when it is attempted it SHALL be stated over `Instrs_ok'` with this entry cited, never over the pinned relation.",
+      "resolution": "The pin is NOT advanced: advancing past bd4633a would change the vendored blob set and the Core 3.0 rule inventory (it adds an `Instrs_ok/instr` rule and carries unrelated deltas). Instead the repository states the corrected hierarchy exactly once, in `WasmGemmGnaf/Wasm/Core/Validation/InstructionsCombinedAmended.lean` and `ModulesCombinedAmended.lean`, and carries this entry as its written justification. THE AMD-005 CHANGE IS ONE MODIFIED PREMISE AND NO NEW RULE: `Instrs_okA/seq` carries the frame `t_0*` INSIDE the composition -- `C |- instr_1 instr_2* : (t_0* t_1*) ->_(x_1* x_2*) t_3*` from `Instr_okA: C |- instr_1 : t_1* ->_(x_1*) t_2*`, `Resulttype_okA: C |- t_0* : OK` and `Instrs_okA: ... |- instr_2* : (t_0* t_2*) ->_(x_2*) t_3*`. `empty`, `sub` and `frame` are unchanged, and `t_0* = eps` is exactly the pinned rule. This is the frame the classic prose rule for instruction sequences already carries ('there is a sequence of value types t_0* such that t_2* = t_0* t*') and the second of the two repairs issue #2194 proposes; upstream took the first (lift the head to `Instrs_ok`, adding a rule and making `seq`'s subject an append that no longer determines the split). Because `Instr_ok/block`, `Instr_ok/loop` and `Instr_ok/if` type their bodies with the sequence judgment, the change is propagated through them by the mutual `Instr_okA`; otherwise the vacuity would survive one nesting level down. NO COVERAGE MARKER is attached to any corrected declaration, so the Core 3.0 inventory stays at 1288 of 1288 with validation rules 256 of 256. `Wasm.validate_iff_declarative` remains OUTSTANDING and is NOT counted as discharged; it SHALL be stated over `Module_okA` with this entry cited, never over the pinned relation.",
       "intendedContentProvedBy": [
-        "WasmGemmGnaf.Wasm.Core.Instrs_ok.to_amended -- NO REGRESSION: every pinned derivation is an amended derivation, so the amendment rejects nothing the pinned rules accept",
-        "WasmGemmGnaf.Wasm.Core.Expr_ok.to_amended -- the same at expression level",
-        "WasmGemmGnaf.Wasm.Core.Instrs_ok'.const_binop -- THE DERIVATION THE PINNED RULES CANNOT EXPRESS: C |- (I32.CONST c) (BINOP I32 ADD) : I32 -> I32, in EVERY context",
-        "WasmGemmGnaf.Wasm.Core.Instrs_ok'.const_const_binop -- (CONST) (CONST) (BINOP) : eps -> I32",
-        "WasmGemmGnaf.Wasm.Core.Expr_ok'.const_const_binop -- the same sequence as an EXPRESSION, directly refuting the pinned Expr_ok.const_const_binop_untypable under the amendment",
-        "WasmGemmGnaf.Wasm.Core.Instrs_ok'.block_const_const_binop -- a BLOCK whose body is exactly the sequence the pinned rules cannot type; the witness that the amendment had to propagate through Instr_ok/block",
-        "WasmGemmGnaf.Wasm.Core.Instrs_ok'.block_br -- a BR inside such a block, over a four-instruction body",
-        "WasmGemmGnaf.Wasm.Core.Instrs_ok'.unreachable_binop -- stack polymorphism: (UNREACHABLE) (BINOP I32 ADD) : eps -> I32",
-        "WasmGemmGnaf.Wasm.Core.Instrs_ok'.binop_dom_length -- NON-WIDENING, the check that matters: under the AMENDED rules every type of the singleton (BINOP nt op) STILL has domain length at least 2. This is the very lemma that drives the negative result, re-proved for the amendment: composability was bought by supplying operands from the frame, NOT by letting a domain shrink",
-        "WasmGemmGnaf.Wasm.Core.Instrs_ok'.nil_length -- the empty sequence is still balanced under the amendment, in every context at every type",
-        "WasmGemmGnaf.Wasm.Core.Instrs_ok'.const_length -- (CONST nt c) still pushes EXACTLY one operand",
-        "WasmGemmGnaf.Wasm.Core.Instrs_ok'.binop_length -- (BINOP nt op) still nets exactly one operand off the stack",
-        "WasmGemmGnaf.Wasm.Core.Instrs_ok'.not_const_nil -- a pushed constant still cannot vanish: no amended type eps -> eps",
-        "WasmGemmGnaf.Wasm.Core.Instrs_ok'.not_binop_unary -- BINOP still cannot be fed one operand",
-        "WasmGemmGnaf.Wasm.Core.Instrs_ok'.not_binop_balanced -- BINOP still cannot leave both operands behind",
-        "WasmGemmGnaf.Wasm.Core.Func_ok.to_amended -- NO REGRESSION at function level: every pinned Func_ok is a Func_ok'; the amended rule replaces the ONE Expr_ok premise and leaves the type lookup, Expand and Local_ok premises verbatim",
-        "WasmGemmGnaf.Wasm.Core.Func_ok'.gapFunc -- THE VACUITY CLOSED AT THE LEVEL IT WAS STATED: the body of gapModule, which gapModule_not_ok proves the pinned rules cannot type, IS Func_ok' at exactly the deftype the module's type section declares"
+        "WasmGemmGnaf.Wasm.Core.Instrs_okA.const_binop -- THE DERIVATION THE PINNED RULES CANNOT EXPRESS: C |- (I32.CONST c) (BINOP I32 ADD) : I32 -> I32, in EVERY context",
+        "WasmGemmGnaf.Wasm.Core.Instrs_okA.const_const_binop -- (CONST) (CONST) (BINOP) : eps -> I32",
+        "WasmGemmGnaf.Wasm.Core.Expr_okA.const_const_binop -- the same sequence as an EXPRESSION, directly refuting the pinned Expr_ok.const_const_binop_untypable under the amendment",
+        "WasmGemmGnaf.Wasm.Core.Instrs_okA.binop_dom_length -- NON-WIDENING, the check that matters: under the COMBINED AMENDED rules every type of the singleton (BINOP nt op) STILL has domain length at least 2",
+        "WasmGemmGnaf.Wasm.Core.Instrs_okA.nil_length -- the empty sequence is still balanced under the amendment, in every context at every type",
+        "WasmGemmGnaf.Wasm.Core.Func_okA.gapFunc -- THE VACUITY CLOSED AT FUNCTION LEVEL: the ordinary arithmetic body is Func_okA at exactly the deftype its type section declares"
       ],
-      "strengthEffect": "STRICTLY WIDER THAN THE PINNED RELATION, BY EXACTLY THE INTENDED AMOUNT, AND DISCLOSED. `Instrs_ok'` properly contains `Instrs_ok` (`Instrs_ok.to_amended`), and it must: the pinned relation cannot type ordinary WebAssembly, so any repository theorem quantified over pinned-valid modules would be the most dangerous kind of vacuity. The widening is bounded in the direction that matters. The four arity theorems hold for the AMENDED relation in every context at every instruction type: the empty sequence stays balanced, CONST still pushes exactly one operand, BINOP still consumes at least two and nets exactly minus one. `Instrs_ok'.binop_dom_length` is literally the pinned `Instrs_ok.binop_dom_length` re-proved against the amended rules, so the amendment provably did not achieve composability by weakening arity discipline -- the failure mode an over-wide fix would exhibit. No soundness or `validate_iff_declarative` theorem is claimed here; SPEC 15's `Wasm.validate_iff_declarative` stays OUTSTANDING and CIRCULAR as before, and nothing in this entry is counted as discharged.",
+  "strengthEffect": "AMD-005 WIDENS THE INSTRUCTION-SEQUENCING RULE BY THE DISCLOSED FRAME PREMISE; AMD-007 THROUGH AMD-011 AND AMD-013 APPLY THEIR INDEPENDENT CORRECTIONS IN THE SAME `A` HIERARCHY, SO NO GLOBAL SET-INCLUSION CLAIM BETWEEN THE PINNED AND COMBINED RELATIONS IS IMPLIED. AMD-012 is a separate binary-production replacement. `Instrs_okA.const_binop`, `const_const_binop`, and `Func_okA.gapFunc` prove the intended ordinary arithmetic derivations. `Instrs_okA.binop_dom_length` and `nil_length` prove the two load-bearing arity invariants, so composability was not obtained by allowing BINOP to consume fewer operands or the empty sequence to change stack height. The SPEC-required conditional pinned-to-combined compatibility family at the Instr, Instrs, Expr, Func, and Module levels is not yet present; it remains part of open WS-001. The remaining release checker equivalence is tracked separately and is not discharged by this entry.",
       "specAmendmentRecommended": true,
       "amendmentAdopted": "AMD-005",
-      "amendmentText": "ADOPTED, AND DELIBERATELY NOT AS A CHANGE TO `validate_bool_iff`. The earlier reading of this entry -- that SPEC.md needed no amendment at all -- was too narrow. The theorem needed none, but SPEC.md was silent on the defect, and silence in a normative document is an instruction: a reader following SPEC 7.3 as it stood would have validated against a pinned relation this repository has proved cannot type `i32.const c; i32.add`, and would have believed a near-vacuous `Module_ok` was the contract. AMD-005 therefore records, in SPEC 4 and SPEC 7.3: that the pinned WebAssembly Core revision carries this upstream defect; that the pin SHALL NOT be advanced on account of it, because advancing past bd4633a would change the vendored blob set and the rule inventory, which SPEC 4 makes a new-profile event; that `Wasm.DeclarativelyValid` SHALL be read over the amended `Instr_ok'`/`Instrs_ok'`/`Expr_ok'`/`Func_ok'` judgments; that the amendment SHALL be one modified premise and no new rule, propagated through `block`/`loop`/`if` so the vacuity does not survive one nesting level down; that it SHALL carry no-regression theorems at every level and the pinned arity theorems re-proved against the amended relation; that no coverage marker SHALL be attached to a declaration in the amended files, so the Core 3.0 inventory keeps measuring the PINNED tree; and that `validate_bool_iff` SHALL be stated over the amended relation with this entry cited, and remains OUTSTANDING. The substantive repair still belongs UPSTREAM and upstream has already made it: WebAssembly/spec PR #2197 (bd4633aced30b720ff62b44cf00c03ece792f008). The pin is kept and this entry is carried."
+      "amendmentText": "ADOPTED, AND DELIBERATELY NOT AS A CHANGE TO `validate_bool_iff`. The earlier reading of this entry -- that SPEC.md needed no amendment at all -- was too narrow. The theorem needed none, but SPEC.md was silent on the defect, and silence in a normative document is an instruction: a reader following SPEC 7.3 as it stood would have validated against a pinned relation this repository has proved cannot type `i32.const c; i32.add`, and would have believed a near-vacuous `Module_ok` was the contract. AMD-005 therefore records, in SPEC 4 and SPEC 7.3: that the pinned WebAssembly Core revision carries this upstream defect; that the pin SHALL NOT be advanced on account of it, because advancing past bd4633a would change the vendored blob set and the rule inventory, which SPEC 4 makes a new-profile event; that `Wasm.DeclarativelyValid` SHALL be read over the sole combined amended `Instr_okA`/`Instrs_okA`/`Expr_okA`/`Func_okA`/`Module_okA` hierarchy; that the AMD-005 change SHALL be one modified premise and no new rule, propagated through nested control so the vacuity does not survive one nesting level down; that it SHALL carry explicit non-vacuity and arity evidence; that no coverage marker SHALL be attached to a corrected declaration, so the Core 3.0 inventory keeps measuring the PINNED tree; and that `validate_bool_iff` SHALL be stated over `Module_okA` with this entry cited, and remains OUTSTANDING. The substantive repair still belongs UPSTREAM and upstream has already made it: WebAssembly/spec PR #2197 (bd4633aced30b720ff62b44cf00c03ece792f008). The pin is kept and this entry is carried."
+    },
+    {
+      "id": "DEV-007",
+      "specSection": "4 and 7.3",
+      "status": "RECORDED IN SPEC -- PINNED SOURCE DEFECT",
+      "adoptedIntoSpec": "AMD-007",
+      "issue": "The pinned `BsN(N)` continuation production recurses into unsigned `BuN(N-7)` instead of signed `BsN(N-7)`. Multi-byte negative LEB encodings therefore receive unrelated positive values. The same bytes `FF 7E` derive `-129` under the repaired signed recursion and `16255` under the pinned production.",
+      "resolution": "The vendored source remains unchanged. `Binary.BsN'` states the corrected recursive relation and the single authority-parameterized decoder propagates it through `BmoduleA` and `decodeA`. The public `Wasm.decode` uses that amended decoder, with soundness and completeness proved against the independent amended grammar.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.Core.Binary.BsN'_two_byte_negative",
+        "WasmGemmGnaf.Wasm.Core.Binary.BsN_pinned_two_byte_positive",
+        "WasmGemmGnaf.Wasm.Core.Decode.not_BsN'_two_byte_positive"
+      ],
+      "intendedContentProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.Decode.decSN'_sound",
+        "WasmGemmGnaf.Wasm.Core.Decode.decSN'_complete",
+        "WasmGemmGnaf.Wasm.Core.Decode.BsN'_det"
+      ],
+      "strengthEffect": "NARROWING TO THE INTENDED SIGNED GRAMMAR. The repair rejects the pinned production's spurious positive interpretation. It now participates in the public representable-module carrier and decoder; migration of the Universal evaluation universe remains a separate release-spine obligation.",
+      "ledgerEffect": "STRICT RELEASE-CONNECTED LEDGER: NONE. Together with AMD-008 and AMD-010's recursive propagation, `Wasm.decode_sound` and `Wasm.decode_complete` are re-proved on the amended public carrier, but both names were already counted at the origin baseline; this correction earns zero strict credit by itself. The canonical public encoder round trip is now separately proved, but it selects no release artifact and earns no release-connected credit."
+    },
+    {
+      "id": "DEV-008",
+      "specSection": "4 and 7.3",
+      "status": "RECORDED IN SPEC -- PINNED SOURCE DEFECT",
+      "adoptedIntoSpec": "AMD-008",
+      "issue": "The pinned binary production for opcode `0xBB` reverses the result and operand types of `f64.promote_f32`, deriving `CVTOP F32 F64 PROMOTE`. The independent instruction syntax rejects that reversed abstract instruction and accepts `CVTOP F64 F32 PROMOTE`.",
+      "resolution": "`Binary.BinstrNum'` removes only the malformed pinned production and adds the corrected one. The single authority-parameterized instruction, expression, and module decoder propagates that choice through `decodeA`; public decoder soundness and completeness are proved against `BmoduleA`.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.Core.Binary.pinnedBadPromote_not_wf"
+      ],
+      "intendedContentProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.Binary.correctedPromote_wf",
+        "WasmGemmGnaf.Wasm.Core.Decode.op0'_sound"
+      ],
+      "strengthEffect": "REPLACEMENT, NEUTRAL IN INTENDED CORE REACH. It removes one malformed abstract result and restores the one valid instruction assigned to opcode `0xBB`.",
+      "ledgerEffect": "STRICT RELEASE-CONNECTED LEDGER: NONE. Together with AMD-007 and AMD-010's recursive propagation, the two public decoder laws are re-proved over the corrected carrier, but both names were already counted at the origin baseline; this correction earns zero strict credit by itself. The canonical public encoder round trip is now separately proved, but it selects no release artifact and earns no release-connected credit."
+    },
+    {
+      "id": "DEV-009",
+      "specSection": "4 and 7.3",
+      "status": "RECORDED IN SPEC -- PINNED SOURCE DEFECT",
+      "adoptedIntoSpec": "AMD-009",
+      "issue": "The pinned free-index auxiliary record omits tag indices, and the pinned free-instruction equations omit `throw`, `throw_ref`, `try_table`, and its catch clauses. Dependency collection can therefore discard tag and nested exception-body dependencies.",
+      "resolution": "`Free'`, `freeCatch'`, `freeInstr'`, and their recursive module lifts state the repaired equations exactly, including catch tags/labels and every instruction in a `try_table` body. Module validation now has a corrected dependency collector available, but checker equivalence remains open.",
+      "intendedContentProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.exceptionFreeAmendment_targets",
+        "WasmGemmGnaf.Wasm.Core.freeInstr'_tryTable"
+      ],
+      "strengthEffect": "WIDENING OF DEPENDENCY BOOKKEEPING ONLY. It does not add a program form; it prevents existing exception forms from losing dependencies.",
+      "ledgerEffect": "NONE. `Wasm.validate_iff_declarative` remains outstanding."
+    },
+    {
+      "id": "DEV-010",
+      "specSection": "4 and 7.3",
+      "status": "RECORDED IN SPEC -- PINNED SOURCE DEFECT",
+      "adoptedIntoSpec": "AMD-010",
+      "issue": "The pinned binary control grammar omits the Core 3.0 typed-reference call productions for opcodes `0x14` (`call_ref`) and `0x15` (`return_call_ref`), although those instructions exist in the pinned syntax and validation layers.",
+      "resolution": "`Binary.BinstrControl'` adds exactly those two productions and the single authority-parameterized decoder propagates them through expressions and modules. Public decoder soundness and completeness are proved against `BmoduleA`.",
+      "intendedContentProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.Decode.decOp1'_sound",
+        "WasmGemmGnaf.Wasm.Core.Decode.decOp1'_callRef_complete",
+        "WasmGemmGnaf.Wasm.Core.Decode.decOp1'_returnCallRef_complete"
+      ],
+      "strengthEffect": "WIDENING TO THE INTENDED CORE BINARY LANGUAGE. It adds exactly the two missing encodings for already-present Core instructions.",
+      "ledgerEffect": "STRICT RELEASE-CONNECTED LEDGER: NONE. Together with AMD-007 and AMD-008's recursive propagation, the two public decoder laws are re-proved over the corrected carrier, but both names were already counted at the origin baseline; this correction earns zero strict credit by itself. The canonical public encoder round trip is now separately proved, but it selects no release artifact and earns no release-connected credit."
+    },
+    {
+      "id": "DEV-011",
+      "specSection": "4 and 7.3",
+      "status": "RECORDED IN SPEC -- PINNED SOURCE DEFECT",
+      "adoptedIntoSpec": "AMD-011",
+      "issue": "Four pinned heap-subtyping rules omit the premise that their intermediate target is not `BOT`. Together with the bottom rule this collapses unrelated heap-type families, deriving edges such as `NONE <: BOT` and then cross-family subtyping.",
+      "resolution": "`Heaptype_subA` restores the four `ht != BOT` premises and propagates the corrected relation through the full amended type hierarchy. The executable abstract lattice rejects the collapsing pairs, and the repaired declarative relation cannot end at `BOT` unless it started at `BOT`. Full module-checker equivalence remains open.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.Core.not_none_sub_bot",
+        "WasmGemmGnaf.Wasm.Core.not_nofunc_sub_bot",
+        "WasmGemmGnaf.Wasm.Core.not_noexn_sub_bot",
+        "WasmGemmGnaf.Wasm.Core.not_noextern_sub_bot"
+      ],
+      "intendedContentProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.source_bot_of_target_bot",
+        "WasmGemmGnaf.Wasm.Core.Heaptype_subA.to_pinned"
+      ],
+      "strengthEffect": "NARROWING. It removes invalid cross-family subtype derivations while preserving a projection from every repaired derivation to the pinned relation.",
+      "ledgerEffect": "NONE. `Wasm.validate_iff_declarative` and the validation metatheory remain outstanding."
+    },
+    {
+      "id": "DEV-012",
+      "specSection": "4 and 7.3",
+      "status": "RECORDED IN SPEC -- PINNED SOURCE DEFECT",
+      "adoptedIntoSpec": "AMD-012",
+      "issue": "The pinned opcode-275 binary production constructs `VEXTTERNOP (I32 X 4) (I16 X 8) RELAXED_DOT_ADD S`. The independently transcribed operator-family premise requires `4 * lsize(input) = lsize(result) = 32`; after the instruction syntax's documented reversed family indexing, the pinned production demands the false equation `4 * 16 = 32`. It therefore constructs an instruction rejected by `Instr.wf` and whose numeric intermediate shape is not a 128-bit vector.",
+      "resolution": "The release binary relation, decoder, and encoder replace only opcode 275's malformed second shape with `I8 X 16`, yielding `.vextternop ishI32x4 ishI8x16 (.relaxedDotAdd .s)`, and exclude the malformed pinned `I16 X 8` result. The byte-identical pinned relation and default remain unchanged.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.Core.Binary.pinnedBadRelaxedDotAdd_not_wf"
+      ],
+      "intendedContentProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.Binary.correctedRelaxedDotAdd_wf",
+        "WasmGemmGnaf.Wasm.Core.Decode.opFD0_amended_275"
+      ],
+      "strengthEffect": "REPLACEMENT, NEUTRAL IN INTENDED CORE REACH. It replaces one internally ill-formed abstract instruction with the sole well-formed shape denoted by the standardized `i32x4.relaxed_dot_i8x16_i7x16_add_s` opcode.",
+      "ledgerEffect": "STRICT RELEASE-CONNECTED LEDGER: NONE. Amendment text alone discharges zero claims. The corrected production is a prerequisite for the amended encoder/decoder round trip and the grammar-to-well-formedness bridge; those theorems earn credit only when separately proved."
+    },
+    {
+      "id": "DEV-013",
+      "specSection": "4 and 7.3",
+      "status": "RECORDED IN SPEC -- PINNED SOURCE DEFECT",
+      "adoptedIntoSpec": "AMD-013",
+      "issue": "The pinned `Subtype_ok2` rule does not require its generalized declared supertype type uses to be valid. An otherwise valid inline deftype can therefore hide an invalid proof-internal supertype, and the unchanged declarative transitivity rules can derive false cross-family subtype edges that no syntax-directed executable checker can accept.",
+      "resolution": "The release `Subtype_ok2A` constructor requires `Typeuse_okA` for every declared generalized supertype. No heap-subtyping transitivity or declared-supertype traversal rule is changed. This is the exact repair merged upstream for WebAssembly/spec#2141.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.Core.heapDecision_not_complete_on_abstract_endpoints"
+      ],
+      "intendedContentProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.Subtype_ok2A",
+        "WasmGemmGnaf.Wasm.Core.Subtype_ok2A.to_pinned"
+      ],
+      "strengthEffect": "NARROWING. It removes invalid proof-internal subtype derivations without removing any Core syntax or changing the other subtyping rules.",
+      "ledgerEffect": "NONE. `Wasm.validate_iff_declarative` and the validation metatheory remain outstanding until the strengthened premise is propagated through the sole checker and module hierarchy."
     }
   ],
   "amendments": [
@@ -177,7 +278,7 @@
       "now": "theorem costed_erase_iff_plain_run : Wasm.CostedRun P module invocation costedTrace observation <-> (Wasm.Run module invocation (eraseCosts costedTrace) observation /\\ Wasm.CostedLabelling module invocation costedTrace), with `theorem costed_run_iff_plain_run : (exists costedTrace, Wasm.CostedRun P module invocation costedTrace observation) <-> Wasm.Run module invocation observation.trace observation` required beside it and `Wasm.CostedLabelling` defined in the same fenced block.",
       "rationale": "The superseded text is KERNEL-REFUTED, for every profile, by `WasmGemmGnaf.Wasm.not_costed_erase_iff_plain_run`. A normative document that states a proposition this repository has proved false instructs its readers to prove something impossible, so the text is corrected rather than deviated from. The added conjunct is the smallest change that makes the biconditional true: it is a condition on LABELS alone, mentioning no observation, no store and no terminal status, and it names exactly the payload information `eraseCosts` discards.",
       "strengthEffect": "STRENGTHENING. The forward direction is strictly stronger than the text it replaces; the backward direction is the strongest true form, since no theorem of the superseded shape exists.",
-      "ledgerEffect": "`Wasm.costed_erase_iff_plain_run` moves from OUTSTANDING (present, AMENDED binding) to DISCHARGED. The declaration was already proved and already bound; the amendment did not weaken SPEC to reach it -- it corrected SPEC to what is true, and the existing theorem happened to be exactly that. SPEC 15: 34 discharged of 58 before, 35 of 58 after. ZERO NEW PROOF LINES EARNED IT: `WasmGemmGnaf/Wasm/Erasure.lean` was not modified in the round that landed this amendment, and the only changes were SPEC.md 7.5 and the marker in Conformance/RequiredSignatures.lean. Adversarial review flagged this and SPEC 24 now carries the rule it prompted. The release-connected count does NOT move for it; a repository cannot discharge an obligation by editing the document that imposes it.",
+      "ledgerEffect": "HISTORICALLY, `Wasm.costed_erase_iff_plain_run` moved from OUTSTANDING to DISCHARGED when the formula amendment landed: SPEC 15 went 34 of 58 to 35 of 58 on zero new proof lines. That promotion is now reversed. The existing theorem is over legacy `Wasm.Subset.Module`, whereas SPEC's public carrier is amended-Core `Wasm.Module`; Conformance/RequiredSignatures.lean therefore marks it WEAKER and the name is OUTSTANDING. The amendment still repairs the false formula, but it closes no public-carrier proof obligation.",
       "refutedBy": [
         "WasmGemmGnaf.Wasm.not_costed_erase_iff_plain_run",
         "WasmGemmGnaf.Wasm.Counterexample.minimal_run",
@@ -220,22 +321,15 @@
       "deviation": "DEV-005",
       "was": "theorem attention_no_optimum_relevant_false_negative (... seven hypotheses, candidateBytes an arbitrary ByteArray ...) : Atlas.AttentionContains core candidateBytes \\/ Atlas.HasSoundExclusionCertificate core candidateBytes evaluation -- with `Atlas.AttentionContains` and `Atlas.HasSoundExclusionCertificate` used but never defined.",
       "now": "The same seven hypotheses plus `Atlas.Coherent state.body` and `candidateBytes IN state.body.declarationBase.declarations`, concluding `Atlas.OptimumRelevant profile problem objective core candidateBytes /\\ Atlas.AttentionRoutes state.body candidateBytes /\\ Atlas.AttentionContains core candidateBytes`; with all four predicates defined normatively in the clause, the two honesty conditions stated, non-vacuity required, and `Atlas.OptimumRelevant` required to be defined without reference to the attention mechanism.",
-      "rationale": "The superseded text is KERNEL-REFUTED PARAMETRICALLY in the two predicates it left undefined, so no honest reading rescues it: `Atlas.SealCertificate` is seven deterministic checkers not one of which mentions a byte string, a decoder, a semantics or a cost, and it is satisfied with every root empty by a state that recorded nothing. Leaving the predicates undefined was itself a defect, since it is what made a vacuous discharge available.",
-      "strengthEffect": "THE OBLIGATION SHRANK, AND THIS ROW IS THE DISCLOSURE. The superseded clause quantified over every byte string; the amended one does not. The residue is SPEC 10.5's universal coverage obligation, required at SPEC 15 as `Universal.universal_sublevel_coverage` and MISSING; it was not discharged and was not relocated, only removed from a clause that provably could not carry it. Within the reduced scope the conclusion is strictly stronger than the disjunction it replaces.",
-      "ledgerEffect": "NONE. `Atlas.attention_no_optimum_relevant_false_negative` stays MISSING: no declaration wears the required name and no binding was added. The amended proposition is proved here as `Atlas.attention_no_declared_optimum_relevant_false_negative`. `Universal.universal_sublevel_coverage` stays MISSING and is where the removed quantifier now has to be earned.",
-      "refutedBy": [
-        "WasmGemmGnaf.Atlas.attention_no_optimum_relevant_false_negative_is_false",
-        "WasmGemmGnaf.Atlas.honesty_conditions_satisfiable",
-        "WasmGemmGnaf.Atlas.undeclared_witness_is_missed",
-        "WasmGemmGnaf.Atlas.no_listed_exclusion_ground_for_witness",
-        "WasmGemmGnaf.Atlas.attention_no_optimum_relevant_false_negative_is_false_for_listed_grounds",
-        "WasmGemmGnaf.Atlas.attention_no_optimum_relevant_false_negative_is_false_at_every_evaluator"
-      ],
+      "rationale": "A prior revision claimed a concrete kernel refutation, but that proof depended on the retired `Wasm.Subset` release witness and evaluator cone. The witness-dependent declarations were removed and the refutation claim is withdrawn. AMD-004 remains as an explicit record that the normative obligation was narrowed; it is not presented as a proved necessity and earns no release credit.",
+      "strengthEffect": "THE OBLIGATION SHRANK, AND THIS ROW IS THE DISCLOSURE. The superseded clause quantified over every byte string; the amended one does not. Within the reduced scope the surviving theorem proves a conjunction stronger than the former disjunction. The public-Core all-byte residue remains `Universal.universal_sublevel_coverage`, and the required attention name remains open.",
+      "ledgerEffect": "NONE; RELEASE CREDIT IS ZERO. `Atlas.attention_no_optimum_relevant_false_negative` remains open with no declaration or signature binding. The amended proposition survives as `Atlas.attention_no_declared_optimum_relevant_false_negative`. `Universal.universal_sublevel_coverage` remains open.",
+      "refutedBy": [],
       "replacementProvedBy": [
         "WasmGemmGnaf.Atlas.attention_no_declared_optimum_relevant_false_negative",
-        "WasmGemmGnaf.Atlas.declared_witness_is_routed",
         "WasmGemmGnaf.Atlas.attentionRoutes_of_indexesCandidate",
-        "WasmGemmGnaf.Atlas.attentionContains_of_attentionRoutes"
+        "WasmGemmGnaf.Atlas.attentionContains_of_attentionRoutes",
+        "WasmGemmGnaf.Atlas.honesty_conditions_satisfiable"
       ]
     },
     {
@@ -244,10 +338,10 @@
       "date": "2026-08-13",
       "deviation": "DEV-006",
       "was": "SPEC 4 recorded the WebAssembly Core pin with no note of any defect, and SPEC 7.3 required `validate_bool_iff` against `Wasm.DeclarativelyValid` without saying which validation relation that names.",
-      "now": "SPEC 4 records that the pinned revision carries a known upstream defect in its instruction-sequence typing rule and that the pin SHALL NOT be advanced on account of it. SPEC 7.3 states the defect in full, and requires: `Wasm.DeclarativelyValid` read over the amended `Instr_ok'`/`Instrs_ok'`/`Expr_ok'`/`Func_ok'` judgments; the amendment to be one modified premise and no new rule, propagated through `block`/`loop`/`if`; no-regression theorems at every level; the pinned arity theorems re-proved against the amended relation; no coverage marker on any amended declaration, so the Core 3.0 inventory keeps measuring the pinned tree; and `validate_bool_iff` stated over the amended relation with DEV-006 cited.",
+      "now": "SPEC 4 records that the pinned revision carries a known upstream defect in its instruction-sequence typing rule and that the pin SHALL NOT be advanced on account of it. SPEC 7.3 states the defect in full, and requires: `Wasm.DeclarativelyValid` read over the sole combined amended `Instr_okA`/`Instrs_okA`/`Expr_okA`/`Func_okA`/`Module_okA` hierarchy; the AMD-005 change to be one modified premise and no new rule, propagated through nested control; explicit non-vacuity and arity evidence; no coverage marker on any corrected declaration, so the Core 3.0 inventory keeps measuring the pinned tree; and `validate_bool_iff` stated over `Module_okA` with DEV-006 cited.",
       "rationale": "THE DEFECT IS IN THE VENDORED PINNED SOURCE, NOT IN SPEC.md AND NOT IN THE TRANSCRIPTION. `validate_bool_iff` is the right proposition and is UNCHANGED. What was wrong was SPEC's silence: a reader following SPEC 7.3 as it stood would have validated against a relation this repository has proved cannot type `i32.const c; i32.add`, under which no function body performing binary arithmetic is `Expr_ok` and `Module_ok` is near-vacuous. Upstream agrees, after the pin: WebAssembly/spec issue #2194 and PR #2197, merged as bd4633aced30b720ff62b44cf00c03ece792f008, nine months after the pinned commit 9d36019973201a19f9c9ebb0f10828b2fe2374aa.",
-      "strengthEffect": "STRICTLY WIDER DECLARATIVE SIDE, BOUNDED AND DISCLOSED. Widening is unavoidable and is the safe direction here: the pinned relation cannot type ordinary WebAssembly, so a theorem quantified over pinned-valid modules would be the most dangerous kind of vacuity. The widening is bounded by the no-regression theorems in one direction and by the re-proved arity theorems in the other, so composability was bought by supplying operands from the frame and not by letting a domain shrink.",
-      "ledgerEffect": "NONE. `Wasm.validate_iff_declarative` stays OUTSTANDING and CIRCULAR, the Core 3.0 inventory is unchanged because no coverage marker is attached to an amended declaration, and the pin in authority/manifest.json is not moved.",
+      "strengthEffect": "THE AMD-005 SEQUENCING RULE IS STRICTLY WIDER, BOUNDED AND DISCLOSED. It is composed with the independent AMD-007 through AMD-011 and AMD-013 corrections in one `A` hierarchy; AMD-012 separately repairs a binary production. This entry therefore does not assert global inclusion between the complete pinned and corrected relations. The ordinary arithmetic witnesses and re-proved arity invariants show that composability was bought by supplying operands from the frame and not by letting a binary operator consume fewer operands.",
+      "ledgerEffect": "NONE. `Wasm.validate_iff_declarative` stays OUTSTANDING and CIRCULAR; the required conditional pinned-to-combined compatibility theorems at the Instr, Instrs, Expr, Func, and Module levels remain absent under WS-001; the Core 3.0 inventory is unchanged because no coverage marker is attached to an amended declaration; and the pin in authority/manifest.json is not moved.",
       "refutedBy": [
         "WasmGemmGnaf.Wasm.Core.Validate.Instrs_ok.cons_inv",
         "WasmGemmGnaf.Wasm.Core.Validate.Instrs_ok.cons_untypable_of_arity",
@@ -256,12 +350,12 @@
         "WasmGemmGnaf.Wasm.Core.gapModule_not_ok"
       ],
       "replacementProvedBy": [
-        "WasmGemmGnaf.Wasm.Core.Instrs_ok.to_amended",
-        "WasmGemmGnaf.Wasm.Core.Expr_ok.to_amended",
-        "WasmGemmGnaf.Wasm.Core.Func_ok.to_amended",
-        "WasmGemmGnaf.Wasm.Core.Instrs_ok'.const_binop",
-        "WasmGemmGnaf.Wasm.Core.Instrs_ok'.binop_dom_length",
-        "WasmGemmGnaf.Wasm.Core.Func_ok'.gapFunc"
+        "WasmGemmGnaf.Wasm.Core.Instrs_okA.const_binop",
+        "WasmGemmGnaf.Wasm.Core.Instrs_okA.const_const_binop",
+        "WasmGemmGnaf.Wasm.Core.Expr_okA.const_const_binop",
+        "WasmGemmGnaf.Wasm.Core.Instrs_okA.binop_dom_length",
+        "WasmGemmGnaf.Wasm.Core.Instrs_okA.nil_length",
+        "WasmGemmGnaf.Wasm.Core.Func_okA.gapFunc"
       ]
     },
     {
@@ -279,6 +373,132 @@
         "WasmGemmGnaf.GNAF.loopReg_eq_loopNest",
         "WasmGemmGnaf.GNAF.loopReg_zero",
         "WasmGemmGnaf.GNAF.Plan.steps_le_stepBound"
+      ]
+    },
+    {
+      "id": "AMD-007",
+      "specSection": "4 and 7.3",
+      "date": "2026-08-14",
+      "deviation": "DEV-007",
+      "was": "The pinned `BsN(N)` continuation production recursed into unsigned `BuN(N-7)`.",
+      "now": "The release semantics uses a digest-bound amendment whose continuation recurses into signed `BsN(N-7)`; the vendored source remains byte-identical.",
+      "rationale": "The pinned production gives multi-byte negative encodings unrelated positive values. The repaired relation and parser agree soundly and completely, and a concrete two-byte witness distinguishes them.",
+      "strengthEffect": "NARROWING TO THE INTENDED SIGNED GRAMMAR.",
+      "ledgerEffect": "STRICT RELEASE-CONNECTED LEDGER: NONE. The recursively amended public decoder now re-proves `Wasm.decode_sound` and `Wasm.decode_complete`, but both names were already counted at the origin baseline; this correction earns zero strict credit by itself. The canonical public encoder round trip is now separately proved, but it selects no release artifact and earns no release-connected credit.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.Core.Binary.BsN_pinned_two_byte_positive",
+        "WasmGemmGnaf.Wasm.Core.Decode.not_BsN'_two_byte_positive"
+      ],
+      "replacementProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.Binary.BsN'_two_byte_negative",
+        "WasmGemmGnaf.Wasm.Core.Decode.decSN'_sound",
+        "WasmGemmGnaf.Wasm.Core.Decode.decSN'_complete"
+      ]
+    },
+    {
+      "id": "AMD-008",
+      "specSection": "4 and 7.3",
+      "date": "2026-08-14",
+      "deviation": "DEV-008",
+      "was": "The pinned `0xBB` production derived the reversed abstract instruction `CVTOP F32 F64 PROMOTE`.",
+      "now": "The release binary relation and opcode dispatch derive `CVTOP F64 F32 PROMOTE` for `0xBB` and exclude the malformed pinned result.",
+      "rationale": "The independent instruction well-formedness predicate rejects the pinned result and accepts the corrected one.",
+      "strengthEffect": "REPLACEMENT, NEUTRAL IN INTENDED CORE REACH.",
+      "ledgerEffect": "STRICT RELEASE-CONNECTED LEDGER: NONE. The corrected production now reaches the recursively amended public decoder and its two re-proved laws, but both names were already counted at the origin baseline; this correction earns zero strict credit by itself. The canonical public encoder round trip is now separately proved, but it selects no release artifact and earns no release-connected credit.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.Core.Binary.pinnedBadPromote_not_wf"
+      ],
+      "replacementProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.Binary.correctedPromote_wf",
+        "WasmGemmGnaf.Wasm.Core.Decode.op0'_sound"
+      ]
+    },
+    {
+      "id": "AMD-009",
+      "specSection": "4 and 7.3",
+      "date": "2026-08-14",
+      "deviation": "DEV-009",
+      "was": "The pinned free-index auxiliaries omitted tag indices and the exception-instruction/catch equations.",
+      "now": "The release dependency collector carries tag indices and exact equations for catches, `throw`, `throw_ref`, and every instruction of a `try_table` body.",
+      "rationale": "Without these equations an existing Core exception form can silently lose dependencies during module-context construction.",
+      "strengthEffect": "WIDENING OF DEPENDENCY BOOKKEEPING ONLY.",
+      "ledgerEffect": "NONE. Full checker equivalence remains outstanding.",
+      "replacementProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.exceptionFreeAmendment_targets",
+        "WasmGemmGnaf.Wasm.Core.freeInstr'_tryTable"
+      ]
+    },
+    {
+      "id": "AMD-010",
+      "specSection": "4 and 7.3",
+      "date": "2026-08-14",
+      "deviation": "DEV-010",
+      "was": "The pinned control-instruction binary grammar omitted opcodes `0x14` and `0x15`.",
+      "now": "The release binary relation and decoder include exactly `call_ref` at `0x14` and `return_call_ref` at `0x15`.",
+      "rationale": "The omitted encodings belong to Core 3.0 instructions already present in syntax and validation.",
+      "strengthEffect": "WIDENING TO THE INTENDED CORE BINARY LANGUAGE.",
+      "ledgerEffect": "STRICT RELEASE-CONNECTED LEDGER: NONE. The two added productions now reach the recursively amended public decoder and its two re-proved laws, but both names were already counted at the origin baseline; this correction earns zero strict credit by itself. The canonical public encoder round trip is now separately proved, but it selects no release artifact and earns no release-connected credit.",
+      "replacementProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.Decode.decOp1'_sound",
+        "WasmGemmGnaf.Wasm.Core.Decode.decOp1'_callRef_complete",
+        "WasmGemmGnaf.Wasm.Core.Decode.decOp1'_returnCallRef_complete"
+      ]
+    },
+    {
+      "id": "AMD-011",
+      "specSection": "4 and 7.3",
+      "date": "2026-08-14",
+      "deviation": "DEV-011",
+      "was": "Four pinned heap-subtyping rules omitted the side condition that the intermediate target is not `BOT`.",
+      "now": "The release declarative and executable subtype hierarchies restore all four `ht != BOT` premises and propagate them through every dependent type judgment.",
+      "rationale": "The missing premises collapse unrelated heap-type families through `BOT`; the repaired relation proves that a derivation ending at `BOT` must start there.",
+      "strengthEffect": "NARROWING. Invalid cross-family subtype derivations are removed.",
+      "ledgerEffect": "NONE. Module-checker equivalence and validation metatheory remain outstanding.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.Core.not_none_sub_bot",
+        "WasmGemmGnaf.Wasm.Core.not_nofunc_sub_bot",
+        "WasmGemmGnaf.Wasm.Core.not_noexn_sub_bot",
+        "WasmGemmGnaf.Wasm.Core.not_noextern_sub_bot"
+      ],
+      "replacementProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.source_bot_of_target_bot",
+        "WasmGemmGnaf.Wasm.Core.Heaptype_subA.to_pinned"
+      ]
+    },
+    {
+      "id": "AMD-012",
+      "specSection": "4 and 7.3",
+      "date": "2026-08-14",
+      "deviation": "DEV-012",
+      "was": "The pinned opcode-275 production constructed `VEXTTERNOP (I32 X 4) (I16 X 8) RELAXED_DOT_ADD S`, which violates its operator-family side condition and has `Instr.wf = false`.",
+      "now": "The release binary relation, decoder, and encoder construct `VEXTTERNOP (I32 X 4) (I8 X 16) RELAXED_DOT_ADD S` for opcode 275 and exclude the malformed pinned `I16 X 8` form.",
+      "rationale": "`I8 X 16` is the unique released shape making `4 * 8 = 32`, producing the I16x8 intermediate and I32x4 result named by `i32x4.relaxed_dot_i8x16_i7x16_add_s`.",
+      "strengthEffect": "REPLACEMENT, NEUTRAL IN INTENDED CORE REACH.",
+      "ledgerEffect": "STRICT RELEASE-CONNECTED LEDGER: NONE. Amendment text alone discharges zero claims; only separately checked encoder, decoder, well-formedness, and round-trip theorems may close their registered obligations.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.Core.Binary.pinnedBadRelaxedDotAdd_not_wf"
+      ],
+      "replacementProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.Binary.correctedRelaxedDotAdd_wf",
+        "WasmGemmGnaf.Wasm.Core.Decode.opFD0_amended_275"
+      ]
+    },
+    {
+      "id": "AMD-013",
+      "specSection": "4 and 7.3",
+      "date": "2026-08-14",
+      "deviation": "DEV-013",
+      "was": "The pinned `Subtype_ok2` rule omitted validity of its generalized declared supertype type uses.",
+      "now": "The release `Subtype_ok2A` rule requires every generalized supertype to satisfy `Typeuse_okA`; all other subtype rules are unchanged.",
+      "rationale": "Without the premise, a valid inline deftype can hide an invalid generalized supertype and declarative transitivity can derive false cross-family edges. WebAssembly/spec#2141 identified the same defect, and upstream commit `44b03c21317f07500f66bc739553c83dcde445eb` adds exactly this premise.",
+      "strengthEffect": "NARROWING. Invalid proof-internal subtype derivations are removed; no Core syntax is removed.",
+      "ledgerEffect": "NONE. Amendment text alone discharges zero claims; checker equivalence and validation metatheory remain outstanding.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.Core.heapDecision_not_complete_on_abstract_endpoints"
+      ],
+      "replacementProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.Subtype_ok2A",
+        "WasmGemmGnaf.Wasm.Core.Subtype_ok2A.to_pinned"
       ]
     }
   ]

@@ -16,15 +16,17 @@ SPEC.md §1 states the same rule for this repository:
 > `incomplete`; weakening the universe, silently strengthening the machine,
 > omitting cost, or changing the public wording is forbidden.
 
-Accordingly **nothing below is weakened**. `GlobalOptimal` is defined at full
-strength, quantified over all finite byte sequences, with the cost objective
-charging every coordinate at weight one.
+Accordingly **the requested proposition is not weakened**. The authority target
+quantifies over all finite byte sequences and charges every objective coordinate
+at weight one. The repository does not currently provide its release
+instantiation or the required `Release.artifactBytes`.
 
 ---
 
 ## 1. RequestedClaimScope
 
-The requested claim is exactly `authority/global-optimality-WGG-GO-1.json`:
+The requested claim target is exactly
+`authority/global-optimality-WGG-GO-1.json`:
 
 ```
 GlobalOptimal
@@ -36,7 +38,9 @@ GlobalOptimal
 
 with the quantifier in conjunct 7 ranging over **all** finite byte sequences that
 decode and validate under the pinned profile — not GNAF plans, not registered
-kernels, not attention-indexed candidates.
+kernels, not attention-indexed candidates. `Release.artifactBytes` is deliberately
+absent until a computable public-Core compiler, selection, and committed artifact
+exist.
 
 ## 2. Obligation ledger
 
@@ -50,13 +54,13 @@ Decomposed against SPEC §10:
 
 | # | Sub-obligation | Status |
 |---|---|---|
-| O-1 | Competitor universe defined extensionally over all byte strings | definable; stated at full strength |
-| O-2 | Sublevel is finite and decidable | **closable** — see §4.1 |
+| O-1 | Competitor universe defined extensionally over all byte strings | authority target fixed; public-Core release migration outstanding |
+| O-2 | Sublevel is finite and decidable | abstract finiteness infrastructure exists; exact released admission/decision outstanding |
 | O-3 | Complete admission (`SystemEvaluationRel` sound/complete/functional) | outstanding, gated on O-6 |
 | O-4 | Attainment: shipped bytes' exact score computed | outstanding, gated on O-6 |
 | O-5 | **Universal lower bound `F`, attained** | **OUTSTANDING — no known technique** |
 | O-6 | Mechanized Wasm Core 3.0 semantics (GC, EH, SIMD, tail calls) | outstanding — engineering; see §2.1 |
-| O-7 | Non-degenerate release seam (`GO-008`) and a per-rule cost table (`CO-006`) | **discharged** — both closed; see §2.1 for the two disclosures that travel with `GO-008` |
+| O-7 | Non-degenerate public-Core release evaluation (`GO-008`) and exact per-event cost table (`CO-006`) | **OUTSTANDING**; legacy subset seam evidence is non-release-applicable |
 
 Release gate step 9 fails. It is *supposed* to fail. See §6.
 
@@ -66,68 +70,30 @@ A large module and theorem count (see `CONFORMANCE.md` for the live inventory) c
 create a misleading impression of proximity. Three scope facts, all discovered by
 audit rather than reported by construction, bound what has actually been built:
 
-**The Wasm model is a declared subset, not Core 3.0.** `Wasm/Validate.lean` accepts
-an `i32`-only executable subset: one memory, no imports, no tables, structured
-control, `i32` loads/stores and locals. The release *profile* (`Wasm/Feature.lean`,
-correctly transcribed) enables `i64`, fixed SIMD, reference types, GC, tail calls
-and exception handling. The semantics for those enabled features are not modelled.
+**The public Core spine is partly mechanized, but the release chain is not
+closed.** `Wasm.Module` now carries a Core module with an amended declarative
+binary witness. The public decoder and computational encoder are proved sound,
+complete and round-tripping against that same relation, and `Artifact.emit` uses
+that encoder. The corrected declarative validation hierarchy and the executable
+validator's soundness are kernel checked. Full validator completeness, exact
+whole-machine successor enumeration, typed progress, and the complete SPEC §7.5
+event-cost correspondence remain open. The older `Wasm.Subset` machine is retained
+only as legacy support; none of its byte/evaluation witnesses is release evidence.
 
-**The compiler cannot emit a correct release artifact.** Of the four arithmetic
-modes SPEC §8.2 requires, only `modular` with a `u32` accumulator compiles.
-`checked`, `strictFloat` and `exactDyadicRoundOnce` each need an accumulator wider
-than `i32`, or a checked-overflow test `i32` cannot perform. `GNAF.compile` emits
-`unreachable` for those nodes — it traps rather than computing something different,
-which is the honest choice and is stated in the file's own doc comment — but the
-consequence is that **SPEC §13 Phase B, "construct an input-total scalar GNAF GEMM
-plan", is not achievable with the current compiler and target.**
+**The compiler still cannot emit the required public artifact.** `GNAF.compile`
+returns `Wasm.Subset.Module`, not the public Core carrier, and its current target
+does not implement all four SPEC §8.2 arithmetic modes. The direct, bounded Core
+compiler and its refinement/resource/cost proofs are the open `BI-010`/`BI-002`
+work. Consequently there is no released Core GEMM byte string on which to attain
+an upper bound, construct the exact sublevel, or instantiate the abstract argmin.
 
-Phase B is a prerequisite for everything downstream: no baseline means no attained
-upper bound, hence no sublevel, hence no argmin. So O-6 blocks O-5 structurally,
-independently of O-5's own obstruction. `BI-002` records this.
-
-**There is no release theorem.** `Release.Seam` is now a constructed closed term
-(`GO-008`) and `Theorems.release_seam_nondegenerate` proves it is not the
-degenerate one, so the seam is no longer the obstruction. The obstruction is that
-there is **no decider**: `Release.decider` and every result indexed by it have been
-deleted (see `UV-003` below), so this repository states no `Universal.GlobalOptimal`
-result at the release scope, conditional or otherwise. What survives at that scope
-is the seam's non-degeneracy and `Theorems.release_systemEvaluation_inhabited` — a
-`Universal.SystemEvaluation` on a closed `ProfileValid` literal whose module is not
-a GEMM implementation.
-
-`GO-008` recorded this, and **`GO-008` is now closed.** `Release.seam` is a closed
-term — `Release.semantics`, `Release.machine` (`Wasm.releaseCostedMachine`, the real
-all-branch costed explorer of `Wasm/CostedExplore.lean`) and `Release.limit` — and
-`Theorems.release_seam_nondegenerate` proves it is not the degenerate inhabitant:
-no event is charged zero, no module validates for free, no resource coordinate is
-budgeted at zero, and the machine both initializes and returns a **completed,
-nonempty, canonically sorted** frontier at every raw invocation.
-`Theorems.release_systemEvaluation_inhabited` then inhabits
-`Universal.SystemEvaluation` at the constructed setting on the closed literal
-`Release.witnessBytes`, which is also `Universal.ProfileValid`. So the release
-implication is no longer one whose antecedent might be unsatisfiable at every
-constructible seam.
-
-Two disclosures travel with that closure, and neither is small.
-
-* `Release.costEvent` is a **lower bound** on the SPEC §7.5 contribution law, not
-  the law. `Universal.Semantics.costEvent` maps a *plain* `Wasm.Event`, which does
-  not carry the transferred byte count, the `memory.grow` delta or the installed
-  byte count — `Wasm.Event.step` alone is the erasure of fourteen rules.
-  `Release.costEvent_le_eventContribution` proves the charge is componentwise `≤`
-  `Wasm.eventContribution`; `costEvent_branch_charge` and `costEvent_trap_charge`
-  prove it is *exact* on the branch and trap rules. Exactness elsewhere is O-6.
-* The module the machine is discharged on is `Release.witnessModule` — the smallest
-  module `GNAF.moduleOf` emits, `gemm` body `i32.const 0`, every branch terminating
-  in at most three reduction steps — and **not** `Artifact.baselineModule`.
-  Discharging the explorer on the compiled GEMM witness requires a termination proof
-  for `GNAF.bodyCode`'s loops inside a `2 ^ 320` step budget, which is O-6.
-
-`GO-006` is therefore **not** closed by `GO-008`: the literal that carries the
-evaluation is not semantically correct (`witnessModule`'s `gemm` returns the
-constant `0`), and the literal that is a GEMM implementation
-(`Artifact.baselineBytes`) has neither a `SemanticCorrect` proof (`GNAF.compile_refines`,
-`BI-002`) nor an evaluation.
+**There is no release theorem or release evaluation witness.** The former
+subset-only `witnessBytes`/`baselineBytes` and `SystemEvaluation` theorem cones
+were removed after audit: they quantified over the wrong module, decoder, event,
+and cost carriers. `GO-008` is open. The repository therefore states no
+`Universal.GlobalOptimal` result at the SPEC §9 release scope, conditional or
+otherwise, and it does not substitute a legacy witness to make the antecedent
+inhabited.
 
 `GNAF.compile_validates` is *not* vacuous — it holds for every `CheckedPlan` — and
 the in-subset results are no longer unwitnessed either: `GNAF.gemmWitness` is a
@@ -158,12 +124,13 @@ as outstanding. Phase B is thus begun, not achieved.
 An external audit at commit `c44a06d` found the following. All were verified and
 all are accepted; several were missed by this repository's own auditing.
 
-**The inventory materially understated the proof surface.** `model/claims.json`
-showed 10 outstanding rows. SPEC §15 requires 58 declarations, of which **22 are
-discharged and 36 outstanding**. `just required` now derives that inventory
-from SPEC.md and queries the *compiled environment*; gate steps 4, 5, 8 and 9 test
-declaration presence instead of reading a status field. A hand-maintained JSON
-status is not evidence.
+**The inventory materially understated the proof surface.** At commit `c44a06d`,
+`model/claims.json` showed 10 outstanding rows while the then-58-name SPEC §15
+list yielded 22 discharged and 36 outstanding. `just required` now derives the
+live inventory from SPEC.md and queries the compiled environment; its current
+counts are intentionally not copied into this historical paragraph. Gate steps
+4, 5, 8 and 9 test declaration presence instead of reading a status field. A
+hand-maintained JSON status is not evidence.
 
 **CI had never established the exact-SHA build.** `verify.yml` ran
 `sha256sum -c authority/uor-gnaf.sha256` from the repository root, but the
@@ -219,63 +186,55 @@ Load-bearing results:
 
 | Declaration | Content |
 |---|---|
-| `Universal.exists_globalOptimal_of_nonempty` | **the optimality half** — see §3.2 |
-| `Universal.systemEvaluation_subsingleton` | makes `GlobalOptimal` satisfiable at all — §3.2 |
+| `Wasm.decode_sound`, `Wasm.decode_complete` | public amended-Core decoder equivalence with `BmoduleA` |
+| `Wasm.encode_decode_roundtrip`, `Artifact.decode_emit` | computational public Core encoding and exact decode/emit round trip |
+| `Core.Binary.BmoduleA.wf_of` | every amended binary derivation produces a syntactically well-formed Core module |
+| `Core.Validate.validate_sound` | the current executable Core validator implies the corrected declarative hierarchy |
+| `Core.Context.decHeaptypeSubN_complete_of_sourceTypeNodeA` | amended heap-subtype decision completeness on an explicitly certified ranked source graph |
+| `Core.Types_okA.storedTypeSupersRankedA` | the first source type-section rank certificate, with non-wrapping group ranges |
 | `Cost.coordinate_le_score` | every one of the 36 charged coordinates is ≤ the canonical score |
 | `Cost.moduleBytes_le_score` | module size is bounded by the score (size half of properness) |
 | `Cost.CanonicalObjective.monotone` | componentwise ≤ implies score ≤ |
-| `Wasm.mem_successors_iff_step` | the successor enumerator is exactly the `Step` relation |
-| `Wasm.encode_decode_roundtrip` | binary round-trip for the modelled subset |
-| `Wasm.costed_run_iff_plain_run` | cost instrumentation is transparent (SPEC §7.5) |
+| `Core.vstoreLaneVal_mem_directSuccessors` | the exact lane-store success branch remains enumerable even when the pinned OOB branch overlaps it |
+| `Universal.exists_globalOptimal_of_nonempty` | generic classical argmin existence under its explicit nonempty/decision hypotheses — §3.1 |
 | `Atlas.semantic_closure_least` | least closure, and it *equals* the derivation closure |
-| `Atlas.incremental_eq_full_rebuild` | incremental accumulation = full rebuild |
-| `Atlas.universalCoverCompleteCheck_scope_blind` | **hardening** — see §3.1 |
+| `Atlas.incremental_eq_full_rebuild` | incremental accumulation = full rebuild for coherent unscoped state bodies; the scoped required-name theorem remains open |
+| `Atlas.universalCoverCompleteCheck_scope_blind` | **hardening** — see §3.2 |
 
 `coordinate_le_score` is the hinge: it is what makes every score sublevel finite,
 and it is what SPEC §10.3's coverage construction rests on.
 
-### 3.2 The optimality half is discharged; the residue is exhibition
+### 3.1 Generic argmin existence is proved; release instantiation is open
 
-`Universal.exists_globalOptimal_of_nonempty` (SPEC §13 Phase D) proves that **some**
-byte sequence satisfies `GlobalOptimal` in full — all three extensional conjuncts,
-the evaluation existential with `Correct` and `Feasible`, the universal lower-bound
-clause over *all* of `ByteArray`, and the canonical tie-break clause — given
-(i) a nonempty admissible set and (ii) a decider that answers on admissible bytes.
+`Universal.exists_globalOptimal_of_nonempty` is a valid abstract theorem: under
+its explicit nonempty admissible-set and decision hypotheses, the natural-valued
+objective and canonical byte order yield an argmin. It is infrastructure, not a
+proof of the SPEC §9 released WebAssembly objective. The repository has no
+public-Core decider satisfying those hypotheses, no semantically correct emitted
+Core GEMM with an exact `SystemEvaluation`, and no selected committed byte string.
 
-The lower bound never required an analytic certificate. Because the artifact is
-*defined* as the selection (SPEC §11.4), it falls out of the argmin construction:
-scores are naturals, so a nonempty admissible set has a least score; every minimizer
-satisfies `moduleBytes ≤ score` by `coordinate_le_score`, hence is bounded-length and
-there are finitely many; a finite nonempty set under the total order
-`CanonicalBytesLE` has a canonical-least element.
+`Universal.systemEvaluation_subsingleton` shows uniqueness only inside the
+current legacy-subset evaluation carrier once an evaluation exists; it neither
+constructs one nor discharges public-Core relation functionality. The deleted
+legacy subset evaluation must not be used to inhabit the release premise.
 
-`systemEvaluation_subsingleton` is what makes this possible at all: `GlobalOptimal`'s
-lower-bound clause is a *conjunction* over every inhabitant of the evaluation type,
-so it is satisfiable only because that type has a unique inhabitant, pinned by
-`decodeEq`, `initialEq`, `treeComplete`, `resourceExact` and `costExact`.
+The release residue therefore still includes both:
 
-**This relocates O-5.** The residue is no longer "prove a lower bound"; it is two
-exhibition problems:
+- `GO-006`/`GO-008`: construct one public-Core emitted GEMM that is profile valid,
+  semantically correct, resource feasible, and equipped with the exact released
+  all-branch evaluation; and
+- `GO-007`/`WGG-GO-1`: prove the SPEC §9 total-cost lower-bound/coverage and
+  canonical selection clauses, and identify the committed bytes with that
+  selection.
 
-- `GO-006` — nonemptiness: one concrete module with proofs of the three extensional
-  predicates *and* an evaluation. This is SPEC §13 Phase B, blocked by O-6. Two of
-  the four conjuncts now hold on a closed literal (`Release.witness_profileValid`
-  and `Theorems.release_systemEvaluation_inhabited`); the missing one is
-  `SemanticCorrect`, and it is missing on *every* literal this repository has.
-- `GO-007` — identification: the committed literal equals the selected bytes.
-  `exists_globalOptimal_of_nonempty` yields an *existential* produced by classical
-  reasoning and names no literal. Naming one means running the selection over the
-  admissible set — the step that is physically infeasible. Defining
-  `Release.artifactBytes` noncomputably would make the theorem provable and leave no
-  committed artifact, which SPEC §11.4 forbids.
+Axiom closure by `#print axioms`: `propext`, `Quot.sound`, and
+`Classical.choice`, named individually as SPEC §4 requires. Choice is permitted
+only for Prop-level results. The compiled audit also finds it in the Type-valued
+input-enumeration witnesses `Gemm.valid_input_finite`,
+`Gemm.raw_input_finite`, and `Universal.input_enumerator_complete`; those three
+are therefore uncredited and `UV-004` remains open. No `sorryAx`.
 
-Axiom closure by `#print axioms`: `propext`, `Quot.sound`, and `Classical.choice`
-on some Prop-level results. All three are Lean core logical axioms, named
-individually as SPEC §4 requires. SPEC §4's restriction on `Classical.choice` is
-that it must not produce *executable witnesses*; the results using it are
-Prop-level, so the restriction is not triggered. No `sorryAx`.
-
-### 3.1 Hardening: the seal cannot stand in for coverage
+### 3.2 Hardening: the seal cannot stand in for coverage
 
 An adversarial audit found the most attractive route to a false global-optimality
 claim in this repository, and it was closed by **strengthening**, not by softening
@@ -300,7 +259,7 @@ later supplies it without a real proof, or removes the blindness lemma that make
 the absence principled. This is exactly the UOR-GNAF §18 non-claim that *index
 presence or provenance alone proves eligibility, correctness, or optimality*.
 
-### 3.2 Hardening: the forbidden-construct scan
+### 3.3 Hardening: the forbidden-construct scan
 
 The source scan initially matched any identifier containing `sorry`, so it
 false-positived on `Conformance/AxiomAudit.lean`'s `sorryAx` constructor — which
@@ -317,115 +276,74 @@ Authority pins verified by content, not by trusting a string:
 |---|---|
 | UOR-GNAF v1-draft.2 | SHA-256 `5c34…200a` — **matches the SPEC §4 pin exactly** |
 | Lean toolchain | `v4.30.0`, commit `d024af09…c622` — **matches the SPEC §4 pin exactly** |
-| WebAssembly Core wg-3.0 `9d360199…74aa` | **not vendored** — gate step 1 fails |
+| WebAssembly Core wg-3.0 `9d360199…74aa` | vendored and content-digest checked; registered AMD/DEV repairs remain explicit and mutation-tested |
 
 ## 4. Why O-5 is outstanding
 
-This section was adversarially reviewed. Two framings I initially advanced were
-**refuted** and are recorded here as refuted, not quietly dropped.
+This section was adversarially reviewed. Earlier framings were narrowed or
+withdrawn where the formal statements did not support them.
 
 ### 4.1 What is *not* the obstruction
 
-**Not tensor rank — and this is now proved, not merely argued.** It is tempting to
-say closure requires the exact tensor rank of ⟨3,3,3⟩ (open; 19 ≤ R ≤ 23). It does
-not. `LB-002` (`Universal.BilinearScheme.chargedOps_lower_bound`) formalizes the
-accounting: for a bilinear scheme with `r` products, A-side supports `p_k ≥ 1`,
-B-side supports `w_k ≥ 1`, and reconstruction supports summing to at least 27
-(each of the nine outputs is a rank-three bilinear form, so ≥3 products feed it),
-total charged operations satisfy
+**What the bilinear lemma actually proves.** `LB-002`
+(`Universal.BilinearScheme.chargedOps_lower_bound`) formalizes one restricted
+accounting fact. For a modeled bilinear scheme with `r` products, A-side supports
+`p_k ≥ 1`, B-side supports `w_k ≥ 1`, and reconstruction support totaling at least
+27, total charged operations satisfy
 
 ```
 T ≥ r + 18
 ```
 
-**uniformly in `r`**, and the bound is attained exactly by the naive algorithm
-(`r = 27`, 18 additions, 45 charged operations — `naive_attains_bound`). Because
-the bound holds for every `r`, no resolution of `R(⟨3,3,3⟩)` anywhere in [19,23]
-changes the release theorem's truth value. The causal link the framing asserts is
-false.
-
-The mechanism is that the objective charges multiplications *and* additions at
-weight one, so a low-rank scheme pays for every combining addition it introduces:
-dropping to `r` multiplications buys at most `27 − r` operations, while Laderman's
-23-multiplication scheme spends 98 additions for 121 charged operations against
-naive's 45. The saving available from low rank is a few operations; the price is
-dozens. **Refuted, high confidence.**
+The naive rank-27 scheme witnesses equality at 45 charged operations. This shows
+the formula is sharp at that point, not that naive is minimal among lower-rank
+schemes. For `r = 19..23` the theorem gives only `T ≥ 37..41`, so it does not prove
+that resolving the open tensor-rank interval is irrelevant to the release optimum.
+Laderman's particular 23-product/98-addition construction costs 121, but that
+example does not exclude a different lower-rank construction.
 
 **Not asymptotic circuit lower bounds.** Weight-one module bytes creates a
 minimal-*total-cost* obligation, not a minimal-program-size one, so the open
 problem of superlinear circuit lower bounds for explicit functions is the wrong
 authority to invoke. **Refuted, medium confidence.**
 
-**Not the finiteness claim.** SPEC §10.3's literal words — the sublevel is "finite
-and exactly enumerable" — are provable with no computation at all: a subset of a
-finite type is finite, every quantifier ranges over a finite carrier, and filtering
-is the exact enumeration. §10.3 as written is closable today.
+**Abstract finiteness is not constructive enumeration.** A bounded byte carrier is
+finite as a proposition. The release-scope duplicate-free executable enumeration,
+input witnesses, evaluator decision, and exact coverage theorem remain open; the
+choice-tainted input enumerators are explicitly uncredited.
 
 ### 4.2 What *is* the obstruction
 
-The binding obligation is the UOR-GNAF §19.3 disjunct: **a universal lower bound,
-attained.** Concretely, closure requires both of:
+One binding route is the UOR-GNAF §19.3 disjunct: **a universal lower bound,
+attained.** Under that route closure requires both of:
 
 1. a proved floor `F` on the *total charged cost* of every correct, feasible,
    same-profile WebAssembly module over the complete raw-invocation domain; and
 2. shipped bytes whose exact score **equals** `F`.
 
-Neither half has a known route.
+Neither half is proved here. Proof-complete partition or no-improver coverage are
+the alternative routes listed in §5.
 
-**The exhaustive route is physically excluded.** The alternative to an analytic
-floor is enumeration. The candidate space is `256^u` where `u` is the module-byte
-bound. `256^u` exceeds the holographic bit bound of the observable universe
-(~10^123) at `u > 51` bytes. A conforming GEMM module is orders of magnitude
-larger. Enumeration is not slow; it is excluded by physics, and no increase in
-compute, parallelism, or patience changes this.
-
-**The analytic route has no known technique.** An adversary lower bound would have
-to be tight to within a few dozen units across the entire summed domain, over a
-space expressive enough to include memory, branches, SIMD, and GC. Worse, the
-optimum is plausibly *not* the naive kernel — data-dependent shortcuts (skipping
-multiplications by zero, exploiting structure shared across the enumerated domain)
-mean there is no obvious candidate whose cost one could match with an adversary
-argument. Existing exhaustive-optimality precedents are far smaller: Knuth's
-results cover 5-variable Boolean functions; BB(5) took decades with heavy
-machine-specific normalization. Neither scales to multi-hundred-byte Wasm modules
-over a `~10^(1.29×10^10)`-element input domain.
-
-**It is decidable, and that matters.** Item 7 is not undecidable, and no appeal to
-undecidability is made here. Because `staticModuleBytes` carries weight one, any
-competitor scoring below `S` has module length below `S`; because
-`sumWasmRuleSteps` carries weight one, execution can be capped at `S` steps and
-anything exceeding it rejected — so the halting problem never arises. Item 7 is
-therefore a bounded, mechanically computable statement: enumerate the byte strings
-shorter than `S`, run each for at most `S` steps on each domain input, compare.
-Its truth value is mathematically determinate.
-
-**The obstruction is exactly infeasibility plus the absence of a certificate.**
-`256^u` passes the observable universe's holographic bit bound at `u > 51` bytes,
-so the decision procedure exists and can never be run. Closure therefore needs an
-analytic certificate instead, and none is known — the bound would have to be tight
-to within a few dozen units across the whole summed domain, over a space including
-memory, branches, SIMD, and GC.
+**No exhaustive or analytic certificate is present.** Properness yields bounded
+sublevels once the public evaluator and exact cost model exist, but this repository
+does not yet provide the constructive public-carrier enumeration/decision theorem
+or a complete checked partition. Nor does it provide an analytic lower bound tight
+at the shipped bytes. Claims about physical infeasibility are not used as proof and
+receive no registry credit.
 
 **A further complication, recorded because it is easy to miss.** Under
 charge-everything accounting over a *finite* input domain, the optimum may not be
 an arithmetic algorithm at all. Dispatch is charged, so shape-specialized kernels
 are penalized; and for narrow scalar kinds a lookup table can undercut arithmetic
 on `staticDataBytes` against `sumScalarOps`. The argmin is a discrete trade-off
-across 36 coordinates, not an algebraic invariant. This is a second, independent
-reason tensor rank is the wrong place to look — and it means there is no obvious
-candidate whose cost an adversary argument could be matched against.
+across 36 coordinates, not an algebraic invariant. Tensor-rank accounting alone
+therefore neither identifies the optimum nor supplies the all-module lower bound.
 
-**Residual uncertainty, stated honestly.** The reviewer who refuted the
-circuit-complexity framing did so at *medium* confidence and conceded that the
-alternative routes relocate the difficulty rather than eliminating it. The `LB-002`
-floors are proved for *bilinear* schemes; a non-bilinear straight-line program over
-`ZMod (2^w)` is outside that accounting, though it too pays for every operation it
-performs. The correct characterization is therefore: O-5 is **not proved
-impossible**, and is decidable in principle — it has **no known route**, and the
-only mechanical route is physically excluded. Under UOR-GNAF §13.1 a generic
-hardness result must not be used to dismiss a bounded profile; that is why this is
-filed as an *outstanding obligation with no known discharge*, never as an
-impossibility theorem.
+**Residual uncertainty, stated honestly.** The `LB-002` floor covers only its
+modeled bilinear schemes; non-bilinear programs and arbitrary WebAssembly modules
+are outside that theorem. O-5 is not proved impossible, and no generic hardness
+result may dismiss this bounded profile. It is filed as an outstanding obligation
+with no known discharge, never as an impossibility theorem.
 
 ## 5. What would discharge O-5
 
@@ -458,22 +376,21 @@ restricting the input domain to make the sum tractable; or asserting
 `released_wasm_gemm_gnaf_global_optimal` with any hypothesis attached. Each would
 produce a different, weaker proposition wearing the release theorem's name.
 
-Each of those substitutions is now mechanically detectable rather than merely
-prohibited in prose. `WasmGemmGnaf/Conformance/Schema.lean` states every entry of
-the authority's `scopeCriticalDefinitions` against its fully spelled-out body and
-closes it definitionally, so a narrowed quantifier, a dropped conjunct, an added
-hypothesis or a substituted scoped predicate stops elaborating; and `just schema`
-reads that list from `authority/global-optimality-WGG-GO-1.json` rather than
-transcribing it, so the frozen authority — not this repository — decides what must
-be bound.
+Each authority schema name is now mechanically accounted rather than silently
+omitted. `WasmGemmGnaf/Conformance/Schema.lean` closes exact entries
+definitionally, so a narrowed quantifier, dropped conjunct, added hypothesis, or
+substituted scoped predicate stops elaborating. Definitions still using a legacy
+carrier are marked as explicit uncredited gaps; `just schema` prints the public
+schema OPEN while any remain. The inventory itself is read from
+`authority/global-optimality-WGG-GO-1.json`, not transcribed here.
 
 ## 7. Reproducing this outcome
 
 ```
 just claims     # registry: WGG-GO-1 present, status incomplete
 just axioms     # axiom closure of every proved declaration
-just schema     # every scope-critical definition bound to the frozen schema
-just vv         # full gate; FAILS at step 9 by design
+just schema     # exact bindings plus explicit uncredited schema gaps
+just vv         # full gate; FAILS on open prerequisites and the absent step-9 theorem
 ```
 
 `just vv` failing is the correct observable behavior of a conforming repository in

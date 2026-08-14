@@ -44,25 +44,26 @@
     {
       "id": "M6",
       "family": "GO",
-      "plants": "green gate while GO-001 outstanding",
-      "expectedRejector": "release gate step 9",
-      "status": "rejects"
+      "plants": "a compiled-environment response with the exact final release theorem absent",
+      "expectedRejector": "the exact predicate used by release gate step 9",
+      "status": "rejects",
+      "note": "Carries a planted-present control, so the falsifier remains valid after genuine closure."
     },
     {
       "id": "M7",
       "family": "AT",
-      "plants": "citing the Atlas seal's cover check as universal coverage",
-      "expectedRejector": "AT-001 scope-blindness lemma plus AT-002 absence check",
+      "plants": "an exact COPY of WasmGemmGnaf/Atlas/CoverageScope.lean whose real scope-blindness theorem has its required searchPartitions equality replaced by an unrelated declarationBase equality while retaining the real conclusion and proof",
+      "expectedRejector": "Lean elaboration of the real universalCoverCompleteCheck_scope_blind proof",
       "status": "rejects",
-      "note": "Fails if Atlas.seal_implies_universal_coverage is supplied without a real proof, or if the blindness lemma that makes its absence principled is removed."
+      "note": "The unmodified CoverageScope source is elaborated first as the control. The mutant attacks the exact dependency used by the theorem's real proof rather than introducing an arbitrary false theorem, and it does not depend on AT-002 remaining absent."
     },
     {
       "id": "M8",
       "family": "CM",
-      "plants": "a stale .olean masking a root module that does not elaborate",
-      "expectedRejector": "direct `lean WasmGemmGnaf.lean` elaboration",
+      "plants": "an owned Foundation Lean module added after root generation in a disposable repository, alongside a planted stale WasmGemmGnaf.olean",
+      "expectedRejector": "the real `xtask sources root --check` source-inventory rejector",
       "status": "rejects",
-      "note": "Regression guard. This defect really occurred: lakefile used globs .submodules, which never builds the root, so `lake build` reported green while two modules declared clashing Fault types."
+      "note": "The same production root generator first creates a control root and `--check` must accept it. The new owned source then makes the root stale even though a compiled-root object is present, and `--check` must reject it. This is independent of the repository's current module count."
     },
     {
       "id": "M9",
@@ -75,10 +76,10 @@
     {
       "id": "M10",
       "family": "CM",
-      "plants": "a manifest stage containing its own identity, or a backward reference between stages",
-      "expectedRejector": "M10 acyclicity check over MANIFEST.json",
+      "plants": "a backward stage-identity binding in a disposable generated MANIFEST.json: sourceManifestCoreIdentity is replaced by the later generatedProofInputIdentity",
+      "expectedRejector": "the real `xtask manifest --check` identity rejector",
       "status": "rejects",
-      "note": "SPEC 4 requires the identity stages be acyclic: no manifest contains its own identity and no two stages hash each other. A cyclic manifest could be made to attest to itself."
+      "note": "The production manifest generator creates the control and the production checker must accept it before mutation. The same checker must then reject the backward identity alias. This invokes the release-path rejector instead of locally reimplementing acyclicity over the current manifest."
     },
     {
       "id": "M11",
@@ -105,12 +106,76 @@
       "note": "SPEC 7.1 says Wasm.profile_matches_pinned_revision means the model and map are identity-bound to the VENDORED revision. Lean cannot read vendor/wasm-spec/; the theorem stands on the literals core3VendorManifestSha256, core3VendoredTree.fileCount and core3RevisionCommit in WasmGemmGnaf/Wasm/Revision.lean, and a literal that had drifted from the tree would still elaborate. The binding is therefore only as good as the checker that recomputes it, and a checker that never fires is indistinguishable from one with nothing to find. The falsifier runs the REAL checker against the planted tree rather than reimplementing it, and carries the unmutated copy as a control so it cannot pass by failing for an unrelated reason. The appended-line mutation is the one that matters most: every per-file digest still checks out, so `sha256sum -c` alone would pass it and only the recorded digest of digests catches it. The repository's own vendored tree is never written."
     },
     {
+      "id": "M14",
+      "family": "CM",
+      "plants": "six independent coverage-integrity attacks against a COPY of the Lean tree: invented opcode, typing-rule, and syntax markers; an attempted covered-count increase; a real marker attached only to comments; and a real marker attached to a declaration absent from the compiled environment",
+      "expectedRejector": "core::report and core::report_elaborated, the real extracted-checklist checks used by `xtask core`",
+      "status": "rejects",
+      "note": "The unmutated copied tree is required to pass first. Invented items must be rejected without increasing the covered count, floating markers must be reported unattached, and a marker above a ghost declaration must be reported unelaborated. The repository itself is never written."
+    },
+    {
       "id": "M15",
       "family": "CM",
-      "plants": "a declaration carrying a required SPEC 15 NAME and the type `Nat`, bound at `:= 0` -- elaborated in a temporary file against the real compiled environment, never in the repository -- plus four mutations of a COPY of WasmGemmGnaf/Conformance/RequiredSignatures.lean: a deleted marker, a `:= @Name` closure replaced by `by exact @Name`, a marker naming something SPEC 15 does not require, and an amendment to SPEC.md that leaves a binding's quotation stale",
+      "plants": "a declaration carrying a required SPEC 15 NAME and the type `Nat`, bound at `:= 0` -- elaborated in a temporary file against the real compiled environment, never in the repository -- plus five wiring attacks: a deleted marker, a `:= @Name` closure replaced by `by exact @Name`, a marker naming something SPEC 15 does not require, an amendment to SPEC.md that leaves a binding's quotation stale, and an exact theorem-shaped prose decoy placed before the drifted fenced theorem",
       "expectedRejector": "the `:= @Name` definitional coercion in WasmGemmGnaf/Conformance/RequiredSignatures.lean, and signature::audit plus required::apply_signatures, which `xtask signature`, `xtask claims required` and release gate step 2 all call",
       "status": "rejects",
-      "note": "This is the falsifier for the defect an external audit named directly: 'The repository's reported 36/58 remains inflated. Its checker verifies names rather than exact proposition types; its own M12 test demonstrates that a matching-name `Nat := 0` is counted as discharged.' That was accurate -- `xtask claims required` asked `#print axioms` whether the NAME existed, so any type under that name passed, and M12 planted exactly that shape while only ever testing the choice-taint rule on it. The elaborator half plants `Wasm.m15_planted_validation_progress : Nat := 0` and requires the SPEC 7.3 `validation_progress` signature binding, closed by `:= @<planted>`, to fail with a TYPE MISMATCH -- not with an unknown identifier, which would mean the plant never entered the environment and nothing was rejected. The real binding closed by `:= @Wasm.validation_progress` is the control, so the mutant cannot fail for an unrelated reason. The wiring half then attacks the checker that decides whether the elaborator is ever asked. Meta-falsified: emptying required::apply_signatures turns M15 red and leaves M12 green; making signature::closes_definitionally accept everything turns M15 red on its own. Applying this fix moved the reported ledger from 36 to 34 of 58 -- two names, Wasm.costed_erase_iff_plain_run (DEV-001) and Atlas.incremental_eq_full_rebuild (no deviation filed), are present in the environment but do not carry SPEC's proposition."
+      "note": "This is the falsifier for the defect an external audit named directly: 'The repository's reported 36/58 remains inflated. Its checker verifies names rather than exact proposition types; its own M12 test demonstrates that a matching-name `Nat := 0` is counted as discharged.' That was accurate -- `xtask claims required` asked `#print axioms` whether the NAME existed, so any type under that name passed, and M12 planted exactly that shape while only ever testing the choice-taint rule on it. The elaborator half now uses the legitimately exact public-Core `Wasm.decode_sound` binding as its control, plants `Wasm.m15_planted_decode_sound : Nat := 0`, and requires closing the same signature by `:= @<planted>` to fail with a TYPE MISMATCH -- not with an unknown identifier, which would mean the plant never entered the environment and nothing was rejected. The wiring half attacks the checker that decides whether the elaborator is ever asked. In particular, signature::spec_block now reads theorem blocks only from Lean fences; otherwise an exact prose decoy can hide drift in the authoritative fenced proposition. Meta-falsified: emptying required::apply_signatures turns M15 red and leaves M12 green; making signature::closes_definitionally accept everything turns M15 red on its own. Weaker bindings remain machine-readable disclosures and never count as discharge."
+    },
+    {
+      "id": "M16",
+      "family": "CM",
+      "plants": "two proof-path circularities in the real compiled environment: one forbidden executable theorem cited by a required proof term and one forbidden binary grammar declaration cited by the declarative definition, plus an empty-forbidden control and a required-ledger demotion check",
+      "expectedRejector": "independence::report_over and required::apply_independence, the real independence and claim-demotion checks",
+      "status": "rejects",
+      "note": "The real independence table must first be answerable by the compiled environment. The planted table must identify both known dependencies, the same declarations with no forbidden names must pass, and applying the resulting rejection must move Wasm.decode_sound from discharged to circular. This tests both definition and proof-term inspection without freezing the repository's current repaired/remaining circularity set."
+    },
+    {
+      "id": "M17",
+      "family": "WS",
+      "plants": "four independent drifts in a COPY of the canonical Core authority-amendment binding: an AMD-005 source digest, an AMD-007 textual anchor, the amended BsN' Lean declaration, and DEV-007's adoptedIntoSpec register edge",
+      "expectedRejector": "amendment::binding, the real checker used by `xtask amendment` and release-gate step 1",
+      "status": "rejects",
+      "note": "The unmutated copied tree is required to pass first. Each plant then calls the real generalized checker, and every modified file is restored before the next plant; the repository itself is never written. This guards all four non-kernel halves of `Wasm.core3AuthorityAmendmentSet`: pinned content, exact textual operation, amended declaration existence, and deviation/amendment registry linkage."
+    },
+    {
+      "id": "M18",
+      "family": "WS",
+      "plants": "the malformed pinned opcode-275 `I16 X 8` shape in place of AMD-012's corrected `I8 X 16` inserted text, on a COPY of the canonical authority-amendment binding",
+      "expectedRejector": "amendment::binding, the real checker used by `xtask amendment` and release-gate step 1",
+      "status": "rejects",
+      "note": "The unmutated copied tree must pass first. M18 then changes only AMD-012's exact inserted text back to the malformed pinned shape and requires the real digest/anchor/text/deviation binding to reject it. Kernel regressions separately prove that the pinned form has `Instr.wf = false` and the corrected form has `Instr.wf = true`; the mutation guards the non-kernel authority edge selecting the corrected form."
+    },
+    {
+      "id": "M19",
+      "family": "WS",
+      "plants": "the pinned omission of generalized-supertype `Typeuse_ok` in place of AMD-013's inserted premise, on a COPY of the canonical authority-amendment binding",
+      "expectedRejector": "amendment::binding, the real checker used by `xtask amendment` and release-gate step 1",
+      "status": "rejects",
+      "note": "The unmutated copied tree must pass first. M19 then removes only AMD-013's exact inserted `Typeuse_ok` line, making the recorded insertion a no-op, and requires the real digest/anchor/text/deviation binding to reject it. The kernel counterexample separately demonstrates why the missing premise defeats executable subtype completeness; the mutation guards the non-kernel authority edge selecting the upstream repair."
+    },
+    {
+      "id": "M20",
+      "family": "WS",
+      "plants": "removal of the exact `TypeGroupRangeOk` conjunct from a COPY of the full amended Core type checker, restoring modulo-2^32 capture of type indices across large recursive groups",
+      "expectedRejector": "Lean elaboration of the real `ValidateTypes.lean` soundness proof against the declarative `Type_okA` range premise",
+      "status": "rejects",
+      "note": "The unmutated copied validator is elaborated first as the control. M20 then removes only the executable non-wrapping group-range check and elaborates the same proof file. The mutant must fail because `checkTypeOkA_sound` can no longer construct `Type_okA`'s source-faithful range premise. This guards the exact defect found while proving finite type-graph origin: `TypeIdx.ofNat` is modulo 2^32, so without the group bound a future recursive-group slot can capture an earlier `_IDX` and invalidate both validation completeness and runtime subtype enumeration."
+    },
+    {
+      "id": "M21",
+      "family": "WS",
+      "plants": "replacement of the independent lane-store failure-plus-success successor union with a lossy if/else on a COPY of the full amended Core whole-machine successor enumerator",
+      "expectedRejector": "Lean elaboration of the real `vstoreLaneVal_mem_directSuccessors` completeness proof against the authority `StepA.vstoreLaneVal` rule",
+      "status": "rejects",
+      "note": "The pinned lane-store rules deliberately preserve different quantities: the out-of-bounds premise compares `sz` bits while the successful write uses `sz / 8` bytes. Both rules can therefore apply to one state. M21 keeps the unmodified full file as a control, then restores the defective exclusive branch that drops the valid write whenever the broader failure test holds. The real `vstoreLaneVal_mem_directSuccessors` proof then fails, so the mutation detects the lost relational successor rather than merely observing a changed runtime result."
+    },
+    {
+      "id": "M22",
+      "family": "WS",
+      "plants": "two controlled source-copy mutations: public Wasm.encode in Wasm/CoreBackEnd.lean replaced by ByteArray.empty, and public Artifact.emit in Artifact/Emit.lean replaced by ByteArray.empty",
+      "expectedRejector": "Lean elaboration of the actual Wasm.encode_decode_roundtrip and Artifact.decode_emit proof chains",
+      "status": "rejects",
+      "note": "Each unmodified full source file is elaborated first as its own control. M22 then changes only the corresponding public encoder implementation and requires the real downstream round-trip proof chain to fail. This guards both the public amended-Core encoder and the chosen-output emitter without claiming byte uniqueness, release selection, GEMM correctness, or a SystemEvaluation."
     }
   ],
   "note": "A mutation suite that merely expects runtime output differences does not test universal-coverage integrity (SPEC 18). M4 and M6 target claim integrity directly."

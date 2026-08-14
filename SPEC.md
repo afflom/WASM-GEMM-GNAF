@@ -145,12 +145,17 @@ The following identities SHALL be recorded in `authority/manifest.json`, checked
 
 Changing an authority creates a new profile and invalidates dependent certificates. No floating tags, mutable action revisions, unpinned package revisions, or network-fetched proof inputs are allowed in release verification.
 
-The pinned WebAssembly Core revision is known to carry an upstream defect in its
-instruction-sequence typing rule, repaired upstream only after the pin. It is
-recorded and worked around under §7.3 and deviation `DEV-006`; the pin SHALL NOT be
-advanced on account of it, and a repository that carries a defect in a pinned
-authority SHALL record it here and in the governing clause rather than silently
-tracking the fix.
+The pinned WebAssembly Core revision carries the authority defects recorded by
+`DEV-006` through `DEV-013` and repaired by the canonical amendment set
+`AMD-005`, `AMD-007`, `AMD-008`, `AMD-009`, `AMD-010`, `AMD-011`, `AMD-012`, and
+`AMD-013`
+under §7.3.
+The pin SHALL NOT be advanced on account of them. The vendored source remains
+byte-identical to that pin, while the release semantics identity binds both the
+vendored-tree identity and the ordered, exact-text authority-amendment-set identity.
+A repository that carries a defect in a pinned authority SHALL record it here, in
+the governing clause, and in `model/spec-deviations.json`, rather than silently
+tracking a later source tree.
 
 The mathematical theorem is relative to the Lean mechanization of the pinned WebAssembly semantics. The repository SHALL include a clause-by-clause conformance map from the pinned normative source to Lean declarations. Tests against an external reference interpreter are additional evidence, not a replacement for the formal semantics.
 
@@ -755,22 +760,26 @@ Therefore, normatively:
   `bd4633a` would change the vendored blob set and the Core 3.0 rule inventory, which
   §4 makes a new-profile event; the defect is recorded instead.
 - `Wasm.DeclarativelyValid` SHALL be defined over the **amended** judgments
-  `Wasm.Core.Instr_ok'` / `Instrs_ok'` / `Expr_ok'` / `Func_ok'` and their module-level
-  lifts, stated explicitly in `Wasm/Core/Validation/InstructionsAmended.lean` and
-  `Wasm/Core/Validation/ModulesAmended.lean`.
-- The amendment SHALL be **one modified premise and no new rule**: `Instrs_ok'/seq`
+  `Wasm.Core.Instr_okA` / `Instrs_okA` / `Expr_okA` / `Func_okA` and their
+  `Module_okA` lift, stated once in
+  `Wasm/Core/Validation/InstructionsCombinedAmended.lean` and
+  `Wasm/Core/Validation/ModulesCombinedAmended.lean`.
+- The amendment SHALL be **one modified premise and no new rule**: `Instrs_okA/seq`
   carries the frame `t_0*` inside the composition, so `C ⊢ instr_1 instr_2* :
   (t_0* t_1*) →_(x_1* x_2*) t_3*` follows from `C ⊢ instr_1 : t_1* →_(x_1*) t_2*`,
   `C ⊢ t_0* : OK` and `C ⊢ instr_2* : (t_0* t_2*) →_(x_2*) t_3*`. `empty`, `sub` and
   `frame` are unchanged, and `t_0* = ε` is exactly the pinned rule. Because
   `Instr_ok/block`, `/loop` and `/if` type their bodies with the sequence judgment,
-  the amendment SHALL be propagated through them by a mutual `Instr_ok'` that lifts
+  the amendment SHALL be propagated through them by the mutual `Instr_okA` that lifts
   every pinned instruction rule unchanged and restates only those three; otherwise
   the vacuity survives one nesting level down.
-- The amendment SHALL be accompanied by a **no-regression** theorem at every level —
-  `Instrs_ok.to_amended`, `Expr_ok.to_amended`, `Func_ok.to_amended` — so it rejects
-  nothing the pinned rules accept, and by the arity theorems of the pinned relation
-  **re-proved against the amended one** (`Instrs_ok'.binop_dom_length`,
+- The amendment SHALL be accompanied by a **compatibility** theorem at every level:
+  every pinned derivation whose dependent type/subtyping premises satisfy the other
+  release amendments maps into the combined `A` hierarchy. Thus AMD-005 itself rejects
+  no derivation; this is not a global inclusion claim because AMD-011 and AMD-013
+  independently remove invalid pinned subtype derivations. It SHALL also carry the arity theorems
+  of the pinned relation
+  **re-proved against the amended one** (`Instrs_okA.binop_dom_length`,
   `…nil_length`, `…const_length`, `…binop_length`, `…not_const_nil`,
   `…not_binop_unary`, `…not_binop_balanced`), so that composability is bought by
   supplying operands from the frame and not by letting a domain shrink.
@@ -780,6 +789,38 @@ Therefore, normatively:
 - `validate_bool_iff` SHALL be stated over the amended relation with `DEV-006` cited,
   never over the pinned relation, and it remains **outstanding**: nothing in this
   amendment discharges it.
+
+The same pinned tree has seven further source defects, recorded exactly by
+`AMD-007` through `AMD-013`. Their repairs are part of the release semantics, not
+changes to the vendored transcription:
+
+| Amendment | Pinned defect | Required release interpretation |
+|---|---|---|
+| `AMD-007` / `DEV-007` | `BsN(N)` recurses into unsigned `BuN(N-7)` | Its continuation SHALL recurse into signed `BsN(N-7)`. The executable signed parser SHALL be proved sound and complete against that independent amended relation. |
+| `AMD-008` / `DEV-008` | Opcode `0xBB` derives the reversed `CVTOP F32 F64 PROMOTE` | `0xBB` SHALL derive and decode as `CVTOP F64 F32 PROMOTE`; the malformed pinned result SHALL be excluded. |
+| `AMD-009` / `DEV-009` | Free-index auxiliaries omit tag indices and the exception instruction/catch equations | Free-index collection SHALL carry `TAGS` and the exact equations for `throw`, `throw_ref`, every catch clause, and every instruction in a `try_table` body. |
+| `AMD-010` / `DEV-010` | The binary control grammar omits `call_ref` and `return_call_ref` | Opcodes `0x14` and `0x15` SHALL encode/decode exactly those two typed-reference calls. |
+| `AMD-011` / `DEV-011` | Four heap-subtyping rules omit `heaptype ≠ BOT`, collapsing unrelated families | The four premises SHALL be restored in the declarative and executable hierarchies and propagated through all type, instruction, and module judgments used by release validation. |
+| `AMD-012` / `DEV-012` | Opcode `275` constructs `VEXTTERNOP (I32 X 4) (I16 X 8) RELAXED_DOT_ADD S`, violating the family premise `4 * lsize(input) = lsize(result) = 32` | Opcode `275` SHALL derive, decode, and encode exactly `VEXTTERNOP (I32 X 4) (I8 X 16) RELAXED_DOT_ADD S`; the malformed pinned `I16 X 8` form SHALL be excluded. The pinned transcription and default remain byte-identical. |
+| `AMD-013` / `DEV-013` | `Subtype_ok2` omits validity of each generalized declared supertype, allowing an invalid proof-internal type use to create false cross-family subtyping through transitivity | Every generalized supertype in `Subtype_ok2` SHALL satisfy `Typeuse_ok`; no other subtyping rule changes. The strengthened premise SHALL propagate through the sole release validation hierarchy and executable checker. |
+
+Each repair SHALL be represented by exact source digest, anchors, removed text,
+inserted text, affected authority symbols, and amended Lean declarations inside
+`Wasm.core3AuthorityAmendmentSet`. `Wasm.Profile` SHALL bind the identity of that
+ordered set as well as the vendored-tree identity. The public
+`Wasm.DeclarativeBinaryRelation`, `Wasm.decode`, `Wasm.encode`, and
+`Wasm.DeclarativelyValid` SHALL use one recursively propagated amended Core
+relation; a leaf-level repair beside a still-pinned public decoder or validator is
+insufficient. The public `Wasm.Module` carrier SHALL contain a Core module together
+with proof that some byte sequence derives it under that amended binary relation;
+it SHALL store no privileged source bytes and SHALL introduce no coercion that can
+hide a carrier mismatch.
+
+No coverage marker SHALL be attached to these amended declarations. Coverage still
+measures the digest-bound pinned tree, while the profile identity separately binds
+the repair set. None of these amendments, by itself, discharges a required theorem:
+the laws below remain outstanding until their public statements are proved over the
+single amended carrier and relations.
 
 Required theorems include:
 
@@ -2503,24 +2544,18 @@ def Atlas.OptimumRelevant
 Two honesty conditions SHALL hold of any admissible reading of them: an attention
 root listing no signature contains no candidate, and a certificate root listing no
 certificate identity supplies no *retained* exclusion certificate. Both follow from
-the definitions above, and it is exactly those two conditions that make the
-following refutation unavoidable.
+the definitions above and are proved by `Atlas.honesty_conditions_satisfiable`.
 
 This clause previously required `attention_no_optimum_relevant_false_negative` with
 no hypothesis about the state beyond the seal, and with `candidateBytes` an arbitrary
-byte string. That proposition is **false**, and the repository has proved it false
-(`Atlas.attention_no_optimum_relevant_false_negative_is_false`, deviation `DEV-005`)
-*parametrically* in the two predicates, so no reading satisfying the honesty
-conditions rescues it. `Atlas.SealCertificate` is the conjunction of seven
-deterministic checkers, not one of which mentions a byte string, a decoder, a
-semantics or a cost; `attentionCompleteCheck` asks only that every object the state
-**records** is routed by some indexed signature, and it is satisfied — with every
-root empty — by a state that recorded nothing at all. Nothing links such a seal to an
-arbitrary candidate whose evaluated score is within the baseline, and no exclusion
-certificate could have been sound either: of the three grounds listed above, `empty`
-is contradicted by the witness's profile validity, `cannotBeatBound` by its tying the
-baseline, and `reconstructibleElsewhere` by the core attending nothing
-(`Atlas.no_listed_exclusion_ground_for_witness`).
+byte string. A prior revision claimed a concrete, kernel-checked refutation of that
+all-byte proposition. That refutation depended on the now-retired `Wasm.Subset`
+release witness and its evaluator; once that wrong-carrier release cone was removed,
+the refutation declarations were removed with it and the claim of refutation was
+withdrawn. This repository therefore asserts no current counterexample to the
+superseded proposition. The structural scope gap remains disclosed: the seven seal
+checkers constrain the state the Atlas records, whereas the all-byte quantifier must
+be supplied by the separate public-Core coverage proof.
 
 The amendment therefore states attention completeness **relative to what the Atlas
 was given**: over a coherent state and a candidate in its declaration base. Within
@@ -2528,9 +2563,12 @@ that scope the conclusion is **strictly stronger** than the disjunction it repla
 the left disjunct is proved outright, at the `attend`-level reading as well as the
 core-level one, so no exclusion certificate is needed and none is offered, and the
 `Atlas.OptimumRelevant` witness is returned so that no hypothesis is idle. The two
-added hypotheses are proved load-bearing and neither is an assumption that the index
-already holds the candidate: `hdeclared` says only that the candidate reached the
-Atlas as a declaration, and the indexing and routing are then derived.
+added hypotheses delimit the theorem's proved scope, and neither assumes that the
+index already holds the candidate: `hdeclared` says only that the candidate reached
+the Atlas as a declaration, and the indexing and routing are then derived by
+`Atlas.attentionRoutes_of_indexesCandidate` and
+`Atlas.attentionContains_of_attentionRoutes`. The surviving theorem is
+`Atlas.attention_no_declared_optimum_relevant_false_negative`.
 
 **What this amendment gives up, stated plainly.** The obligation shrank. The residue
 — that every profile-valid byte string is declared to the Atlas — is §10.5's
@@ -2538,7 +2576,9 @@ universal coverage obligation, which is stated there with no coverage hypothesis
 is **not** discharged by this clause, by the seal, or by anything in §12. A seal
 built from seven checkers that never read a byte SHALL NOT be presented as carrying a
 proposition quantified over all byte strings; §10.5 is where that quantifier lives,
-and it remains open.
+and `Universal.universal_sublevel_coverage` remains open. The amendment earns zero
+release credit, and the required name
+`Atlas.attention_no_optimum_relevant_false_negative` also remains open.
 
 ```lean
 theorem attention_no_optimum_relevant_false_negative
@@ -2563,12 +2603,13 @@ theorem attention_no_optimum_relevant_false_negative
   Atlas.AttentionContains core candidateBytes
 ```
 
-The class this theorem speaks about SHALL be shown inhabited by a real candidate
-actually returned by the index, so that it is not a statement about an empty class,
-and `Atlas.OptimumRelevant` SHALL be defined from the objective, the candidate bytes
-and the decider alone — mentioning no attention index, no `attend`, no signature and
-no seal check — so that relevance is not defined through the mechanism the theorem
-is about.
+The class this theorem speaks about SHALL ultimately be shown inhabited by a real
+public-Core release-scope candidate actually returned by the index, so that it is not
+a statement about an empty class. No retired `Wasm.Subset` witness earns that
+non-vacuity credit. `Atlas.OptimumRelevant` SHALL be defined from the objective, the
+candidate bytes and the decider alone — mentioning no attention index, no `attend`,
+no signature and no seal check — so that relevance is not defined through the
+mechanism the theorem is about.
 
 An attention score alone is never an optimality proof.
 
@@ -2853,7 +2894,9 @@ The following public declarations SHALL exist with fully implemented bodies and 
 ```lean
 Wasm.decode_sound
 Wasm.decode_complete
-Wasm.validate_iff_declarative
+Wasm.encode_decode_roundtrip
+Wasm.validate_bool_iff
+Wasm.validation_preservation
 Wasm.validation_progress
 Wasm.mem_successors_iff_step
 Wasm.bounded_tree_covers_every_branch
@@ -3457,32 +3500,40 @@ Three rules govern this log.
 | `AMD-001` | §5, new §5.1 | Lean tooling under `Tools/`; "the Rust workspace SHALL be removed after the Lean conformance replacement passes" | §5.1 fixes two languages: Lean 4 is the proof and implementation language under `WasmGemmGnaf/`; Rust is the infrastructure and tooling language under `xtask/`, one-directional and off the proof path | Neutral. The trust base stays the Lean kernel: `xtask` **checks** whether the kernel discharged an obligation, never **decides** one. Supersedes an unfiled `DEV-003`. |
 | `AMD-002` | §7.5 | `costed_erase_iff_plain_run` as a bare biconditional between `CostedRun` and the plain run of the erased trace | The biconditional's right-hand side carries `Wasm.CostedLabelling`, plus the side-condition-free existential law `costed_run_iff_plain_run` and the definition of `CostedLabelling` | Strengthening. The old text is **proved false** (`DEV-001`); the forward direction is now strictly stronger, and the intent is stated unconditionally. |
 | `AMD-003` | §12.5 | `incremental_eq_full_rebuild` with no hypothesis, rebuilding through `semanticRebuildBody` | The same equation under `Atlas.Coherent state.body`, rebuilt in the state's **own** scope through `semanticRebuildBodyWith`, with `incremental_eq_full_rebuild_exact`, `semanticApplyBody_coherent` and `rebuild_coherent` required beside it | Strengthening. The old text is **proved false** six ways (`DEV-004`), including that restricting to unscoped states does not rescue it. The scope objection is fixed rather than assumed away, so the amended form implies the repaired literal form and constrains scoped states as well. |
-| `AMD-004` | §12.2 | `attention_no_optimum_relevant_false_negative` over an arbitrary byte string, concluding a disjunction with an undefined exclusion predicate; `AttentionContains` and `HasSoundExclusionCertificate` left undefined | The four predicates defined normatively; the theorem restricted to a coherent state and a candidate in its declaration base, concluding the strictly stronger conjunction of relevance, `attend`-level routing and core-level containment | **Obligation shrank, and this is the disclosure.** The old text is **proved false** parametrically in the two undefined predicates (`DEV-005`); no honest reading rescues it. The byte-universe residue is §10.5's universal coverage obligation and stays open there. Within its scope the conclusion is stronger than the disjunction it replaces. |
-| `AMD-005` | §4, §7.3 | Silence on the pinned Core 3.0 revision's instruction-sequence typing defect | The defect recorded, the pin explicitly **not** advanced, `DeclarativelyValid` read over the amended `Instr_ok'`/`Instrs_ok'` judgments, with no-regression and re-proved arity discipline required and the coverage inventory forbidden to count the amendment | Strictly wider declarative side, disclosed and bounded. The defect is in the **vendored pinned source**, not in this document (`DEV-006`); upstream repaired it in PR #2197, after the pin. `validate_bool_iff` is unchanged and remains outstanding. |
+| `AMD-004` | §12.2 | `attention_no_optimum_relevant_false_negative` over an arbitrary byte string, concluding a disjunction with an undefined exclusion predicate; `AttentionContains` and `HasSoundExclusionCertificate` left undefined | The four predicates defined normatively; the theorem restricted to a coherent state and a candidate in its declaration base, concluding the strictly stronger conjunction of relevance, `attend`-level routing and core-level containment | **Obligation shrank, and this is the disclosure; release credit is zero.** The earlier concrete refutation depended on the retired `Wasm.Subset` release witness and is withdrawn. The declared-candidate theorem and its routing, containment and honesty lemmas survive; `Universal.universal_sublevel_coverage` and the required all-byte name stay open. |
+| `AMD-005` | §4, §7.3 | Silence on the pinned Core 3.0 revision's instruction-sequence typing defect | The defect recorded, the pin explicitly **not** advanced, `DeclarativelyValid` read over the sole combined amended `Instr_okA`/`Instrs_okA` hierarchy, with conditional pinned-compatibility and re-proved arity discipline required and the coverage inventory forbidden to count the amendment | Strictly wider instruction-sequencing rule, disclosed and bounded. The defect is in the **vendored pinned source**, not in this document (`DEV-006`); upstream repaired it in PR #2197, after the pin. `validate_bool_iff` is unchanged and remains outstanding. |
 | `AMD-006` | §11.1 | Silence on the trip count of a register-bounded plan loop | The trip count clamped at the profile's address-space ceiling, so a static step bound stays derivable from plan text | Neutral in reach (`DEV-002`). The ceiling equals `maxRawExtent` and is unreachable for the released ABI; the clamp preserves `Plan.steps_le_stepBound` instead of weakening it. |
+| `AMD-007` | §4, §7.3 | Pinned signed-LEB continuation recurses into the unsigned grammar | Signed continuation recurses into the signed grammar, with an independently proved parser | Narrowing to the intended signed grammar (`DEV-007`). The recursively amended production now propagates through the proved public decoder and canonical encoder round trip; no selected release artifact follows from that backend result. |
+| `AMD-008` | §4, §7.3 | Pinned opcode `0xBB` reverses the result and operand of `f64.promote_f32` | `0xBB` derives `CVTOP F64 F32 PROMOTE` and excludes the malformed pinned result | Replacement, neutral in intended Core reach (`DEV-008`). The corrected production now propagates through the proved public decoder and canonical encoder round trip; no selected release artifact follows from that backend result. |
+| `AMD-009` | §4, §7.3 | Pinned free-index auxiliaries omit tags and exception equations | Tags, catches, `throw`, `throw_ref`, and the `try_table` instruction list participate in dependency collection | Wider dependency bookkeeping only (`DEV-009`); it adds no program form. Checker equivalence remains outstanding. |
+| `AMD-010` | §4, §7.3 | Pinned binary control grammar omits opcodes `0x14` and `0x15` | `call_ref` and `return_call_ref` receive their Core 3.0 encodings | Wider to the intended Core binary language (`DEV-010`). The added productions now propagate through the proved public decoder and canonical encoder round trip; no selected release artifact follows from that backend result. |
+| `AMD-011` | §4, §7.3 | Four pinned heap-subtyping rules omit `heaptype ≠ BOT` | All four premises restored and propagated through the release validation hierarchy | Narrowing away invalid cross-family derivations (`DEV-011`). Checker equivalence and validation metatheory remain outstanding. |
+| `AMD-012` | §4, §7.3 | Pinned opcode `275` constructs the internally ill-formed `VEXTTERNOP (I32 X 4) (I16 X 8) RELAXED_DOT_ADD S` | Opcode `275` uses the unique well-formed second shape `I8 X 16` and excludes the malformed pinned result | Replacement, neutral in intended Core reach (`DEV-012`). Amendment text alone discharges zero claims; the decoder, encoder, well-formedness bridge, and canonical public round trip are proved separately, but they select no release artifact. |
+| `AMD-013` | §4, §7.3 | Pinned `Subtype_ok2` omits validity of its generalized supertype type uses | `Subtype_ok2` requires every declared generalized supertype to satisfy `Typeuse_ok`; `Heaptype_sub/trans` and `Deftype_sub/super` remain unchanged | Narrowing away invalid proof-internal subtype derivations (`DEV-013`). This is the exact upstream repair from WebAssembly/spec#2141 and commit `44b03c21317f07500f66bc739553c83dcde445eb`; checker equivalence remains outstanding. |
 
-**`AMD-002` moved the ledger by itself, and that is a defect in the process rather
-than a result.** An earlier draft of this paragraph asserted that none of
-`AMD-002` through `AMD-006` moves a name from outstanding to discharged; that
-sentence was false and adversarial review caught it. `AMD-002` makes §7.5's
-required declaration bindable by a theorem the repository **already proved**, so
-`xtask claims required` went from 34 to 35 discharged while
-`WasmGemmGnaf/Wasm/Erasure.lean` was not modified at all. **Net new proof for
-that credit: zero lines.**
+**`AMD-002` once moved the syntactic ledger by itself, and that credit has been
+withdrawn.** It moved the reported count from 34 to 35 only because an existing
+legacy-subset theorem was exact-marked after the amendment. That declaration
+quantifies over `Wasm.Subset.Module` and the legacy subset `Run` / `CostedRun`,
+not the public amended-Core `Wasm.Module`, so the SPEC-scope name remains
+outstanding. **Net new public-Core proof for that credit: zero lines.**
 
 The amendment itself stands — §7.5's literal biconditional is refuted by
 `Wasm.not_costed_erase_iff_plain_run` over a non-degenerate witness, so the text
 was wrong and correcting it was required. What must not stand is reading the
-resulting +1 as progress. A repository cannot discharge an obligation by editing
-the document that imposes it, and the release-connected count, which is the only
-one that measures progress toward the release theorem, does not move for
-`AMD-002`.
+former +1 as progress. A repository cannot discharge an obligation by editing
+the document that imposes it, and correcting the false formula does not itself
+discharge the public-carrier obligation.
 
 The rest: `AMD-003` and `AMD-004` state propositions the repository proves under
 *other* names, so those two SPEC §15 names stay outstanding until a declaration
-of the required name carries the amended proposition; `AMD-005` leaves
-`Wasm.validate_iff_declarative` outstanding and circular; `AMD-006` concerns no
-required name.
+of the required name carries the amended proposition; `AMD-005` and `AMD-011`
+leave `Wasm.validate_iff_declarative` outstanding; the combined recursive
+propagation of `AMD-007`, `AMD-008`, `AMD-010`, and `AMD-012` now closes
+`Wasm.decode_sound`, `Wasm.decode_complete`, and the canonical public
+encode/decode round trip. Those backend facts select no release bytes and build
+no system evaluation. `AMD-009` and `AMD-013` are consumed by the same open
+validator closure; and `AMD-006` concerns no required name.
 
 **Rule, added because this happened.** An amendment that makes an existing
 theorem bindable SHALL be recorded in `model/spec-deviations.json` with

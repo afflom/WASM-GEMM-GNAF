@@ -50,6 +50,8 @@ set_option autoImplicit false
 
 namespace WasmGemmGnaf.Wasm.Core.Binary
 
+variable [authority : BinaryAuthority]
+
 /-! ## Sections -/
 
 /-- `grammar Bsection_(N, grammar BX : en*) : en*`:
@@ -453,5 +455,11 @@ inductive Bmodule : Bytes → Module → Prop where
         { types := types, imports := imports, tags := tags, globals := globals,
           mems := mems, tables := tables, funcs := funcs, datas := datas,
           elems := elems, start := start, exports := exports }
+
+/-- The explicit byte-identical pinned whole-module relation. -/
+abbrev BmodulePinned := @Bmodule pinnedBinaryAuthority
+
+/-- The whole-module relation under the exact AMD-007/008/010 authority. -/
+abbrev BmoduleA := @Bmodule amendedBinaryAuthority
 
 end WasmGemmGnaf.Wasm.Core.Binary

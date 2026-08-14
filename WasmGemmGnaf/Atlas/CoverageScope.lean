@@ -25,12 +25,11 @@ the state's `searchPartitions`, the identities in its `candidateFacts`, and the
 core's `partitionCoverRoot`.  Two states agreeing on those three agree on the
 check — *whatever* byte strings exist, decode, validate, or compute GEMM.
 
-Consequence, and the reason this lemma is here: no proposition quantified over
-`ByteArray` can be derived from `universalCoverCompleteCheck … = true` alone.
-The check verifies that the recorded cover is internally consistent with the
-recorded candidate facts.  It does **not** verify that those partitions denote
-every profile-valid byte string, and it is satisfiable by a cover that records
-nothing at all.
+The check verifies only that the recorded cover is internally consistent with
+the recorded candidate facts. It does not inspect `ByteArray`, decode modules,
+or establish that those partitions denote every profile-valid byte string. The
+equality theorem below records that scope limitation; it is not a meta-level
+proof that no byte-quantified proposition could follow from additional premises.
 
 This is exactly the failure mode SPEC §10.5 forbids when it requires
 `universal_sublevel_coverage` to "have no coverage hypothesis", and that
@@ -39,9 +38,9 @@ UOR-GNAF §18 lists as an explicit non-claim:
   *that registration, discovery, index presence, or provenance alone proves
   eligibility, correctness, trust, feasibility, cost, or optimality.*
 
-`Atlas.seal_implies_universal_coverage` (SPEC §15) is therefore **absent** from
-this repository rather than derived from the seal.  Deriving it from this check
-would be unsound.
+`Atlas.seal_implies_universal_coverage` (SPEC §15) is therefore absent rather
+than being inferred from this bookkeeping check. A future proof must supply the
+separate public-carrier coverage premises.
 -/
 theorem universalCoverCompleteCheck_scope_blind
     (s₁ s₂ : UnsealedState) (core₁ core₂ : SealCore)
@@ -52,9 +51,9 @@ theorem universalCoverCompleteCheck_scope_blind
   simp only [universalCoverCompleteCheck, hp, hc, hr]
 
 /--
-The same statement in the form the release gate cares about: the cover check
-cannot distinguish two cores whose recorded roots agree, so it cannot be the
-witness for a claim about all competitor bytes.
+The same equality with a fixed state: the cover check cannot distinguish two
+cores whose recorded roots agree. This is scope evidence, not the missing
+all-competitor coverage theorem.
 -/
 theorem universalCoverCompleteCheck_determined_by_record
     (s : UnsealedState) (core₁ core₂ : SealCore)

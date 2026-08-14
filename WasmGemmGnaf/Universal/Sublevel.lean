@@ -5,12 +5,14 @@
 
   SCOPE — read this before citing anything here.
 
-  This file states `GlobalOptimal` at full strength and proves *structural*
-  facts about it: monotonicity in the competitor scope, projection to a single
-  competitor, and non-vacuity of the competitor premises.  It also proves the
-  two sublevel facts that follow from properness alone: a score sublevel bounds
-  every charged coordinate, and bounded-length byte strings are finitely
-  covered.
+  This file's current `GlobalOptimal` uses the legacy subset evaluation carrier.
+  Its *outer byte quantifier* is unrestricted, and this file proves structural
+  facts about that quantifier: monotonicity in the byte scope, projection to a
+  single competitor, and non-vacuity of the competitor premises.  Those facts
+  receive no public amended-Core release credit until the evaluation carrier is
+  migrated.  The file also proves two carrier-level sublevel facts that follow
+  from properness alone: a score sublevel bounds every charged coordinate, and
+  bounded-length byte strings are finitely covered.
 
   It proves `possible_winner_within_sublevel` (SPEC §10.3): an evaluated
   competitor that does not score worse than the baseline is confined to the
@@ -48,12 +50,13 @@ variable {P : Wasm.Profile} [Foundation.Fintype (Gemm.RawInvocation P)]
   **SPEC §1**, `GlobalOptimal`, with the competitor quantifier restricted to a
   named scope.
 
-  This generalization exists only so that the *strength* of the real predicate
+  This generalization exists only so that the outer byte-scope strength of the current predicate
   is checkable: `GlobalOptimal` below is exactly this with the scope `fun _ =>
   True`, and `globalOptimalOver_mono` proves that shrinking the scope can only
   weaken the statement.  A scope-restricted instance is therefore never a
-  substitute for the release theorem, and SPEC §1's rule that "a theorem scoped
-  only to such a subset SHALL have a different name" is visible in the types.
+  substitute for the public release theorem.  The current predicate's inner
+  profile/evaluation carrier remains `Wasm.Subset.Module` and is separately
+  outstanding.
 -/
 def GlobalOptimalOver (scope : ByteArray → Prop) (S : Setting P) (D : Decider S)
     (O : Cost.ProperObjective P S.problem) (releasedBytes : ByteArray) : Prop :=
@@ -83,13 +86,15 @@ def GlobalOptimalOver (scope : ByteArray → Prop) (S : Setting P) (D : Decider 
          Foundation.CanonicalBytesLE releasedBytes competitorBytes)
 
 /--
-  **SPEC §1**, `GlobalOptimal`.
+  The current legacy-carrier shape corresponding to **SPEC §1** `GlobalOptimal`.
 
   All three leading conjuncts, the existential over `releasedEval`, and *both*
   universally quantified clauses.  The competitor quantifier ranges over **all**
   of `ByteArray` — every finite byte sequence, not only GNAF plans, registered
   kernels, familiar algorithms, proof-carrying submissions, or candidates found
-  by an attention index.
+  by an attention index.  Its `ProfileValid` and `SystemEvaluation` predicates
+  still use `Wasm.Subset.Module`, so this is not yet the public amended-Core
+  release predicate.
 -/
 def GlobalOptimal (S : Setting P) (D : Decider S)
     (O : Cost.ProperObjective P S.problem) (releasedBytes : ByteArray) : Prop :=
@@ -387,13 +392,16 @@ theorem mem_boundedByteArrays_iff {n : Nat} (b : ByteArray) :
 
 end Enumerate
 
-/-- **SPEC §10.3 (1)**, assembled: every competitor whose evaluated score lies
-in the sublevel `u` occurs in the finite list `boundedByteArrays u`.
+/-- Carrier finiteness for the current legacy `SystemEvaluation`: every
+evaluated byte string whose score lies in the sublevel `u` occurs in the finite
+list `boundedByteArrays u`.
 
 This is a finiteness fact about the *carrier*.  It is NOT
 `universal_sublevel_coverage`: nothing here claims that every winner is
 evaluated, that the enumeration is checked, or that modules outside the
-sublevel cannot beat the baseline. -/
+sublevel cannot beat the baseline.  Because `SystemEvaluation` still contains
+`Wasm.Subset.Module`, this theorem receives no public release credit until the
+competitor/evaluation carrier is migrated. -/
 theorem sublevel_bytes_enumerated {P : Wasm.Profile}
     [Foundation.Fintype (Gemm.RawInvocation P)] {S : Setting P}
     (O : Cost.ProperObjective P S.problem) {bytes : ByteArray}
@@ -418,8 +426,9 @@ proves it.  Both are stated over the objective's **own declared**
 
 What this is NOT: it is not `universal_sublevel_coverage`.  Nothing below claims
 that every winner is evaluated, that the sublevel is enumerated and checked, or
-that a module *outside* the sublevel cannot beat the baseline.  It is the first
-of the six numbered obligations of §10.3 and it discharges only that one.
+that a module *outside* the sublevel cannot beat the baseline.  The definitions
+below still use the legacy subset evaluation carrier and therefore do not
+discharge the public amended-Core §10.3 obligation.
 -/
 
 section PossibleWinner

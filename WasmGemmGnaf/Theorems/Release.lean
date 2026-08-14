@@ -12,8 +12,7 @@
   | name | content |
   |---|---|
   | `Theorems.release_scope_identities` | every profile / problem / setting / objective identity equation of the release instance, in one conjunction |
-  | `Theorems.release_seam_nondegenerate` | **GO-008**: the constructed `Release.seam` charges every event, charges every validation, budgets every coordinate, and its machine completes with a nonempty frontier |
-  | `Theorems.release_systemEvaluation_inhabited` | **GO-008's headline**: `Universal.SystemEvaluation` at the constructed setting is inhabited on a `ProfileValid` closed literal |
+  | `Theorems.release_seam_nondegenerate` | the constructed subset `Release.seam` charges every event, charges every validation, budgets every coordinate, and its machine completes with a nonempty frontier |
 
   ## WHAT IS NOT PROVED HERE, AND USED TO BE
 
@@ -46,12 +45,13 @@
   ## EVERY HYPOTHESIS THAT REMAINS
 
   1. `[Foundation.Fintype (Gemm.RawInvocation Release.wasmProfile)]` — SPEC
-     §8.4's `problem_input_fintype`.  This is now **discharged**, globally and
-     constructively, by `Gemm.raw_input_finite` in
-     `Universal/EnumerateInputs.lean`; §4's section header still binds it
-     because the statements there were written before the instance existed, and
-     it is satisfied rather than assumed.
-  2. `(seam : Release.Seam)` — **CLOSED (GO-008)**.  `Release.seam` is a closed
+     §8.4's `problem_input_fintype`.  A global instance exists in
+     `Universal/EnumerateInputs.lean`, but the compiled axiom audit reaches
+     `Classical.choice`.  Because this is an executable enumeration witness,
+     SPEC §4 does not credit it; `UV-004` and the three associated required
+     names remain outstanding until that dependency is removed.
+  2. `(seam : Release.Seam)` — constructed for the current subset machine.
+     `Release.seam` is a closed
      term: `Release.semantics` (`Release.costEvent` plus `Wasm.validationCost`
      and `Wasm.instantiatedStaticBytes`), `Release.machine`
      (`Wasm.releaseCostedMachine`, the real all-branch costed explorer), and
@@ -70,29 +70,20 @@
      not even statable in the form the deleted theorems used, because that form
      mentioned the decider.  No byte sequence is proved `ProfileValid ∧
      SemanticCorrect ∧ SemanticWithinResources` anywhere in this repository, and
-     none is asserted to be.  Two of the four conjuncts are theorems on one
-     closed literal, `Release.witnessBytes`: `Release.witness_profileValid`
-     (profile validity) and `Theorems.release_systemEvaluation_inhabited` (the
-     `Universal.SystemEvaluation` inhabitant).  `Universal.SemanticWithinResources`
-     is unproved for it and `Universal.SemanticCorrect` is **false** for it — the
-     witness module's `gemm` returns the constant `0`.  `Artifact/Baseline.lean`
-     proves profile validity for the compiled GEMM witness
-     (`Artifact.baseline_profileValid`); its `SemanticCorrect` is
-     `GNAF.compile_refines`, omitted under `BI-002`/`O-6`.
+     none is asserted to be.  The former subset-emitted witness and its
+     byte-indexed `Universal.SystemEvaluation` have been omitted; the current
+     GNAF compiler does not produce a public Core module.
   5. The disclosed profile deviation: `Release.wasmProfile` is
-     `Wasm.unitWitnessProfile`, not SPEC §7.2's release literal — the cost table
-     is `Wasm.canonicalCostTableUnits`, whose eight units, canonical GC widths
-     and audit rows are the canonical release values, but which is *not* built
-     by `Wasm.buildCanonicalCostTable` from a vendored Core 3.0 conformance map,
-     because neither that function nor that map exists here.  What CO-006
-     reported — empty `ruleRows` and `initializationRows`, so that `rowFor?`
-     returned `none` for every rule — is closed: the rows are now an exact,
-     duplicate-free cover of `Wasm.RuleId` and `Wasm.InitEventId`, and
-     `release_scope_identities` asserts that cover rather than asserting
-     emptiness.  What remains open is only the *provenance* of the row
-     contributions: they are proved equal to this repository's own contribution
-     law (`Wasm.canonicalCostTable_charges_exactly`), not cross-checked against
-     an external conformance map.
+     `Wasm.unitWitnessProfile`, not SPEC §7.2's release literal.  Its cost table
+     is `Wasm.canonicalCostTableUnits`; the audit rows exactly cover the local
+     legacy `Wasm.RuleId` and `Wasm.InitEventId` enumerations, and their
+     contributions agree with this repository's own contribution law
+     (`Wasm.canonicalCostTable_charges_exactly`).  Those identifiers are not a
+     complete enumeration of the amended Core rule universe, however, and the
+     rows are not built from or cross-checked against a vendored Core 3.0
+     conformance map.  Thus the former empty-row defect is repaired only for the
+     legacy subset machinery; release-wide CO-006 remains open for both complete
+     amended-Core coverage and external provenance.
 
   `Release.decider` no longer exists (§2).  Nothing selects a byte sequence at
   the release scope, so `Artifact.released_bytes_equal_selection` (`O-4`) is not
@@ -113,11 +104,10 @@ open WasmGemmGnaf
 
 One conjunction, all `rfl`-or-near-`rfl`, so that "which profile, which problem,
 which objective" is checkable in a single place instead of being reassembled
-from a dozen files.  The four `ruleRows`/`initializationRows` conjuncts are the
-machine-checked cost-profile statement SPEC §7.5 requires of
-`buildCanonicalCostTable`'s argument — an exact, duplicate-free cover, with
-every rule resolving to a row; they are part of the scope statement, not a
-footnote to it. -/
+from a dozen files.  The four `ruleRows`/`initializationRows` conjuncts establish
+an exact, duplicate-free cover of the local legacy `Wasm.RuleId` and
+`Wasm.InitEventId` enumerations, with every such rule resolving to a row.  They
+do not establish the complete amended-Core coverage required by SPEC §7.5. -/
 
 /--
   **The release scope, stated in full.**
@@ -125,9 +115,10 @@ footnote to it. -/
   Reading, in order: the profile body is the canonical Core 3.0 wasm32 body at
   the pinned revision commit over `Wasm.canonicalCostTableUnits`; the address
   model is 32-bit with the 65536-page limit; the cost table is the *units*
-  table, and its audit rows are an exact duplicate-free cover of every pinned
-  Core rule identifier and every harness initialization event; decoding costs
-  one unit per byte plus one terminal unit; the problem is
+  table, and its audit rows are an exact duplicate-free cover of every local
+  legacy `Wasm.RuleId` and every harness initialization event; this is not a
+  complete amended-Core rule cover.  Decoding costs one unit per byte plus one
+  terminal unit; the problem is
   `Gemm.canonicalWGNGv1ProblemBody` at `workloadRepetitions = 1` with the
   `2 ^ 320` costed step budget; the setting forwards exactly those numbers, adds
   nothing to `Gemm.Reference.Accepts` and narrows nothing in the raw-invocation
@@ -230,17 +221,16 @@ implemented explorer is the same non-conformance.
 result at the release scope.**  Closing it means implementing SPEC §10.1's
 finite decoder, validator, input enumerator and all-branch explorer as a
 `Universal.Decider (Release.setting Release.seam)` and proving
-`Universal.DeciderAnswersAdmissible` of *that*.  The scope identities of §1, the
-seam non-degeneracy of §4 and the evaluation inhabitant of §4 are unaffected:
-none of them mentions a decider. -/
+`Universal.DeciderAnswersAdmissible` of *that*.  The scope identities of §1 and
+the subset seam non-degeneracy of §4 are unaffected: neither mentions a
+decider. -/
 
-/-! ## 4. The seam is constructed (GO-008)
+/-! ## 4. The subset seam is constructed
 
 Everything in §2 and §3 takes `(seam : Release.Seam)` as an argument.  Until
 `Release.seam` existed, nothing inhabited that type, so every one of those
 statements was an implication whose *type-level* antecedent might have been
-unsatisfiable — and the nonemptiness antecedent `hne` was worse than open, it
-was not even known to be satisfiable at any seam.
+unsatisfiable.
 
 `Artifact/Release.lean` §5 now builds one:
 
@@ -275,10 +265,10 @@ cannot be discharged here. -/
   `Release.witnessModule` the costed machine both initializes and returns a
   completed, nonempty, canonically ordered frontier — at *every* raw invocation.
 
-  The last conjunct is the one that matters: a `Seam` whose machine answered
-  `.initializationFailure` unconditionally would typecheck and would leave
-  `Universal.SystemEvaluation` uninhabited, which is exactly the degenerate
-  inhabitant this theorem rules out.
+  The last conjunct rules out a `Seam` whose machine answers
+  `.initializationFailure` unconditionally.  It does not construct a
+  byte-indexed `Universal.SystemEvaluation`; that additionally needs the omitted
+  compiler-to-public-Core emission path.
 -/
 theorem release_seam_nondegenerate :
     (∃ e : Wasm.Event,
@@ -287,7 +277,7 @@ theorem release_seam_nondegenerate :
           Wasm.dispatchCharge Release.wasmProfile.costTableBody) ∧
     (∀ e : Wasm.Event,
       0 < (Release.seam.semantics.costEvent e).charge.wasmRuleSteps) ∧
-    (∀ m : Wasm.Module, 0 < Release.seam.semantics.validationSteps m) ∧
+    (∀ m : Wasm.Subset.Module, 0 < Release.seam.semantics.validationSteps m) ∧
     (∀ dc : Cost.DynamicCoordinate, 0 < dc.value Release.seam.limit) ∧
     (∀ raw : Gemm.RawInvocation Release.wasmProfile,
       Release.seam.machine.initialGemmInvocationCosted Release.witnessModule
@@ -307,30 +297,5 @@ theorem release_seam_nondegenerate :
   ⟨Release.seam_costEvent_not_zero, Release.seam_costEvent_charge_pos,
    Release.seam_validationSteps_pos, Release.limit_pos,
    Release.seam_machine_completes⟩
-
-section AtSeam
-
-variable [Foundation.Fintype (Gemm.RawInvocation Release.wasmProfile)]
-
-/--
-  **GO-008's headline, at top level.**
-
-  `Universal.SystemEvaluation` at the *constructed* release setting is
-  inhabited, on a closed byte literal that is also `Universal.ProfileValid`.
-
-  This is what defeats vacuity.  It does **not** say the literal is
-  `Universal.Admissible`: `Universal.SemanticCorrect` demands
-  `Gemm.Reference.Accepts` at every raw invocation, which is false for a module
-  whose `gemm` returns `0`, and is not claimed.  Two of the four conjuncts of
-  the release antecedent are now theorems on one literal; two are not.
--/
-theorem release_systemEvaluation_inhabited :
-    ∃ bytes : ByteArray,
-      Universal.ProfileValid Release.wasmProfile bytes ∧
-      Nonempty (Universal.SystemEvaluation (Release.setting Release.seam) bytes) :=
-  ⟨Release.witnessBytes, Release.witness_profileValid,
-    ⟨Release.witnessSystemEvaluation⟩⟩
-
-end AtSeam
 
 end WasmGemmGnaf.Theorems

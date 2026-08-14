@@ -23,13 +23,13 @@ variable {P : Wasm.Profile}
 observation list of an `InputEvaluation` is a `NonemptyCanonicalFrontier`, so it
 carries at least one execution by construction.  `Correct` therefore cannot be
 satisfied by an empty run relation. -/
-theorem observations_ne_nil {S : Setting P} {module : Wasm.Module}
+theorem observations_ne_nil {S : Setting P} {module : Wasm.Subset.Module}
     {raw : Gemm.RawInvocation P} (ie : InputEvaluation S module raw) :
     ie.observations.elements ≠ [] :=
   Foundation.NonemptyCanonicalFrontier.elements_ne_nil _
 
 /-- Every input evaluation exhibits at least one costed execution. -/
-theorem exists_observation {S : Setting P} {module : Wasm.Module}
+theorem exists_observation {S : Setting P} {module : Wasm.Subset.Module}
     {raw : Gemm.RawInvocation P} (ie : InputEvaluation S module raw) :
     ∃ o : CostedExecutionObservation S.semantics ie.initial,
       o ∈ ie.observations.elements :=

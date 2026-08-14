@@ -4,17 +4,17 @@
 
   SCOPE — read this before citing anything here.
 
-  This file transcribes SPEC section 10.1 with its quantifiers unchanged.  Every
-  competitor predicate below quantifies over *all* raw invocations and *all*
-  maximal executions; nothing here is artifact-specific, selector-specific, or
-  conclusion-dependent.
+  This is the legacy subset seam corresponding to SPEC section 10.1, not its
+  public-Core release instantiation.  Every competitor predicate below
+  quantifies over all raw invocations and all maximal executions of the selected
+  seam, and nothing is artifact-, selector-, or conclusion-dependent.  However,
+  `ProfileValid` decodes to `Wasm.Subset.Module`, so these definitions do not yet
+  range over the public representable amended-Core carrier required by the
+  release claim.
 
-  THE SEAM.  Three files of the mandated tree do not exist yet:
-  `Wasm/Costed.lean` (the costed WebAssembly semantics), `Gemm/Reference.lean`
-  (the reference acceptance relation) and `Gemm/Problem.lean` (the problem
-  record).  Rather than invent them — which would silently substitute a wrong or
-  artifact-shaped reference relation into the scope-critical definitions — the
-  pieces they owe are carried as *parameters*:
+  `Wasm/Costed.lean`, `Gemm/Reference.lean`, and `Gemm/Problem.lean` now exist.
+  This file nevertheless retains older parameter records around the subset
+  machine:
 
     * `Universal.Semantics P`     — the event cost map and the two static cost
                                     counters of SPEC section 7.5;
@@ -29,9 +29,9 @@
   `validationSteps`, `staticDataBytes` parameters).  No field of any of these
   records is a *conclusion*: none asserts correctness, feasibility, coverage,
   optimality, or finiteness of anything.  They are the data and the executable
-  functions that the missing layers must supply.  When those layers land, each
-  record is inhabited once with the frozen definitions and nothing in this file
-  changes.
+  functions supplied at a particular legacy seam.  Migrating the release path
+  requires restating these carriers over the public Core machine; merely
+  inhabiting the records with subset functions does not close that obligation.
 
   Every declaration in this file is either a definition or a proved theorem.
   Nothing is assumed.
@@ -51,14 +51,14 @@ set_option autoImplicit false
 
 namespace WasmGemmGnaf.Universal
 
-/-! ## Profile validity (SPEC §10.1)
+/-! ## Legacy subset profile validity
 
-`ProfileValid` is defined here from the *existing* release validator and the
+`ProfileValid` is defined here from the legacy subset validator and the
 profile's own first-order limit table.  It is not a callback. -/
 
 /-- Every index-space population of the module is inside the profile's declared
 limit table (SPEC §7.2). -/
-def WithinProfileLimits (P : Wasm.Profile) (m : Wasm.Module) : Bool :=
+def WithinProfileLimits (P : Wasm.Profile) (m : Wasm.Subset.Module) : Bool :=
   decide (m.types.length ≤ P.body.limits.maxTypes) &&
   decide (m.funcs.length ≤ P.body.limits.maxFunctions) &&
   decide (m.tables.length ≤ P.body.limits.maxTables) &&
@@ -70,23 +70,22 @@ def WithinProfileLimits (P : Wasm.Profile) (m : Wasm.Module) : Bool :=
   decide (m.imports.length ≤ P.body.limits.maxImports) &&
   decide (m.exports.length ≤ P.body.limits.maxExports)
 
-/-- SPEC §10.1's `Wasm.validateUnder`: the release validator together with the
-profile's limit table. -/
-def validateUnder (P : Wasm.Profile) (m : Wasm.Module) : Bool :=
+/-- The legacy subset validator together with the profile's limit table. -/
+def validateUnder (P : Wasm.Profile) (m : Wasm.Subset.Module) : Bool :=
   Wasm.validate m && WithinProfileLimits P m
 
-/-- SPEC §10.1's `HasExactGemmExports`: the required memory and `gemm` exports
-are present with the pinned ABI type, and no other export exists. -/
-def HasExactGemmExports (_P : Wasm.Profile) (m : Wasm.Module) : Prop :=
-  Wasm.Module.exportsMemory m = true ∧
-  Wasm.Module.checkGemmExport m = true ∧
+/-- The legacy subset check that the required memory and `gemm` exports are
+present with the pinned ABI type and no other export exists. -/
+def HasExactGemmExports (_P : Wasm.Profile) (m : Wasm.Subset.Module) : Prop :=
+  Wasm.Subset.Module.exportsMemory m = true ∧
+  Wasm.Subset.Module.checkGemmExport m = true ∧
   ∀ e ∈ m.exports, e.name = Wasm.gemmExportName ∨ e.name = Wasm.memoryExportName
 
-/-- **SPEC §10.1**, `Universal.ProfileValid`.  Quantifier-for-quantifier.
+/-- The current legacy-subset `Universal.ProfileValid`.
 
 SCOPE, and it is load-bearing for every "universal" claim downstream: the
 decoder here is `Wasm.Subset.decode`, the codec of `Wasm/Binary.lean`, not the
-pinned Core 3.0 decoder `Wasm.decode` of `Wasm/CoreFrontEnd.lean`.  The
+public amended-Core decoder `Wasm.decode` of `Wasm/CoreFrontEnd.lean`.  The
 competitor universe is therefore the byte strings that decode under the SUBSET
 grammar into the subset syntax of `Wasm/Syntax.lean`.  That was already true
 before the front-end migration; what changed is that the type now says so
@@ -94,24 +93,23 @@ instead of the name `Wasm.decode` implying the pinned format.  Migrating this
 predicate to the Core decoder is a separate step and would change what the
 release theorem quantifies over. -/
 def ProfileValid (P : Wasm.Profile) (bytes : ByteArray) : Prop :=
-  ∃ module : Wasm.Module,
+  ∃ module : Wasm.Subset.Module,
     Wasm.Subset.decode bytes = .ok module ∧
     validateUnder P module = true ∧
     module.imports = [] ∧
     HasExactGemmExports P module
 
-/-! ## The costed-semantics seam (`Wasm/Costed.lean`) -/
+/-! ## The parameterized legacy costed-semantics seam -/
 
-/-- The costed WebAssembly semantics owed by `Wasm/Costed.lean`: the charge of
-one reduction event and the two static cost counters of SPEC §7.5.  Pure data
-and pure functions; no proposition. -/
+/-- The legacy seam's charge of one subset reduction event and its two static
+cost counters.  Pure data and pure functions; no proposition. -/
 structure Semantics (_P : Wasm.Profile) where
   /-- SPEC §7.5: the charge of one relational reduction event. -/
   costEvent : Wasm.Event → Cost.Event
   /-- SPEC §7.5: `Wasm.validationCost` applied to the module's derivation. -/
-  validationSteps : Wasm.Module → Nat
+  validationSteps : Wasm.Subset.Module → Nat
   /-- SPEC §7.5: `Wasm.instantiatedStaticBytes`. -/
-  staticDataBytes : Wasm.Module → Nat
+  staticDataBytes : Wasm.Subset.Module → Nat
 
 /-- **SPEC §10.1**, `Wasm.InitializationObservation`: the configuration a costed
 GEMM invocation starts from, and the charge of reaching it. -/
@@ -182,22 +180,21 @@ inductive CostedTreeResult {P : Wasm.Profile} (W : Semantics P) (bound : Nat)
   /-- Instantiation failed before any reduction. -/
   | initializationFailure (fault : Wasm.InstantiationFault)
 
-/-- The two executable costed entry points owed by `Wasm/Costed.lean`. -/
+/-- The two executable entry points supplied by a legacy subset costed seam. -/
 structure CostedMachine {P : Wasm.Profile} (W : Semantics P) where
   /-- SPEC §10.1's `Wasm.initialGemmInvocationCosted`. -/
   initialGemmInvocationCosted :
-    Wasm.Module → Wasm.Invocation P →
+    Wasm.Subset.Module → Wasm.Invocation P →
       Except Foundation.FailureReport (InitializationObservation P)
   /-- SPEC §10.1's `Wasm.exploreAllCosted`. -/
   exploreAllCosted :
     (bound : Nat) → (initial : Wasm.Config) → CostedTreeResult W bound initial
 
-/-! ## The problem seam (`Gemm/Problem.lean`, `Gemm/Reference.lean`) -/
+/-! ## The parameterized problem seam -/
 
-/-- The problem-level data SPEC §8 owes: the resource contract, the workload
-repetition count, and the reference acceptance relation.  `Accepts` is exactly
-SPEC §10.1's `Gemm.Reference.Accepts G raw observation`: it is a field of the
-*problem*, as SPEC §8.4 requires, never of the artifact. -/
+/-- Problem-level data for this seam: the resource contract, workload repetition
+count, and reference acceptance relation.  `Accepts` is a field of the problem,
+never of the artifact. -/
 structure Problem (P : Wasm.Profile) where
   /-- SPEC §8.2: the per-invocation costed step budget. -/
   maxSteps : Nat
@@ -244,7 +241,7 @@ variable {P : Wasm.Profile}
 
 /-- **SPEC §10.1**, `Universal.InputEvaluation`: the exact result of the bounded
 all-successor tree on one raw invocation. -/
-structure InputEvaluation (S : Setting P) (module : Wasm.Module)
+structure InputEvaluation (S : Setting P) (module : Wasm.Subset.Module)
     (raw : Gemm.RawInvocation P) where
   /-- The configuration the invocation starts from. -/
   initial : Wasm.Config
@@ -276,7 +273,7 @@ structure InputEvaluation (S : Setting P) (module : Wasm.Module)
 initial configuration escapes the recorded costed observations.  A divergent
 execution has no finite observation, so it falsifies this predicate. -/
 def InputEvaluation.CoversEveryMaximalExecution {S : Setting P}
-    {module : Wasm.Module} {raw : Gemm.RawInvocation P}
+    {module : Wasm.Subset.Module} {raw : Gemm.RawInvocation P}
     (ie : InputEvaluation S module raw) : Prop :=
   ∀ execution : Wasm.MaximalExecution ie.initial,
     ∃ costed ∈ ie.observations.elements,
@@ -297,7 +294,7 @@ variable [Foundation.Fintype (Gemm.RawInvocation P)]
 -/
 structure SystemEvaluation (S : Setting P) (bytes : ByteArray) where
   /-- The decoded module. -/
-  module : Wasm.Module
+  module : Wasm.Subset.Module
   /-- It is exactly what `bytes` decodes to. -/
   decodeEq : Wasm.Subset.decode bytes = .ok module
   /-- One input evaluation for *every* raw invocation. -/
@@ -347,8 +344,10 @@ end Evaluation
 
 /-! ## The extensional semantic predicates (SPEC §10.1)
 
-These are the predicates the release theorem quantifies over.  None of them
-mentions an evaluation, a certificate, an artifact or a selector. -/
+These are extensional predicates for the current legacy-subset seam.  They do
+not yet instantiate the public amended-Core competitor universe required by the
+release theorem.  None mentions an evaluation, certificate, artifact, or
+selector. -/
 
 section Semantic
 
@@ -359,7 +358,7 @@ def StartsCostedInvocation (S : Setting P) (bytes : ByteArray)
     (raw : Gemm.RawInvocation P)
     (initialization : InitializationObservation P) (initial : Wasm.Config) :
     Prop :=
-  ∃ module : Wasm.Module,
+  ∃ module : Wasm.Subset.Module,
     Wasm.Subset.decode bytes = .ok module ∧
     validateUnder P module = true ∧
     S.machine.initialGemmInvocationCosted module (toWasmInvocation raw) =
@@ -575,14 +574,14 @@ theorem semanticWithinResourcesAt_charge {S : Setting P} {bytes : ByteArray}
 /-- `ProfileValid` really does produce a decoded, validated, closed module. -/
 theorem profileValid_module {P : Wasm.Profile} {bytes : ByteArray}
     (h : ProfileValid P bytes) :
-    ∃ module : Wasm.Module,
+    ∃ module : Wasm.Subset.Module,
       Wasm.Subset.decode bytes = .ok module ∧ validateUnder P module = true ∧
       module.imports = [] ∧ HasExactGemmExports P module :=
   h
 
 /-- `ProfileValid` is decode-functional: the module it names is unique. -/
 theorem profileValid_module_unique {bytes : ByteArray}
-    {a b : Wasm.Module} (ha : Wasm.Subset.decode bytes = .ok a)
+    {a b : Wasm.Subset.Module} (ha : Wasm.Subset.decode bytes = .ok a)
     (hb : Wasm.Subset.decode bytes = .ok b) : a = b := by
   rw [ha] at hb
   exact (Except.ok.injEq _ _ ▸ hb).symm ▸ rfl

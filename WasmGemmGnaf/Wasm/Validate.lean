@@ -1,24 +1,20 @@
 /-
-  Wasm/Validate.lean --- the declarative typing judgment and its decidable
-  checker.
+  Wasm/Validate.lean --- the legacy SUBSET declarative typing judgment and its
+  decidable checker.
 
-  Normative source: SPEC.md section 7.1 ("`Validate` owns all context and
-  declaration judgments"), section 7.2 ("disabled forms decode when
-  grammatically valid and then fail profile validation") and section 7.3, which
-  requires
+  The compatibility theorem in this file has the historical public shape
 
-      theorem validate_bool_iff (module : Wasm.Module) :
+      theorem validate_bool_iff (module : Wasm.Subset.Module) :
         Wasm.validate module = true ↔ Wasm.DeclarativelyValid module
 
-  `Wasm/Syntax.lean` expresses the whole pinned Core 3.0 grammar, so every
-  Core form can be *written*.  Validation is what selects the released
-  executable subset: an instruction outside the declared subset has no typing
-  rule, hence no derivation, hence `validate` rejects it.  That is exactly the
-  behaviour SPEC section 7.2 prescribes for out-of-profile forms, and it is the
-  reason the judgment below is stated positively (rules only for admitted
-  forms) rather than by a list of prohibitions.
+  It is an internal equivalence over `Wasm.Subset.Module`, not the release
+  theorem required over the public amended-Core carrier.  `Wasm/Syntax.lean`
+  is a broad legacy syntax but omits several Core families; the complete public
+  Core grammar lives under `Wasm/Core/`.  Forms represented by the legacy
+  syntax but outside this judgment have no typing rule and are rejected.
 
-  The declared executable subset is: `unreachable`, `nop`, `i32.const`, `drop`,
+  The legacy validator's admitted instruction fragment is: `unreachable`,
+  `nop`, `i32.const`, `drop`,
   the wrapping and unsigned `i32` binary operators, `i32.eqz`, the `i32`
   relational operators, the local and global accessors, full-width `i32`
   loads/stores on memory 0, `memory.size`/`memory.grow` on memory 0, the
@@ -32,18 +28,12 @@
   The vendored normative text is `vendor/wasm-spec/document/core/valid/`.  Two
   things about that text govern what can be checked against it here.
 
-  1. In the vendored tree the *bodies* of the typing rules are SpecTec macro
-     references --- `valid/instructions.rst` writes `${rule: Instr_ok/load-val}`
-     and `valid/modules.rst` writes `${rule: Module_ok}` --- and the `.watsup`
-     sources those expand from are not part of the vendored snapshot.  What the
-     snapshot does state in full is: the prose of `valid/conventions.rst`
-     (contexts, the label stack, polymorphism), the notes of
-     `valid/instructions.rst`, and --- decisively --- the complete
-     sound-and-complete type-checking algorithm of
-     `vendor/wasm-spec/document/core/appendix/algorithm.rst`, which
-     `valid/conventions.rst` ("Conventions") names as the algorithmic
-     counterpart of the declarative rules.  Every correspondence claimed below
-     is to text that is literally present in the snapshot.
+  1. The vendored tree now includes the authoritative `.spectec` bodies
+     behind the rendered-document macros, and `xtask core` inventories
+     them.  This legacy file was developed from the rendered prose and appendix
+     algorithm and does not claim a declaration-by-declaration proof of
+     correspondence to those sources.  The source-bound public transcription is
+     the separate development under `Wasm/Core/`.
 
   2. `valid/conventions.rst` ("Contexts") fixes the shape of the context:
      *Labels* are "the stack of labels accessible from the current position,
@@ -82,7 +72,7 @@
     `global.set`, that the mutability is `var`.
   * `t.load` / `t.store` --- `valid/instructions.rst` `_valid-load-val` /
     `_valid-store-val`.  Two premises: the memory index must name a declared
-    memory (here memory `0`, and `Module.checkMems` declares exactly one), and
+    memory (here memory `0`, and `Subset.Module.checkMems` declares exactly one), and
     the alignment must not exceed the access width, `2 ^ memarg.align <= |t|/8`.
     For full-width `i32` that is `2 ^ align <= 4`, i.e. `align <= 2`; see
     `alignOk_iff_pow_le`.  `syntax/instructions.rst` ("Memory Instructions")
@@ -97,26 +87,26 @@
   * `br` / `br_if` --- the `br n` / `br_if n` cases, together with the note
     under `valid/instructions.rst` `_valid-br` that the label index space
     "contains the most recent label first".
-  * `throw` --- the `throw x` case; `Module.checkTag` pins every declared tag to
+  * `throw` --- the `throw x` case; `Subset.Module.checkTag` pins every declared tag to
     `[i32] -> []`, so popping one operand is popping `tags[x].type.params`.
   * function bodies --- `valid/modules.rst` ("Functions"), plus
     `appendix/algorithm.rst`: "every function has an implicit outermost label
-    that corresponds to an implicit block frame".  `Module.funcCtx` therefore
+    that corresponds to an implicit block frame".  `Subset.Module.funcCtx` therefore
     seeds the label stack with the function's own result arity.
 
   ## What is deliberately *not* modelled
 
-  The judgment below is a **sound restriction** of Core 3.0 validation, not an
-  equivalent of it.  Two kinds of gap, both intentional:
+  The judgment below is a deliberately narrow legacy model, not an equivalent
+  of amended Core validation.  Two kinds of gap are visible:
 
   * **Excluded families.**  SIMD/vector, GC (structures, arrays, `i31`),
     reference types and `ref.*`, tables and element segments, bulk memory and
     data segments, tail calls (`return_call`, `return_call_indirect`),
     exception handling beyond a bare `throw` (`try_table`, `throw_ref`),
     `call`/`call_indirect`/`return`, `br_table`, `select`, non-empty block
-    types, `i64`, `f32` and `f64`.  These are expressible in `Wasm/Syntax.lean`
-    and have no rule here, so they are rejected --- which is what SPEC section
-    7.2 prescribes for out-of-profile forms.
+    types, `i64`, `f32` and `f64`.  Most are expressible in the legacy
+    syntax and have no rule here; forms absent from that syntax cannot be
+    represented at all.
   * **Stack polymorphism.**  `valid/instructions.rst` (`_polymorphism`, and the
     notes under `_valid-unreachable` and `_valid-br`) makes `unreachable`, `br`
     and `throw` stack-polymorphic: `appendix/algorithm.rst`'s `unreachable()`
@@ -124,12 +114,12 @@
     `Bot`.  The rules below instead type those three instructions concretely
     (`h -> h`, `h -> h` at a label of arity `h`, and `h+1 -> h`), which
     *rejects* code Core accepts, for example `(unreachable) (i32.add)` or a
-    `br` taken with operands still below the label's results.  The judgment is
-    therefore contained in Core validation, never wider than it.
+    `br` taken with operands still below the label's results.
 
   Consequently `Wasm.validate_iff_declarative` is an equivalence between the
   executable validator and the declarative judgment **for the modelled
-  subset**, and a one-way soundness statement with respect to full Core 3.0.
+  subset** only.  No theorem in this file relates that judgment to the amended
+  Core module relation used by the public proof path.
 
   Every declaration in this file is proved.  Nothing is assumed.
 -/
@@ -151,7 +141,7 @@ currently in scope (innermost first).
 
 This is the fragment of the Core context of
 `vendor/wasm-spec/document/core/valid/conventions.rst` ("Contexts") that the
-released subset can use: *Locals* (all `i32`, so only their number matters),
+legacy subset can use: *Locals* (all `i32`, so only their number matters),
 *Globals*, *Tags* and *Labels*.  The remaining fields of the Core context ---
 *Types*, *Recursive Types*, *Functions*, *Tables*, *Memories*, *Element
 Segments*, *Data Segments*, *Return* and *References* --- are either fixed by
@@ -837,25 +827,25 @@ theorem ExprTyping.functional {C : Ctx} {h : Nat} {e : Expr} {a b : Nat}
   have := (checkExpr_eq_some_iff C h e b).mpr hb
   simp_all
 
-/-! ## Module validation -/
+/-! ## Subset module validation -/
 
-namespace Module
+namespace Subset.Module
 
 /-- The flattened sub-type list of the module's recursive type groups. -/
-def flatTypes (m : Module) : List SubType := m.types.flatMap (·.types)
+def flatTypes (m : Subset.Module) : List SubType := m.types.flatMap (·.types)
 
 /-- The function type at index `i`, when that index names a function type. -/
-def funcTypeAt (m : Module) (i : Nat) : Option FuncType :=
+def funcTypeAt (m : Subset.Module) (i : Nat) : Option FuncType :=
   match (flatTypes m)[i]? with
   | some st => match st.body with
       | .func ft => some ft
       | _ => none
   | none => none
 
-/-- All parameters, results and locals of the released subset are `i32`. -/
+/-- All parameters, results and locals of this legacy subset are `i32`. -/
 def isI32 (t : ValType) : Bool := t = ValType.num .i32
 
-/-- A declared sub type is admitted by the released subset when it is a final,
+/-- A declared sub type is admitted by the legacy subset when it is a final,
 supertype-free function type all of whose parameters and results are `i32`.
 
 `valid/modules.rst` ("Types") requires the module's whole type section to be
@@ -878,7 +868,7 @@ def checkSubType (st : SubType) : Bool :=
      | _ => false)
 
 /-- Every declared type of the module is admitted. -/
-def checkTypes (m : Module) : Bool := (flatTypes m).all checkSubType
+def checkTypes (m : Subset.Module) : Bool := (flatTypes m).all checkSubType
 
 /-- The validation context of a defined function.
 
@@ -888,7 +878,7 @@ extended with the function's locals and with its result type as the sole label;
 has an implicit outermost label that corresponds to an implicit block frame".
 The label stack is therefore seeded with the function's result arity, so that a
 `br 0` at the top of a body is a return, exactly as in Core. -/
-def funcCtx (m : Module) (ft : FuncType) (f : Func) : Ctx :=
+def funcCtx (m : Subset.Module) (ft : FuncType) (f : Func) : Ctx :=
   { numLocals := ft.params.length + f.locals.length
     globals := m.globals.map (·.type)
     numTags := m.tags.length
@@ -897,7 +887,7 @@ def funcCtx (m : Module) (ft : FuncType) (f : Func) : Ctx :=
 /-- A defined function is valid: its declared type exists, is entirely `i32`,
 its locals are `i32`, and its body takes the empty operand stack to exactly the
 number of results. -/
-def checkFunc (m : Module) (f : Func) : Bool :=
+def checkFunc (m : Subset.Module) (f : Func) : Bool :=
   match funcTypeAt m f.type with
   | none => false
   | some ft =>
@@ -915,8 +905,8 @@ def checkGlobal (g : Global) : Bool :=
 def checkTag (t : TagType) : Bool :=
   t.funcType.params == [ValType.num .i32] && t.funcType.results == []
 
-/-- The single memory of the released profile. -/
-def checkMems (m : Module) : Bool :=
+/-- The single memory required by the legacy subset profile. -/
+def checkMems (m : Subset.Module) : Bool :=
   match m.mems with
   | [mem] =>
       mem.type.addressType == AddressType.i32 &&
@@ -939,20 +929,20 @@ def distinctExportNames : List Export → Bool
   | e :: rest => !rest.any (fun e' => e'.name == e.name) && distinctExportNames rest
 
 /-- The module's export names are pairwise distinct. -/
-def checkExports (m : Module) : Bool := distinctExportNames m.exports
+def checkExports (m : Subset.Module) : Bool := distinctExportNames m.exports
 
 /-- The module exports the required memory. -/
-def exportsMemory (m : Module) : Bool :=
+def exportsMemory (m : Subset.Module) : Bool :=
   m.exports.any (fun e => e.name == memoryExportName && e.desc == ExportDesc.mem 0)
 
 /-- The index of the exported `gemm` function, if any. -/
-def gemmIndex? (m : Module) : Option Nat :=
+def gemmIndex? (m : Subset.Module) : Option Nat :=
   match m.exports.find? (fun e => e.name == gemmExportName) with
   | some ⟨_, .func i⟩ => some i
   | _ => none
 
 /-- The exported `gemm` function exists and has the pinned ABI type. -/
-def checkGemmExport (m : Module) : Bool :=
+def checkGemmExport (m : Subset.Module) : Bool :=
   match gemmIndex? m with
   | none => false
   | some i =>
@@ -961,7 +951,7 @@ def checkGemmExport (m : Module) : Bool :=
       | some f => funcTypeAt m f.type == some gemmFuncType
 
 /-- The optional start function exists and has type `() → ()`. -/
-def checkStart (m : Module) : Bool :=
+def checkStart (m : Subset.Module) : Bool :=
   match m.start with
   | none => true
   | some i =>
@@ -969,14 +959,15 @@ def checkStart (m : Module) : Bool :=
       | none => false
       | some f => funcTypeAt m f.type == some { params := [], results := [] }
 
-/-- The released profile is closed and carries no table, element or data
-section: those Core forms are grammatically expressible and rejected here. -/
-def checkClosed (m : Module) : Bool :=
+/-- The legacy subset profile is closed and carries no table, element or data
+section. -/
+def checkClosed (m : Subset.Module) : Bool :=
   m.imports.isEmpty && m.tables.isEmpty && m.elems.isEmpty && m.datas.isEmpty
 
-end Module
+end Subset.Module
 
-/-- The decidable release validator.
+/-- The decidable legacy subset validator.  This is not the public amended-Core
+release validator.
 
 The conjuncts are, in order: the profile's closedness restriction; the memory
 section (`valid/modules.rst` "Memories", `valid/types.rst` "Limits"); the
@@ -984,49 +975,49 @@ globals (`valid/modules.rst` "Globals"); the tags ("Tags"); the functions
 ("Functions"); the two export conjuncts the profile pins; the start function
 ("Start Function"); the type section ("Types"); and the uniqueness of export
 names (`syntax/modules.rst` "Exports"). -/
-def validate (m : Module) : Bool :=
-  Module.checkClosed m &&
-  Module.checkMems m &&
-  m.globals.all Module.checkGlobal &&
-  m.tags.all Module.checkTag &&
-  m.funcs.all (Module.checkFunc m) &&
-  Module.exportsMemory m &&
-  Module.checkGemmExport m &&
-  Module.checkStart m &&
-  Module.checkTypes m &&
-  Module.checkExports m
+def validate (m : Subset.Module) : Bool :=
+  Subset.Module.checkClosed m &&
+  Subset.Module.checkMems m &&
+  m.globals.all Subset.Module.checkGlobal &&
+  m.tags.all Subset.Module.checkTag &&
+  m.funcs.all (Subset.Module.checkFunc m) &&
+  Subset.Module.exportsMemory m &&
+  Subset.Module.checkGemmExport m &&
+  Subset.Module.checkStart m &&
+  Subset.Module.checkTypes m &&
+  Subset.Module.checkExports m
 
-/-- The declarative validity judgment of the released profile: the conjunction
+/-- The declarative validity judgment of the legacy subset profile: the conjunction
 of the closedness, memory, global, tag, function, export, start, type-section
 and export-name conditions of SPEC section 7.2, with every function body
 carrying a derivation of the declarative typing judgment. -/
-def DeclarativelyValid (m : Module) : Prop :=
-  Module.checkClosed m = true ∧
-  Module.checkMems m = true ∧
-  (∀ g ∈ m.globals, Module.checkGlobal g = true) ∧
-  (∀ t ∈ m.tags, Module.checkTag t = true) ∧
+def DeclarativelyValid (m : Subset.Module) : Prop :=
+  Subset.Module.checkClosed m = true ∧
+  Subset.Module.checkMems m = true ∧
+  (∀ g ∈ m.globals, Subset.Module.checkGlobal g = true) ∧
+  (∀ t ∈ m.tags, Subset.Module.checkTag t = true) ∧
   (∀ f ∈ m.funcs, ∃ ft : FuncType,
-      Module.funcTypeAt m f.type = some ft ∧
-      (∀ t ∈ ft.params, Module.isI32 t = true) ∧
-      (∀ t ∈ ft.results, Module.isI32 t = true) ∧
-      (∀ t ∈ f.locals, Module.isI32 t = true) ∧
-      ExprTyping (Module.funcCtx m ft f) 0 f.body ft.results.length) ∧
-  Module.exportsMemory m = true ∧
-  Module.checkGemmExport m = true ∧
-  Module.checkStart m = true ∧
-  Module.checkTypes m = true ∧
-  Module.checkExports m = true
+      Subset.Module.funcTypeAt m f.type = some ft ∧
+      (∀ t ∈ ft.params, Subset.Module.isI32 t = true) ∧
+      (∀ t ∈ ft.results, Subset.Module.isI32 t = true) ∧
+      (∀ t ∈ f.locals, Subset.Module.isI32 t = true) ∧
+      ExprTyping (Subset.Module.funcCtx m ft f) 0 f.body ft.results.length) ∧
+  Subset.Module.exportsMemory m = true ∧
+  Subset.Module.checkGemmExport m = true ∧
+  Subset.Module.checkStart m = true ∧
+  Subset.Module.checkTypes m = true ∧
+  Subset.Module.checkExports m = true
 
-theorem checkFunc_eq_true_iff (m : Module) (f : Func) :
-    Module.checkFunc m f = true ↔
+theorem checkFunc_eq_true_iff (m : Subset.Module) (f : Func) :
+    Subset.Module.checkFunc m f = true ↔
       ∃ ft : FuncType,
-        Module.funcTypeAt m f.type = some ft ∧
-        (∀ t ∈ ft.params, Module.isI32 t = true) ∧
-        (∀ t ∈ ft.results, Module.isI32 t = true) ∧
-        (∀ t ∈ f.locals, Module.isI32 t = true) ∧
-        ExprTyping (Module.funcCtx m ft f) 0 f.body ft.results.length := by
-  unfold Module.checkFunc
-  cases hft : Module.funcTypeAt m f.type with
+        Subset.Module.funcTypeAt m f.type = some ft ∧
+        (∀ t ∈ ft.params, Subset.Module.isI32 t = true) ∧
+        (∀ t ∈ ft.results, Subset.Module.isI32 t = true) ∧
+        (∀ t ∈ f.locals, Subset.Module.isI32 t = true) ∧
+        ExprTyping (Subset.Module.funcCtx m ft f) 0 f.body ft.results.length := by
+  unfold Subset.Module.checkFunc
+  cases hft : Subset.Module.funcTypeAt m f.type with
   | none =>
     simp only [Bool.false_eq_true, false_iff]
     rintro ⟨ft, hc, _⟩
@@ -1045,9 +1036,9 @@ theorem checkFunc_eq_true_iff (m : Module) (f : Func) :
       exact ⟨⟨⟨hp, hr⟩, hl⟩,
         decide_eq_true ((checkExpr_eq_some_iff _ _ _ _).mpr hbody)⟩
 
-/-- **SPEC section 7.3.** The executable validator decides the declarative
-validity judgment. -/
-theorem validate_bool_iff (m : Module) :
+/-- The legacy subset executable validator decides its matching legacy
+declarative validity judgment.  This is not the public SPEC §7.3 theorem. -/
+theorem validate_bool_iff (m : Subset.Module) :
     validate m = true ↔ DeclarativelyValid m := by
   unfold validate DeclarativelyValid
   simp only [Bool.and_eq_true, List.all_eq_true]
@@ -1062,13 +1053,13 @@ theorem validate_bool_iff (m : Module) :
       fun f hf => (checkFunc_eq_true_iff m f).mpr (hfuncs f hf)⟩, hexp⟩, hgemm⟩, hstart⟩,
       htypes⟩, hnames⟩
 
-instance instDecidableDeclarativelyValid (m : Module) :
+instance instDecidableDeclarativelyValid (m : Subset.Module) :
     Decidable (DeclarativelyValid m) :=
   decidable_of_iff _ (validate_bool_iff m)
 
 /-- Validity is a decidable property, so the validator is total: it either
 accepts or rejects, and never diverges. -/
-theorem validate_eq_false_iff (m : Module) :
+theorem validate_eq_false_iff (m : Subset.Module) :
     validate m = false ↔ ¬ DeclarativelyValid m := by
   rw [← validate_bool_iff]
   cases validate m <;> simp

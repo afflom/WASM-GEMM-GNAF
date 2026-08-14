@@ -25,24 +25,26 @@ assumed.
   side condition already checked by `Atlas.attentionCompleteCheck`).
 * `Atlas.attend_monotone` — widening the request can only add routed objects.
 
-## Omitted, deliberately — and now REFUTED
+## Declared-candidate coverage and the open all-byte obligation
 
-`attention_no_optimum_relevant_false_negative` (SPEC §12.2) is **not** in this
-repository, and the reason is no longer that it could not be stated: it is that
-it is **false**.  `Atlas/AttentionCoverage.lean` proves it false — parametrically
-in the two predicates SPEC names but does not define
-(`Atlas.attention_no_optimum_relevant_false_negative_is_false`), with a witness
-that is a fully sealed state (`Atlas.sealCertificateAt`, all seven deterministic
-checkers discharged) whose attention root indexes nothing, against a candidate
-that really is `Universal.ProfileValid`, really carries a
-`Universal.SystemEvaluation`, and really scores at the core's baseline
-(`Atlas.undeclared_witness_is_missed`).  `DEV-005` in
-`model/spec-deviations.json` files it.
+`Atlas/AttentionCoverage.lean` proves the surviving Atlas-local statement
+`Atlas.attention_no_declared_optimum_relevant_false_negative`: on a coherent
+state, a candidate in the declaration base is optimum-relevant, routed by
+`attend`, and represented in the sealed core.  Its routing and containment steps
+are exposed separately as `Atlas.attentionRoutes_of_indexesCandidate` and
+`Atlas.attentionContains_of_attentionRoutes`; the empty-root honesty conditions
+remain proved by `Atlas.honesty_conditions_satisfiable`.
 
-Its content is the undischarged universal coverage obligation of SPEC §10.5 —
-the same obligation `Atlas/CoverageScope.lean` proves the seal's cover check
-cannot supply.  The intended content, under the one hypothesis that gap consists
-of, is `Atlas.attention_no_declared_optimum_relevant_false_negative`.
+A prior revision also claimed a concrete, kernel-checked refutation of the
+all-byte `attention_no_optimum_relevant_false_negative` proposition.  That
+argument depended on the retired `Wasm.Subset` release witness and evaluator
+cone.  The witness cone and refutation declarations were removed together, so
+the refutation claim is withdrawn; no counterexample is asserted here.
+
+The amendment remains a disclosed obligation shrink and earns zero release
+credit.  `Universal.universal_sublevel_coverage` remains the open public-Core
+all-byte coverage obligation, and the required declaration
+`Atlas.attention_no_optimum_relevant_false_negative` remains open as well.
 
 ## Anti-vacuity (UOR-GNAF §18: index presence proves nothing)
 

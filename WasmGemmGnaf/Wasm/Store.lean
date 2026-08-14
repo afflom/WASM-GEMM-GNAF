@@ -1,12 +1,15 @@
 /-
   Wasm/Store.lean --- allocation and runtime instances.
 
+  SCOPE.  These are runtime objects for the legacy subset machine imported from
+  `Wasm/Validate.lean`, not the public amended-Core runtime store.
+
   Normative source: SPEC.md section 7.1 ("`Store` owns allocation and runtime
   instances") and section 7.4, which requires an exact `ObservableStore` and an
   `ObservableEffects` carrying "only externally visible non-memory effects
   admitted by the closed profile".
 
-  The released profile is closed: no host functions, clocks, filesystem,
+  The legacy subset machine is closed: no host functions, clocks, filesystem,
   network, or environment query.  `ObservableEffects` is therefore the empty
   record, and that emptiness is *proved* to be a subsingleton rather than
   asserted, so no later file can smuggle an unmodelled effect into semantic
@@ -87,8 +90,8 @@ structure GlobalInst where
   value : UInt32
   deriving DecidableEq, Repr, Inhabited
 
-/-- The runtime store of the released profile: memory zero and the globals.
-The profile admits no host function, table, or external instance. -/
+/-- The runtime store of the legacy subset machine: memory zero and globals.
+That machine admits no host function, table, or external instance. -/
 structure Store where
   /-- Memory zero, which carries the ABI. -/
   memory : Memory
@@ -103,8 +106,8 @@ structure ObservableStore where
   bytes : List UInt8
   deriving DecidableEq, Repr, Inhabited
 
-/-- The externally visible non-memory effects admitted by the closed release
-profile.  The profile has no host function, clock, filesystem, network, or
+/-- The externally visible non-memory effects admitted by the closed legacy
+machine.  It has no host function, clock, filesystem, network, or
 environment query, so this record has no fields. -/
 structure ObservableEffects where
   deriving DecidableEq, Repr, Inhabited
@@ -225,7 +228,7 @@ def allocGlobals : List Global → Option (List GlobalInst)
 /-- Allocate the store of a module: memory zero at its declared minimum size
 and the globals at their constant initializers.  `none` is an initialization
 fault. -/
-def alloc (m : Module) : Option Store :=
+def alloc (m : Subset.Module) : Option Store :=
   match m.mems with
   | [mem] =>
       (allocGlobals m.globals).map fun gs =>
@@ -233,7 +236,7 @@ def alloc (m : Module) : Option Store :=
           globals := gs }
   | _ => none
 
-theorem alloc_eq {m : Module} {mem : Mem} {gs : List GlobalInst}
+theorem alloc_eq {m : Subset.Module} {mem : Mem} {gs : List GlobalInst}
     (hm : m.mems = [mem]) (hg : allocGlobals m.globals = some gs) :
     alloc m =
       some { memory := Memory.alloc mem.type.limits.min mem.type.limits.max
@@ -242,7 +245,7 @@ theorem alloc_eq {m : Module} {mem : Mem} {gs : List GlobalInst}
 
 /-- A successfully allocated store is exactly a fresh memory of the declared
 minimum size together with the allocated globals. -/
-theorem alloc_shape {m : Module} {s : Store} (h : alloc m = some s) :
+theorem alloc_shape {m : Subset.Module} {s : Store} (h : alloc m = some s) :
     ∃ mem, m.mems = [mem] ∧
       s.memory = Memory.alloc mem.type.limits.min mem.type.limits.max := by
   unfold alloc at h
@@ -258,7 +261,7 @@ theorem alloc_shape {m : Module} {s : Store} (h : alloc m = some s) :
   · exact absurd h (by simp)
 
 /-- A freshly allocated store has exactly the declared number of pages. -/
-theorem alloc_memory_size {m : Module} {s : Store} {mem : Mem}
+theorem alloc_memory_size {m : Subset.Module} {s : Store} {mem : Mem}
     (hm : m.mems = [mem]) (h : alloc m = some s) :
     s.memory.size = mem.type.limits.min * pageSize := by
   obtain ⟨mem', hm', hmem⟩ := alloc_shape h
@@ -269,7 +272,7 @@ theorem alloc_memory_size {m : Module} {s : Store} {mem : Mem}
   exact Memory.alloc_size _ _
 
 /-- Every byte of a freshly allocated store is zero. -/
-theorem alloc_zero {m : Module} {s : Store} {a : Nat}
+theorem alloc_zero {m : Subset.Module} {s : Store} {a : Nat}
     (h : alloc m = some s) (ha : a < s.memory.size) :
     s.memory.loadByte a = some 0 := by
   obtain ⟨mem, _, hmem⟩ := alloc_shape h

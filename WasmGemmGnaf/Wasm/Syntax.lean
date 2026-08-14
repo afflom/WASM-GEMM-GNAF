@@ -1,19 +1,20 @@
 /-
-  Wasm/Syntax.lean --- Core 3.0 module syntax.
+  Wasm/Syntax.lean --- the legacy subset module and instruction syntax.
 
-  Normative source: SPEC.md section 7.1 (ownership) and section 7.2 (the
-  released portable profile and its feature matrix).
+  This file predates the public amended-Core carrier.  Its
+  `Wasm.Subset.Module` and `Wasm.Instr` cover a broad, manually
+  selected collection of forms but not the complete Core 3.0 grammar.  The
+  authoritative public syntax and binary grammar live under `Wasm/Core/`.
 
   SPEC section 7.1: "`Syntax` owns types, functions, globals, tables, memories,
   elements, data, imports, exports, and administrative instructions."  This
-  file therefore carries `Wasm.Module` (with every one of those component
-  lists) and `Wasm.Instr` / `Wasm.Expr` (the instruction syntax).  The Core 3.0
-  *type* grammar is owned by `Wasm/Types.lean` and is imported, not restated.
+  file therefore carries `Wasm.Subset.Module` (with every one of those component
+  lists) and `Wasm.Instr` / `Wasm.Expr` (the legacy instruction
+  syntax).  The older type grammar is imported from `Wasm/Types.lean`.
 
   ## Declared instruction coverage
 
-  SPEC section 7.2 allows a released subset only if the decision for each
-  family is explicit.  The families covered by the `Instr` inductive below are
+  The families covered by the legacy `Instr` inductive below are
   exactly:
 
   * **control**: `unreachable`, `nop`, `block`, `loop`, `if`/`else`, `br`,
@@ -49,8 +50,7 @@
   Deliberately **not** modelled here, and therefore not expressible:
 
   * `memory64` address *instructions* --- the `i64` address *type* is
-    expressible (see `Wasm/Types.lean`) precisely so that release validation
-    can reject it, as SPEC section 7.2 requires;
+    expressible (see `Wasm/Types.lean`), while its instructions are absent;
   * shared memories, atomics and thread instructions (rejected family);
   * relaxed-SIMD operators (rejected family);
   * component-model forms (rejected family).
@@ -484,9 +484,11 @@ structure Data where
 
 /-! ## Modules -/
 
-/-- A Core 3.0 module.
+namespace Subset
 
-Field order is the pinned section order of the binary format: types, imports,
+/-- A legacy subset module.
+
+Field order is the local subset codec's section order: types, imports,
 functions, tables, memories, tags, globals, exports, start, elements, data. -/
 structure Module where
   types : List RecType
@@ -536,5 +538,7 @@ instance (m : Module) : Decidable (m.IsClosed) := by
 @[simp] theorem empty_isClosed : empty.IsClosed := rfl
 
 end Module
+
+end Subset
 
 end WasmGemmGnaf.Wasm

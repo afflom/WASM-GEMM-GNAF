@@ -56,6 +56,19 @@ def funcsXt : List ExternType → Option (List DefType)
 
 /-! ## Definitions -/
 
+/-- The mathematical base index `|C.TYPES|` and every occupied member of a
+source recursive type group fit exactly in the 32-bit type-index sort.  The
+base conjunct is needed even for an empty group, whose rule still names `x`.
+This makes the source equation `x = |C.TYPES|` faithful in Lean rather than
+silently interpreting it modulo `2^32`. -/
+def TypeGroupRangeOk (C : Context) (td : TypeDef) : Prop :=
+  C.types.length < 2 ^ 32 ∧
+  C.types.length + td.rectype.count ≤ 2 ^ 32
+
+instance (C : Context) (td : TypeDef) : Decidable (TypeGroupRangeOk C td) := by
+  unfold TypeGroupRangeOk
+  infer_instance
+
 /-- `relation Type_ok: context |- type : deftype*`. -/
 inductive Type_ok : Context → TypeDef → List DefType → Prop where
   /-- `rule Type_ok:
@@ -65,7 +78,8 @@ inductive Type_ok : Context → TypeDef → List DefType → Prop where
         -- Rectype_ok: C ++ {TYPES dt*} |- rectype : OK(x)`. -/
   -- core-rule: Type_ok
   | mk {C : Context} {td : TypeDef} {dts : List DefType} {x : TypeIdx} :
-      x = TypeIdx.ofNat C.types.length →
+      TypeGroupRangeOk C td →
+      x.val = C.types.length →
       dts = rollDt x td.rectype →
       Rectype_ok (Context.append C { types := dts }) td.rectype x →
       Type_ok C td dts

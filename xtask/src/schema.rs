@@ -11,7 +11,7 @@
 //!
 //!   * `authority/global-optimality-WGG-GO-1.json` is the SOURCE OF THE LIST.
 //!     Its `scopeCriticalDefinitions` array decides what must be bound. Nothing
-//!     here enumerates the thirteen names, so adding a fourteenth to the frozen
+//!     here enumerates the fourteen names, so adding a fifteenth to the frozen
 //!     authority immediately fails this check rather than passing unnoticed.
 //!
 //!   * The LEAN ELABORATOR is the comparator. Each binding in
@@ -21,8 +21,10 @@
 //!     conjunct, adding a hypothesis, substituting a scoped predicate or editing
 //!     a field out of a record all stop elaborating.
 //!
+//! Definitions whose public carrier is not yet implemented are marked as
+//! explicit gaps rather than being credited for restating their legacy body.
 //! This file is therefore the wiring between them, and it enforces exactly the
-//! three things that wiring can get wrong: a definition with no binding, a
+//! things that wiring can get wrong: a definition with no binding or gap, a
 //! marker pasted onto a theorem that does not mention the definition, and a
 //! binding closed by a tactic proof instead of definitional reduction. The last
 //! one matters most -- `by simp` would prove a propositional equivalence between
@@ -46,6 +48,9 @@ const PROBE: &str = ".schema_probe.lean";
 
 /// The marker announcing a binding, carrying the exact authority name.
 const MARKER: &str = "-- authority-binding:";
+/// An authority definition whose current implementation is known not to have
+/// the public SPEC carrier. A gap accounts for the name but grants no match.
+const GAP_MARKER: &str = "-- authority-gap:";
 
 /// The proofs that make a binding definitional. Anything else -- `by simp`,
 /// `by constructor`, a named lemma -- proves at most a propositional
@@ -68,17 +73,25 @@ pub struct Binding {
     pub line: usize,
 }
 
+/// One explicit, uncredited mismatch against a scope-critical authority name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Gap {
+    pub definition: String,
+    pub line: usize,
+}
+
 pub fn run(root: &Path) -> Result<Outcome> {
     let required = scope_critical_definitions()?;
     let source = read(BINDINGS)?;
     let bindings = parse(&source);
+    let gaps = parse_gaps(&source);
 
     println!("WGG-GO-1 schema binding (SPEC 1)");
     println!("  authority : {AUTHORITY}");
     println!("  bindings  : {BINDINGS}");
     println!("  required  : {} scope-critical definition(s)\n", required.len());
 
-    let mut failures = audit(&required, &bindings);
+    let mut failures = audit(&required, &bindings, &gaps);
 
     // A binding is only worth anything if Lean agrees it exists. `lake build`
     // can serve a stale olean, so ask the environment itself.
@@ -127,24 +140,40 @@ pub fn run(root: &Path) -> Result<Outcome> {
             binding.theorem
         );
     }
+    for gap in &gaps {
+        let listed = required.iter().any(|r| *r == gap.definition);
+        println!(
+            "  [{}] {:<38} public carrier mismatch; uncredited",
+            if listed { "OPEN " } else { "EXTRA" },
+            gap.definition
+        );
+    }
 
     println!();
     if !failures.is_empty() {
-        println!("SCHEMA: FAIL — {} unbound or unsound binding(s):", failures.len());
+        println!("SCHEMA: FAIL — {} unbound, duplicate, or unsound item(s):", failures.len());
         for failure in &failures {
             println!("  {failure}");
         }
         println!(
-            "\nSPEC 1: every scope-critical definition SHALL be bound to its fully \
-             spelled-out body\nby a definitional proof in {BINDINGS}. A name check alone \
-             cannot reject a weakened\nproposition wearing the right name."
+            "\nSPEC 1: every scope-critical definition SHALL have exactly one exact \
+             definitional binding or explicit uncredited gap in {BINDINGS}. A name check \
+             alone cannot reject a weakened proposition wearing the right name."
         );
         return Ok(Outcome::Fail);
     }
-    println!(
-        "SCHEMA: PASS — all {} scope-critical definitions are definitionally bound",
-        required.len()
-    );
+    if gaps.is_empty() {
+        println!(
+            "SCHEMA: PASS — all {} scope-critical definitions are definitionally bound",
+            required.len()
+        );
+    } else {
+        println!(
+            "SCHEMA INVENTORY: PASS — {} exact binding(s), {} explicit uncredited gap(s)",
+            bindings.len(), gaps.len()
+        );
+        println!("PUBLIC WGG-GO-1 SCHEMA: OPEN — carrier migration remains outstanding");
+    }
     Ok(Outcome::Pass)
 }
 
@@ -185,18 +214,21 @@ fn definitions_from(text: &str) -> Result<Vec<String>> {
 
 /// Every rule that can be decided from the authority list and the parsed
 /// bindings. Pure, so the falsifier suite can attack it directly.
-pub fn audit(required: &[String], bindings: &[Binding]) -> Vec<String> {
+pub fn audit(required: &[String], bindings: &[Binding], gaps: &[Gap]) -> Vec<String> {
     let mut failures = Vec::new();
 
     for definition in required {
         let found: Vec<&Binding> =
             bindings.iter().filter(|b| b.definition == *definition).collect();
-        match found.as_slice() {
-            [] => failures.push(format!(
-                "{definition} -- NO BINDING. Add `{MARKER} {definition}` above a theorem \
-                 in {BINDINGS} stating it against its fully spelled-out body."
+        let found_gaps: Vec<&Gap> = gaps.iter().filter(|g| g.definition == *definition).collect();
+        match (found.as_slice(), found_gaps.as_slice()) {
+            ([], []) => failures.push(format!(
+                "{definition} -- NO BINDING OR GAP. Add `{MARKER} {definition}` above an \
+                 exact definitional theorem, or `{GAP_MARKER} {definition}` while the public \
+                 carrier remains unimplemented."
             )),
-            [binding] => {
+            ([], [_]) => {},
+            ([binding], []) => {
                 // The marker must sit on a theorem that actually mentions the
                 // definition; otherwise it is a label, not a binding.
                 if !mentions(&binding.statement, definition) {
@@ -215,10 +247,10 @@ pub fn audit(required: &[String], bindings: &[Binding]) -> Vec<String> {
                     ));
                 }
             }
-            many => failures.push(format!(
-                "{definition} -- bound {} times ({}); one definition, one binding",
-                many.len(),
-                many.iter().map(|b| b.theorem.as_str()).collect::<Vec<_>>().join(", ")
+            (many, gap_many) => failures.push(format!(
+                "{definition} -- accounted {} times ({} exact binding(s), {} gap(s)); \
+                 require exactly one",
+                many.len() + gap_many.len(), many.len(), gap_many.len()
             )),
         }
     }
@@ -229,6 +261,15 @@ pub fn audit(required: &[String], bindings: &[Binding]) -> Vec<String> {
                 "{} -- bound at line {} but not listed in {AUTHORITY}; a stale binding \
                  claims authority it does not have",
                 binding.definition, binding.line
+            ));
+        }
+    }
+    for gap in gaps {
+        if !required.iter().any(|r| *r == gap.definition) {
+            failures.push(format!(
+                "{} -- gap at line {} but not listed in {AUTHORITY}; a stale gap \
+                 cannot change the authority inventory",
+                gap.definition, gap.line
             ));
         }
     }
@@ -340,6 +381,24 @@ pub fn parse(source: &str) -> Vec<Binding> {
     bindings
 }
 
+/// Parse the explicitly uncredited authority names. Unlike an exact binding, a
+/// gap has no proof term: it records that the current definition is known not to
+/// have the public carrier and prevents the inventory from silently calling its
+/// self-restatement an authority match.
+pub fn parse_gaps(source: &str) -> Vec<Gap> {
+    crate::lean::splitlines(source)
+        .iter()
+        .enumerate()
+        .filter_map(|(index, line)| {
+            let definition = line.trim().strip_prefix(GAP_MARKER)?.trim();
+            (!definition.is_empty()).then(|| Gap {
+                definition: definition.to_string(),
+                line: index + 1,
+            })
+        })
+        .collect()
+}
+
 /// Split a line at the `:=` that ends a declaration's statement, carrying the
 /// bracket depth in and out.
 ///
@@ -443,9 +502,12 @@ theorem wasmProfile_matches_authority_schema (profile : Wasm.Profile) :
         let failures = audit(
             &["GlobalOptimal".into(), "Cost.ProperObjective".into()],
             &parse(SAMPLE),
+            &[],
         );
         assert_eq!(failures.len(), 2, "{failures:?}");
-        assert!(failures.iter().any(|f| f.starts_with("Cost.ProperObjective -- NO BINDING")));
+        assert!(failures
+            .iter()
+            .any(|f| f.starts_with("Cost.ProperObjective -- NO BINDING OR GAP")));
         // and the stale `Wasm.Profile` binding is reported the other way round
         assert!(failures.iter().any(|f| f.contains("not listed in")));
     }
@@ -456,7 +518,11 @@ theorem wasmProfile_matches_authority_schema (profile : Wasm.Profile) :
         // definition and a weaker paraphrase, which is the substitute SPEC 1
         // forbids. Only definitional reduction rejects that.
         let source = SAMPLE.replace("  Iff.rfl", "  by simp [GlobalOptimal]");
-        let failures = audit(&["GlobalOptimal".into(), "Wasm.Profile".into()], &parse(&source));
+        let failures = audit(
+            &["GlobalOptimal".into(), "Wasm.Profile".into()],
+            &parse(&source),
+            &[],
+        );
         assert_eq!(failures.len(), 1, "{failures:?}");
         assert!(failures[0].contains("not by definitional reduction"));
     }
@@ -465,7 +531,7 @@ theorem wasmProfile_matches_authority_schema (profile : Wasm.Profile) :
     fn a_marker_on_an_unrelated_theorem_is_not_a_binding() {
         let source = "-- authority-binding: CanonicalBytesLE\n\
                       theorem unrelated : True ↔ True :=\n  Iff.rfl\n";
-        let failures = audit(&["CanonicalBytesLE".into()], &parse(source));
+        let failures = audit(&["CanonicalBytesLE".into()], &parse(source), &[]);
         assert_eq!(failures.len(), 1, "{failures:?}");
         assert!(failures[0].contains("does not mention it"));
     }
@@ -494,14 +560,18 @@ theorem wasmProfile_matches_authority_schema (profile : Wasm.Profile) :
     fn the_real_bindings_cover_the_real_authority() {
         let required = definitions_from(&repo_file(AUTHORITY)).expect("authority readable");
         let source = repo_file(BINDINGS);
-        let failures = audit(&required, &parse(&source));
+        let failures = audit(&required, &parse(&source), &parse_gaps(&source));
         assert!(failures.is_empty(), "{failures:#?}");
     }
 
     #[test]
     fn one_definition_one_binding() {
         let doubled = format!("{SAMPLE}{SAMPLE}");
-        let failures = audit(&["GlobalOptimal".into(), "Wasm.Profile".into()], &parse(&doubled));
-        assert!(failures.iter().any(|f| f.contains("bound 2 times")));
+        let failures = audit(
+            &["GlobalOptimal".into(), "Wasm.Profile".into()],
+            &parse(&doubled),
+            &[],
+        );
+        assert!(failures.iter().any(|f| f.contains("accounted 2 times")));
     }
 }

@@ -1,12 +1,12 @@
 /-
-  Wasm/Declarative.lean --- the *relational* reading of the SUBSET binary
-  grammar, and `Wasm.validate_iff_declarative`.
+  Wasm/Declarative.lean --- the relational reading of the legacy SUBSET binary
+  grammar, plus the legacy theorem named `Wasm.validate_iff_declarative`.
 
   ## STATUS: two of the three SPEC section 15 names have LEFT this file
 
   `Wasm.decode_sound` and `Wasm.decode_complete` are no longer here.  They are
-  in `Wasm/CoreFrontEnd.lean`, stated over the pinned Core 3.0 decoder and the
-  pinned grammar `Wasm.Core.Binary.Bmodule`.  `xtask independence` had demoted
+  in `Wasm/CoreFrontEnd.lean`, stated over the amended Core 3.0 decoder
+  and amended grammar `Wasm.Core.Binary.BmoduleA`.  `xtask independence` had demoted
   the versions below as CIRCULAR --- `declarativeBinaryRelation_iff_encode`
   equates the "declarative" side with `bytes = Subset.encode module`, so both
   directions were round-trip lemmas about one codec and its own inverse --- and
@@ -14,16 +14,16 @@
   proved, under `Wasm.Subset.decode_sound` and `Wasm.Subset.decode_complete`,
   where the names say which language they are about.
 
-  `Wasm.validate_iff_declarative` is still here, still stated over the subset
-  validator, and `xtask independence` still reports it CIRCULAR --- the ledger
-  carries it as outstanding for that reason.  It cannot be re-pointed at
-  `Wasm.Core` yet: `Wasm.Core.validate_iff_declarative` carries the residual
-  guard `Validate.Module.frag`, which excludes tables and element segments, and
-  removing that guard needs a decision procedure for `Heaptype_sub` that does
-  not exist in this repository.  Stating the biconditional over Core without the
-  guard would be stating something false; stating it WITH the guard would put a
-  checker-side boolean back into the declarative side, which is the exact defect
-  the independence check exists to catch.
+  `Wasm.validate_iff_declarative` remains stated over the subset validator,
+  and `xtask independence` still reports it CIRCULAR; it is not the release
+  validation theorem.  The Core development now has an executable amended
+  subtype decision procedure and an unconditional soundness theorem
+  `Wasm.Core.validate_sound`.  Its reverse direction is proved only by
+  `Wasm.Core.validate_complete` under explicit `Module.wf` and legacy
+  `Validate.Module.frag` hypotheses, and
+  `Wasm.Core.validate_iff_declarative_fragment` has the same hypotheses.
+  No hypothesis-free amended-Core equivalence exists to re-point the public
+  validation name to, so that release obligation remains open.
 
   Normative source: the vendored Core 3.0 sources under `vendor/wasm-spec/`,
   pinned at commit `9d36019973201a19f9c9ebb0f10828b2fe2374aa`, specifically
@@ -38,7 +38,7 @@
   statement about the pinned grammar.  This file supplies the missing side for
   the subset language: a relation
 
-      `Wasm.Subset.DeclarativeBinaryRelation : ByteArray -> Module -> Prop`
+      `Wasm.Subset.DeclarativeBinaryRelation : ByteArray -> Subset.Module -> Prop`
 
   defined by grammar productions, with no reference anywhere in its *definition*
   to `Wasm.Subset.decode`, `Wasm.decULEB`, `Wasm.decSLEB`, `Wasm.decInstr` or any
@@ -54,13 +54,12 @@
 
   This is the point at which claims must be exact, so they are spelled out.
 
-  **1. The grammar's shape is transcribed from the vendored text; the concrete
-  opcode numbering is not, because it is not in the vendored text.**  The
-  vendored `.rst` files carry their productions as unexpanded SpecTec macros
-  (`$${grammar: Binstr/control}`, `$${grammar: Bmodule}`, ...).  The macro
-  *bodies* live in the SpecTec sources, which are not part of the 40 vendored
-  files.  What the vendored text does state in prose, and what is transcribed
-  here, is:
+  **1. This is a manually curated legacy relation, not the authoritative Core
+  transcription.**  The vendored tree now contains the rendered documents and
+  the SpecTec `.spectec` sources behind their macros, and `xtask core`
+  inventories the latter.  This file does not import those source bodies or
+  prove that its local tables correspond to them.  Its grammar shape was
+  developed from the following rendered material:
 
   * `binary/conventions.rst` --- the format is an attribute grammar over byte
     terminals; a byte sequence is well formed iff the grammar generates it;
@@ -84,12 +83,11 @@
     the immediates (instructions), and structured control instructions
     bracketing a nested instruction sequence.
 
-  The concrete byte values of the opcodes and type tags therefore come from this
-  repository's own pinned tables --- `Wasm.opcodeTagged`, `Wasm.Enum.*Tagged` ---
-  which `Wasm/Binary.lean` already declares are *not* the Core 3.0 opcode table.
-  Those tables are data, not decoding functions, and the relation is
-  parameterised by them exactly as the pinned grammar is parameterised by its
-  own table.  **No claim of byte-level identity with Core 3.0 is made here.**
+  The concrete byte values of the opcodes and type tags come from this
+  repository's own legacy tables --- `Wasm.opcodeTagged` and
+  `Wasm.Enum.*Tagged`.  The amended public Core grammar and codec are
+  transcribed separately under `Wasm/Core/`.  **No claim of byte-level
+  identity between this subset format and Core 3.0 is made here.**
 
   **2. Deliberate narrowings of the pinned grammar, each one a real deviation.**
 
@@ -127,7 +125,7 @@
   Within those stated bounds the relation covers the modelled subset
   **exactly**: `BinaryGrammar.Gen` is a two-sided statement, and
   `declarativeBinaryRelation_iff_encode` proves that the byte sequences the
-  grammar derives for a module are precisely `{Wasm.encode m}`, from which both
+  grammar derives for a module are precisely `{Wasm.Subset.encode m}`, from which both
   `decode_sound` and `decode_complete` follow.  Nothing here is conditional and
   nothing is assumed.
 
@@ -467,10 +465,10 @@ theorem gen_section {P : Deriv} {t : List UInt8} (id : UInt8) (h : Gen P t) :
 
 /-! ## Tag tables
 
-The pinned grammar gives each type constructor and each opcode a literal byte.
-Those bytes are behind SpecTec macros that the vendored file set does not carry,
-so the relation takes them from this repository's pinned tables, which are pure
-data.  See the scope note in the file header. -/
+The authoritative Core grammar gives each type constructor and opcode its
+encoding in vendored SpecTec sources.  This legacy relation instead uses the
+repository-local tables below; no correspondence theorem connects those tables
+to the authoritative ones.  See the scope note in the file header. -/
 
 /-- The production of a tagged finite type: its number, LEB128 encoded. -/
 def tag {α : Type} (T : Codec.Tagged α) (a : α) : Deriv := BuN (T.code a)
@@ -1040,7 +1038,7 @@ theorem gen_BExpr (e : Expr) : Gen (BExpr e) (Expr.enc e) :=
 
 theorem gen_expr (e : Expr) : Gen (BExpr e) (exprC.enc e) := gen_BExpr e
 
-/-! ## Module components (`binary/modules.rst`) -/
+/-! ## Subset.Module components (`binary/modules.rst`) -/
 
 /-- `Bimportdesc`. -/
 def BImportDesc : ImportDesc → Deriv
@@ -1167,7 +1165,7 @@ the scope note in the file header. -/
 
 /-- `Bmodule`: the preamble, then the eleven modelled sections in the pinned
 order `1, 2, 3, 4, 5, 13, 6, 7, 8, 9, 11`. -/
-def BModule (m : Module) : Deriv :=
+def BModule (m : Subset.Module) : Deriv :=
   cat (lit magicBytes)
     (cat (section_ 1 (list BRecType m.types))
       (cat (section_ 2 (list BImport m.imports))
@@ -1182,7 +1180,7 @@ def BModule (m : Module) : Deriv :=
                         (section_ 11 (list BData m.datas))))))))))))
 
 set_option maxHeartbeats 1000000 in
-theorem gen_BModule (m : Module) : Gen (BModule m) (Subset.encodeList m) :=
+theorem gen_BModule (m : Subset.Module) : Gen (BModule m) (Subset.encodeList m) :=
   gen_cat (gen_lit magicBytes)
     (gen_cat (gen_section 1 (gen_list (P := BRecType) (f := recTypeC.enc) gen_recType m.types))
       (gen_cat (gen_section 2 (gen_list (P := BImport) (f := importC.enc) gen_import m.imports))
@@ -1225,14 +1223,14 @@ synthesized attribute `m`.
 Its definition mentions no decoding function.  The exact coverage, and every
 deviation from the vendored Core 3.0 grammar, is stated in this file's header
 comment. -/
-def DeclarativeBinaryRelation (bytes : ByteArray) (module : Module) : Prop :=
+def DeclarativeBinaryRelation (bytes : ByteArray) (module : Subset.Module) : Prop :=
   BinaryGrammar.BModule module bytes.toList
 
 /-- The grammar derives, for a given module, exactly the byte sequence that
 `Wasm.Subset.encode` produces --- no more and no fewer.  This equation is what
 `xtask independence` names as the circularity: it is the reason the two
 theorems below are no longer credited under SPEC section 15's names. -/
-theorem declarativeBinaryRelation_iff_encode (bytes : ByteArray) (module : Module) :
+theorem declarativeBinaryRelation_iff_encode (bytes : ByteArray) (module : Subset.Module) :
     DeclarativeBinaryRelation bytes module ↔ bytes = encode module := by
   constructor
   · intro h
@@ -1245,69 +1243,68 @@ theorem declarativeBinaryRelation_iff_encode (bytes : ByteArray) (module : Modul
 
 /-- **Subset soundness (NOT SPEC section 15's `Wasm.decode_sound`).**  Whatever
 the subset decoder accepts, the subset grammar derives. -/
-theorem decode_sound {bytes : ByteArray} {module : Module}
+theorem decode_sound {bytes : ByteArray} {module : Subset.Module}
     (h : decode bytes = .ok module) : DeclarativeBinaryRelation bytes module :=
   (declarativeBinaryRelation_iff_encode bytes module).mpr (decode_is_encode h)
 
 /-- **Subset completeness (NOT SPEC section 15's `Wasm.decode_complete`).**
 Whatever the subset grammar derives, the subset decoder accepts --- and returns
 exactly the module the derivation synthesized. -/
-theorem decode_complete {bytes : ByteArray} {module : Module}
+theorem decode_complete {bytes : ByteArray} {module : Subset.Module}
     (h : DeclarativeBinaryRelation bytes module) : decode bytes = .ok module := by
   rw [(declarativeBinaryRelation_iff_encode bytes module).mp h]
   exact encode_decode_roundtrip module
 
 /-- Soundness and completeness together: the executable decoder *is* the
 grammar. -/
-theorem decode_iff_declarative (bytes : ByteArray) (module : Module) :
+theorem decode_iff_declarative (bytes : ByteArray) (module : Subset.Module) :
     decode bytes = .ok module ↔ DeclarativeBinaryRelation bytes module :=
   ⟨decode_sound, decode_complete⟩
 
 end Subset
 
 /--
-**SPEC section 7.3 / 15, `Wasm.validate_iff_declarative`.**  The executable
-validator decides the declarative validity judgment.  This is exactly the
-proposition `Wasm.validate_bool_iff` proves, restated under the name SPEC
-section 15 requires; the statement is not weakened, so it is discharged by
-`exact`.
+**Legacy subset theorem named `Wasm.validate_iff_declarative`.**  This is
+the exact proposition `Wasm.validate_bool_iff` proves over
+`Wasm.Subset.Module`.  It is not credited as the SPEC section 15 release
+theorem: the public release carrier is amended Core, and the subset predicate
+below retains executable checker conjuncts that make the independence audit
+classify this declaration as circular.
 
-## Which vendored validation rules `DeclarativelyValid` corresponds to
+## Intended source correspondence of the legacy checks
 
 `Wasm.DeclarativelyValid` is the conjunction of `Wasm.validate`'s ten
 conditions, with the function-body conjunct replaced by a derivation of
-`Wasm.ExprTyping`.  Reading them against
-`vendor/wasm-spec/document/core/valid/` (see `Wasm/Validate.lean` for the
-per-instruction table and for the two respects in which the vendored snapshot
-must be read carefully --- its rule *bodies* are unexpanded SpecTec macros, so
-the fully-stated normative content is the prose of `valid/conventions.rst`, the
-notes of `valid/instructions.rst`, and the sound-and-complete algorithm of
-`appendix/algorithm.rst`):
+`Wasm.ExprTyping`.  The list below records how those checks were motivated
+by the rendered validation material.  The authoritative `.spectec` rule
+bodies are vendored now, but this legacy file does not prove semantic
+correspondence to them; the public Core transcription lives under
+`Wasm/Core/`.
 
-* `Module.checkTypes` --- `valid/modules.rst` "Types" (`Types_ok`), restricted
+* `Subset.Module.checkTypes` --- `valid/modules.rst` "Types" (`Types_ok`), restricted
   through `valid/types.rst` "Recursive Types" (`Subtype_ok`) and "Composite
   Types" (`Comptype_ok/func`) to final, supertype-free, all-`i32` function
   types.
-* `Module.checkMems` --- `valid/modules.rst` "Memories" (`Mem_ok`) and
+* `Subset.Module.checkMems` --- `valid/modules.rst` "Memories" (`Mem_ok`) and
   `valid/types.rst` "Memory Types" / "Limits" (`Memtype_ok`, `Limits_ok`): the
   bounds are meaningful (`min <= max`) and within the `2 ^ 16` range for an
   `i32` address type.
-* `Module.checkGlobal` --- `valid/modules.rst` "Globals" (`Global_ok`), with the
+* `Subset.Module.checkGlobal` --- `valid/modules.rst` "Globals" (`Global_ok`), with the
   initializer restricted to the single constant instruction the profile admits.
-* `Module.checkTag` --- `valid/modules.rst` "Tags" (`Tag_ok`) and
+* `Subset.Module.checkTag` --- `valid/modules.rst` "Tags" (`Tag_ok`) and
   `valid/types.rst` "Tag Types" (`Tagtype_ok`): a function type with empty
   results, here pinned to `[i32] -> []`.
-* `Module.checkFunc` / `ExprTyping` --- `valid/modules.rst` "Functions"
+* `Subset.Module.checkFunc` / `ExprTyping` --- `valid/modules.rst` "Functions"
   (`Func_ok`) and "Locals" (`Local_ok`), with the body typed under
-  `Module.funcCtx`, whose label stack carries the function's own result arity
+  `Subset.Module.funcCtx`, whose label stack carries the function's own result arity
   (`appendix/algorithm.rst`: "every function has an implicit outermost label
   that corresponds to an implicit block frame").  The instruction rules are
   `valid/instructions.rst` for the admitted forms; `Wasm/Validate.lean` lists
   them one by one with their anchors.
-* `Module.checkStart` --- `valid/modules.rst` "Start Function" (`Start_ok`).
-* `Module.checkExports` --- `syntax/modules.rst` "Exports": "each export is
+* `Subset.Module.checkStart` --- `valid/modules.rst` "Start Function" (`Start_ok`).
+* `Subset.Module.checkExports` --- `syntax/modules.rst` "Exports": "each export is
   labeled by a unique name".
-* `Module.checkClosed`, `Module.exportsMemory`, `Module.checkGemmExport` ---
+* `Subset.Module.checkClosed`, `Subset.Module.exportsMemory`, `Subset.Module.checkGemmExport` ---
   not Core rules but SPEC section 7.2 profile restrictions: no imports, no
   tables, no element or data segments, and the two pinned exports.  They only
   narrow the accepted set.
@@ -1324,11 +1321,11 @@ and `f64` families.  Nor is Core's **stack polymorphism** modelled:
 and `_valid-br`) makes `unreachable`, `br` and `throw` stack-polymorphic, while
 `Wasm.InstrTyping` types them concretely, which rejects programs Core accepts.
 
-So `DeclarativelyValid` is a *sound restriction* of Core 3.0 validation --- it
-accepts only modules Core accepts --- and this theorem is an equivalence
-between the executable validator and the declarative judgment **for the
-modelled subset**, not an equivalence with Core 3.0 validation as a whole. -/
-theorem validate_iff_declarative (module : Module) :
+Thus the theorem establishes only the internal equivalence between the legacy
+subset checker and the legacy predicate defined in this file.  It is not an
+equivalence with the amended Core declarative module judgment and does not
+close the release validation obligation. -/
+theorem validate_iff_declarative (module : Subset.Module) :
     validate module = true ↔ DeclarativelyValid module :=
   validate_bool_iff module
 
@@ -1361,12 +1358,12 @@ namespace Subset
 
 /-- The relation holds of the empty module and its encoding. -/
 theorem declarative_encode_empty :
-    DeclarativeBinaryRelation (encode Module.empty) Module.empty :=
-  decode_sound (encode_decode_roundtrip Module.empty)
+    DeclarativeBinaryRelation (encode Subset.Module.empty) Subset.Module.empty :=
+  decode_sound (encode_decode_roundtrip Subset.Module.empty)
 
 /-- The relation does not hold of the empty byte string. -/
 theorem not_declarative_empty :
-    ¬ DeclarativeBinaryRelation ByteArray.empty Module.empty := by
+    ¬ DeclarativeBinaryRelation ByteArray.empty Subset.Module.empty := by
   intro h
   have hd := decode_complete h
   rw [decode_empty] at hd

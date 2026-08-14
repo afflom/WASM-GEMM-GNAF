@@ -56,8 +56,8 @@
 
   ## Scope, stated exactly
 
-  This is a soundness theorem about the **modelled** machine: the released
-  executable subset listed in the header of `Wasm/Validate.lean` (scalar `i32`
+  This is a soundness theorem about the **modelled legacy subset** listed in the
+  header of `Wasm/Validate.lean` (scalar `i32`
   arithmetic, locals, globals, full-width `i32` memory access on memory 0,
   `memory.size`/`memory.grow`, `block`/`loop`/`if` of empty block type,
   `br`/`br_if`, `throw`, and the harness frame).  It is not a soundness theorem
@@ -66,7 +66,7 @@
   excludes them, which is exactly why `hwelltyped` is load-bearing.
 
   One further restriction is forced by `Wasm/Step.lean` rather than chosen here,
-  and is disclosed rather than hidden.  `Module.funcCtx` seeds a function body's
+  and is disclosed rather than hidden.  `Subset.Module.funcCtx` seeds a function body's
   label stack with the function's own result arity --- Core's "implicit
   outermost label" --- so `Wasm.validate` accepts a body that branches to it, a
   branch which *returns* from the function.  `Wasm/Step.lean` models no such
@@ -78,7 +78,8 @@
   every branch targets a label the code opened itself.  `GemmFrameLocal` and
   `StartFrameLocal` name that condition at module level; the released compiler
   of `GNAF/Compile.lean` emits only `block`/`loop`-local branches, so the
-  condition holds of the artifact this repository releases.
+  condition holds of modules emitted by that legacy compiler.  These theorems
+  do not discharge the public amended-Core preservation or progress obligations.
 
   Every declaration in this file is proved.  Nothing is assumed.
 -/
@@ -263,17 +264,17 @@ theorem ConfigWellTypedIn.status {c : Config} {G : List GlobalType} {nt : Nat}
 /-- The context in which the exported `gemm` body is typed once the harness has
 entered it: the two ABI parameters plus the function's declared locals, the
 module's globals and tags, and no enclosing label. -/
-def gemmEntryCtx (m : Module) (numGemmLocals : Nat) : Ctx :=
+def gemmEntryCtx (m : Subset.Module) (numGemmLocals : Nat) : Ctx :=
   frameCtx (2 + numGemmLocals) (m.globals.map (·.type)) m.tags.length 0
 
 /-- **SPEC section 7.3.**  The configuration arises from `m`: its store carries
 the module's globals, and its harness is the module's exported `gemm` --- its
 body, its local count, and its two ABI arguments --- typed in the context the
 harness enters it in. -/
-def ConfigInstantiates (m : Module) (c : Config) : Prop :=
+def ConfigInstantiates (m : Subset.Module) (c : Config) : Prop :=
   c.store.globals.length = m.globals.length ∧
   c.harness.args.length = 2 ∧
-  (∃ gi f, Module.gemmIndex? m = some gi ∧ m.funcs[gi]? = some f ∧
+  (∃ gi f, Subset.Module.gemmIndex? m = some gi ∧ m.funcs[gi]? = some f ∧
     c.harness.gemmBody = Func.code f ∧ c.harness.gemmNumLocals = f.locals.length) ∧
   (∃ final, ExprTyping (gemmEntryCtx m c.harness.gemmNumLocals) 0
     (Expr.ofList c.harness.gemmBody) final)
@@ -281,20 +282,20 @@ def ConfigInstantiates (m : Module) (c : Config) : Prop :=
 /-- The exported `gemm` body branches only to labels it opens itself: it types
 with an empty enclosing label stack.  See the header for why the modelled
 machine needs this and `Wasm.validate` alone does not give it. -/
-def GemmFrameLocal (m : Module) : Prop :=
-  ∃ gi f final, Module.gemmIndex? m = some gi ∧ m.funcs[gi]? = some f ∧
+def GemmFrameLocal (m : Subset.Module) : Prop :=
+  ∃ gi f final, Subset.Module.gemmIndex? m = some gi ∧ m.funcs[gi]? = some f ∧
     ExprTyping (gemmEntryCtx m f.locals.length) 0 f.body final
 
 /-- The module's start function, if it has one, branches only to labels it opens
 itself. -/
-def StartFrameLocal (m : Module) : Prop :=
+def StartFrameLocal (m : Subset.Module) : Prop :=
   ∀ si f, m.start = some si → m.funcs[si]? = some f →
     ∃ final, ExprTyping
       (frameCtx f.locals.length (m.globals.map (·.type)) m.tags.length 0) 0 f.body final
 
 /-- A module with no start function satisfies the start-frame condition
 vacuously. -/
-theorem startFrameLocal_of_start_none {m : Module} (h : m.start = none) :
+theorem startFrameLocal_of_start_none {m : Subset.Module} (h : m.start = none) :
     StartFrameLocal m := by
   intro si f hsi _
   rw [h] at hsi
@@ -338,7 +339,7 @@ theorem Store.allocGlobals_length : ∀ {gs : List Global} {is : List GlobalInst
         subst h
         simp [ih hr]
 
-theorem Store.alloc_globals_length {m : Module} {s : Store}
+theorem Store.alloc_globals_length {m : Subset.Module} {s : Store}
     (h : Store.alloc m = some s) : s.globals.length = m.globals.length := by
   unfold Store.alloc at h
   split at h
@@ -369,7 +370,7 @@ theorem Step.globals_length {c : Config} {e : Event} {c' : Config} (h : Step c e
 /-- `ConfigInstantiates` is itself preserved by reduction, so the pair
 `(ConfigInstantiates, ConfigWellTyped)` is an invariant of whole runs rather
 than of a single step. -/
-theorem ConfigInstantiates.step {m : Module} {c : Config} {e : Event} {c' : Config}
+theorem ConfigInstantiates.step {m : Subset.Module} {c : Config} {e : Event} {c' : Config}
     (hstep : Step c e c') (h : ConfigInstantiates m c) : ConfigInstantiates m c' := by
   obtain ⟨hg, ha, hgi, ht⟩ := h
   refine ⟨?_, ?_, ?_, ?_⟩
@@ -543,7 +544,7 @@ theorem successors_nonempty_of_wellTyped {c : Config}
 /-- **SPEC section 7.3, `Wasm.validation_progress`.**  A well-typed
 configuration of a valid module has halted, trapped, thrown, or can still take a
 step. -/
-theorem validation_progress {module : Module} {config : Config}
+theorem validation_progress {module : Subset.Module} {config : Config}
     (hvalid : DeclarativelyValid module)
     (hconfig : ConfigInstantiates module config)
     (hwelltyped : ConfigWellTyped config) :
@@ -589,7 +590,7 @@ theorem wellTypedIn_tail {c c' : Config} {G : List GlobalType} {nt : Nat}
 
 /-- **Preservation.**  Every reduction of an instantiated, well-typed
 configuration lands in a well-typed configuration. -/
-theorem step_configWellTyped {m : Module} {c : Config} {e : Event} {c' : Config}
+theorem step_configWellTyped {m : Subset.Module} {c : Config} {e : Event} {c' : Config}
     (hstep : Step c e c') (hconfig : ConfigInstantiates m c)
     (hwt : ConfigWellTyped c) : ConfigWellTyped c' := by
   obtain ⟨G, nt, hwt⟩ := hwt
@@ -874,11 +875,12 @@ SPEC section 7.3 writes this signature without `hwelltyped`.  That literal
 statement is false --- with no invariant on `config`, `next` need not satisfy
 one either: `code = [i32.const 0, drop, drop]` on an empty stack reduces to
 `code = [drop, drop]` on a one-element stack, and neither configuration is well
-typed.  The invariant hypothesis is therefore present here, which is what makes
+typed. The invariant hypothesis is therefore present here, which is what makes
 this a preservation theorem rather than a claim that every reachable
-configuration is well typed regardless of where it came from.  This declaration
-is not on the SPEC section 15 required list. -/
-theorem validation_preservation {module : Module} {config : Config} {event : Event}
+configuration is well typed regardless of where it came from. SPEC section 15
+now lists the public theorem; this legacy-subset declaration has both the wrong
+carrier and the additional premise, so it receives no public credit. -/
+theorem validation_preservation {module : Subset.Module} {config : Config} {event : Event}
     {next : Config}
     (hvalid : DeclarativelyValid module)
     (hstep : Step config event next)
@@ -928,10 +930,10 @@ theorem not_configWellTyped_call {c : Config} {idx : Nat} {rest : List Instr}
 in, so it is not an empty predicate. -/
 
 /-- Everything `initialConfig` fixes about the configuration it returns. -/
-theorem initialConfig_full {m : Module} {raw : RawInvocation} {c : Config}
+theorem initialConfig_full {m : Subset.Module} {raw : RawInvocation} {c : Config}
     (h : initialConfig m raw = .ok c) :
     ∃ store gi gemmFunc,
-      Store.alloc m = some store ∧ Module.gemmIndex? m = some gi ∧
+      Store.alloc m = some store ∧ Subset.Module.gemmIndex? m = some gi ∧
       m.funcs[gi]? = some gemmFunc ∧
       c.store = store ∧
       c.harness.gemmBody = Func.code gemmFunc ∧
@@ -970,7 +972,7 @@ theorem initialConfig_full {m : Module} {raw : RawInvocation} {c : Config}
 
 /-- The configuration `initialConfig` builds instantiates the module it was
 built from. -/
-theorem initialConfig_instantiates {m : Module} {raw : RawInvocation} {c : Config}
+theorem initialConfig_instantiates {m : Subset.Module} {raw : RawInvocation} {c : Config}
     (h : initialConfig m raw = .ok c) (hlocal : GemmFrameLocal m) :
     ConfigInstantiates m c := by
   obtain ⟨store, gi, gemmFunc, halloc, hgi, hgf, hstore, hbody, hnl, hargs, _, _, _⟩ :=
@@ -992,7 +994,7 @@ theorem initialConfig_instantiates {m : Module} {raw : RawInvocation} {c : Confi
 well typed.  Note the hypothesis is `StartFrameLocal`, not validity of the whole
 module: `initialConfig` only returns `.ok` for a module `Wasm.validate` accepts,
 and the start-frame condition is the disclosed restriction of the header. -/
-theorem initialConfig_configWellTyped {m : Module} {raw : RawInvocation} {c : Config}
+theorem initialConfig_configWellTyped {m : Subset.Module} {raw : RawInvocation} {c : Config}
     (h : initialConfig m raw = .ok c) (hstart : StartFrameLocal m) :
     ConfigWellTyped c := by
   obtain ⟨store, gi, gemmFunc, halloc, hgi, hgf, hstore, hbody, hnl, hargs, hctrl,
@@ -1014,7 +1016,7 @@ theorem initialConfig_configWellTyped {m : Module} {raw : RawInvocation} {c : Co
 
 /-- A module with no start function starts in a well-typed configuration with no
 side condition at all. -/
-theorem initialConfig_configWellTyped_of_start_none {m : Module} {raw : RawInvocation}
+theorem initialConfig_configWellTyped_of_start_none {m : Subset.Module} {raw : RawInvocation}
     {c : Config} (h : initialConfig m raw = .ok c) (hs : m.start = none) :
     ConfigWellTyped c :=
   initialConfig_configWellTyped h (startFrameLocal_of_start_none hs)

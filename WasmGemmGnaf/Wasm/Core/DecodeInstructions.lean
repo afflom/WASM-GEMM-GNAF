@@ -333,6 +333,214 @@ theorem op0_sound {v : Nat} {i : Instr} (h : op0 v = some i) : Binstr [tb v] i :
   · cases h; exact Binstr.ofRef _ _ BinstrRef.asNonNull
   · simp at h
 
+/-- Corrected no-immediate opcode dispatch for AMD-008. -/
+def op0' (v : Nat) : Option Instr :=
+  if v = 0xBB then some (.cvtop .f64 .f32 (.ff .promote)) else op0 v
+
+@[simp] theorem op0'_promote :
+    op0' 0xBB = some (.cvtop .f64 .f32 (.ff .promote)) := rfl
+
+theorem op0'_of_ne {v : Nat} (h : v ≠ 0xBB) : op0' v = op0 v := by
+  simp [op0', h]
+
+/-- Soundness of the amended no-immediate table against the amended grammar
+instance. -/
+theorem op0'_sound {v : Nat} {i : Instr} (h : op0' v = some i) :
+    BinstrA [tb v] i := by
+  letI : BinaryAuthority := amendedBinaryAuthority
+  unfold op0' at h
+  split at h
+  · rename_i hv
+    subst v
+    cases h
+    exact Binstr.ofNum _ _ BinstrNum'.f64PromoteF32
+  · rename_i hv
+    unfold op0 at h
+    split at h
+    · cases h; exact Binstr.ofParametric _ _ BinstrParametric.unreachable
+    · cases h; exact Binstr.ofParametric _ _ BinstrParametric.nop
+    · cases h; exact Binstr.ofControl _ _ (BinstrControl'.ofPinned _ _ BinstrControl.throwRef)
+    · cases h; exact Binstr.ofControl _ _ (BinstrControl'.ofPinned _ _ BinstrControl.ret)
+    · cases h; exact Binstr.ofParametric _ _ BinstrParametric.drop
+    · cases h; exact Binstr.ofParametric _ _ BinstrParametric.select
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32Eqz (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32Eq (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32Ne (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32LtS (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32LtU (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32GtS (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32GtU (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32LeS (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32LeU (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32GeS (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32GeU (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64Eqz (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64Eq (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64Ne (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64LtS (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64LtU (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64GtS (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64GtU (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64LeS (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64LeU (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64GeS (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64GeU (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f32Eq (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f32Ne (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f32Lt (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f32Gt (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f32Le (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f32Ge (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f64Eq (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f64Ne (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f64Lt (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f64Gt (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f64Le (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f64Ge (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32Clz (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32Ctz (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32Popcnt (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32Add (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32Sub (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32Mul (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32DivS (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32DivU (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32RemS (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32RemU (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32And (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32Or (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32Xor (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32Shl (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32ShrS (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32ShrU (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32Rotl (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32Rotr (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64Clz (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64Ctz (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64Popcnt (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64Add (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64Sub (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64Mul (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64DivS (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64DivU (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64RemS (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64RemU (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64And (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64Or (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64Xor (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64Shl (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64ShrS (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64ShrU (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64Rotl (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64Rotr (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f32Abs (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f32Neg (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f32Ceil (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f32Floor (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f32Trunc (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f32Nearest (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f32Sqrt (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f32Add (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f32Sub (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f32Mul (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f32Div (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f32Min (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f32Max (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f32Copysign (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f64Abs (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f64Neg (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f64Ceil (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f64Floor (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f64Trunc (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f64Nearest (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f64Sqrt (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f64Add (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f64Sub (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f64Mul (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f64Div (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f64Min (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f64Max (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f64Copysign (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32WrapI64 (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32TruncF32S (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32TruncF32U (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32TruncF64S (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32TruncF64U (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64ExtendI32S (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64ExtendI32U (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64TruncF32S (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64TruncF32U (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64TruncF64S (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64TruncF64U (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f32ConvertI32S (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f32ConvertI32U (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f32ConvertI64S (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f32ConvertI64U (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f32DemoteF64 (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f64ConvertI32S (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f64ConvertI32U (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f64ConvertI64S (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f64ConvertI64U (by decide))
+    · cases h; contradiction
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32ReinterpretF32 (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64ReinterpretF64 (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f32ReinterpretI32 (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.f64ReinterpretI64 (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32Extend8 (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i32Extend16 (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64Extend8 (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64Extend16 (by decide))
+    · cases h; exact Binstr.ofNum _ _ (BinstrNum'.ofPinned _ _ BinstrNum.i64Extend32 (by decide))
+    · cases h; exact Binstr.ofRef _ _ BinstrRef.isNull
+    · cases h; exact Binstr.ofRef _ _ BinstrRef.eq
+    · cases h; exact Binstr.ofRef _ _ BinstrRef.asNonNull
+    · simp at h
+
+/-- The no-immediate table selected by the current binary authority. -/
+def op0For [authority : BinaryAuthority] (v : Nat) : Option Instr :=
+  match authority.revision with
+  | .pinned => op0 v
+  | .amended => op0' v
+
+theorem op0For_lt [authority : BinaryAuthority] {v : Nat} {i : Instr}
+    (h : op0For v = some i) : v < 0x100 := by
+  cases authority with
+  | mk revision =>
+      cases revision with
+      | pinned => exact op0_lt h
+      | amended =>
+          change op0' v = some i at h
+          unfold op0' at h
+          split at h
+          · omega
+          · exact op0_lt h
+
+theorem op0For_sound [authority : BinaryAuthority] {v : Nat} {i : Instr}
+    (h : op0For v = some i) : Binstr [tb v] i := by
+  cases authority with
+  | mk revision =>
+      cases revision with
+      | pinned => exact op0_sound h
+      | amended =>
+          change op0' v = some i at h
+          exact op0'_sound h
+
+@[simp] theorem op0For_pinned :
+    @op0For pinnedBinaryAuthority = op0 := rfl
+
+@[simp] theorem op0For_amended :
+    @op0For amendedBinaryAuthority = op0' := rfl
+
+/-- Away from the single corrected opcode, authority selection reuses the
+pinned no-immediate table definitionally. -/
+theorem op0For_of_ne [authority : BinaryAuthority] {v : Nat}
+    (hne : v ≠ 0xBB) : op0For v = op0 v := by
+  cases authority with
+  | mk revision =>
+      cases revision with
+      | pinned => rfl
+      | amended => exact op0'_of_ne hne
+
 /-- Every `0xFC k` opcode of `5.3-binary.instructions.spectec` that carries no
 immediate. -/
 def opFC0 : Nat → Option Instr
@@ -346,18 +554,27 @@ def opFC0 : Nat → Option Instr
   | 7 => some (.cvtop .i64 .f64 (.fi (.truncSat .u)))
   | _ => none
 
-theorem opFC0_sound {k : Nat} {i : Instr} {bo : Bytes} (hk : opFC0 k = some i)
+theorem opFC0_sound [authority : BinaryAuthority]
+    {k : Nat} {i : Instr} {bo : Bytes} (hk : opFC0 k = some i)
     (hb : Bprefixed 0xFC k bo) : Binstr bo i := by
   unfold opFC0 at hk
   split at hk
-  · cases hk; exact Binstr.ofNum _ _ (BinstrNum.i32TruncSatF32S bo hb)
-  · cases hk; exact Binstr.ofNum _ _ (BinstrNum.i32TruncSatF32U bo hb)
-  · cases hk; exact Binstr.ofNum _ _ (BinstrNum.i32TruncSatF64S bo hb)
-  · cases hk; exact Binstr.ofNum _ _ (BinstrNum.i32TruncSatF64U bo hb)
-  · cases hk; exact Binstr.ofNum _ _ (BinstrNum.i64TruncSatF32S bo hb)
-  · cases hk; exact Binstr.ofNum _ _ (BinstrNum.i64TruncSatF32U bo hb)
-  · cases hk; exact Binstr.ofNum _ _ (BinstrNum.i64TruncSatF64S bo hb)
-  · cases hk; exact Binstr.ofNum _ _ (BinstrNum.i64TruncSatF64U bo hb)
+  · cases hk; exact Binstr.ofNum _ _
+      (BinstrNumFor.ofPinned (BinstrNum.i32TruncSatF32S bo hb) (by decide))
+  · cases hk; exact Binstr.ofNum _ _
+      (BinstrNumFor.ofPinned (BinstrNum.i32TruncSatF32U bo hb) (by decide))
+  · cases hk; exact Binstr.ofNum _ _
+      (BinstrNumFor.ofPinned (BinstrNum.i32TruncSatF64S bo hb) (by decide))
+  · cases hk; exact Binstr.ofNum _ _
+      (BinstrNumFor.ofPinned (BinstrNum.i32TruncSatF64U bo hb) (by decide))
+  · cases hk; exact Binstr.ofNum _ _
+      (BinstrNumFor.ofPinned (BinstrNum.i64TruncSatF32S bo hb) (by decide))
+  · cases hk; exact Binstr.ofNum _ _
+      (BinstrNumFor.ofPinned (BinstrNum.i64TruncSatF32U bo hb) (by decide))
+  · cases hk; exact Binstr.ofNum _ _
+      (BinstrNumFor.ofPinned (BinstrNum.i64TruncSatF64S bo hb) (by decide))
+  · cases hk; exact Binstr.ofNum _ _
+      (BinstrNumFor.ofPinned (BinstrNum.i64TruncSatF64U bo hb) (by decide))
   · simp at hk
 
 /-! ## Shared operands -/
@@ -366,7 +583,8 @@ theorem opFC0_sound {k : Nat} {i : Instr} {bo : Bytes} (hk : opFC0 k = some i)
 the first byte: `0x40` is the empty result, a non-negative `Bs33` starts below
 `0x40` or at `0x80` and above (`Bs33_head`), and every `Bvaltype` byte lies
 strictly between. -/
-def decBlocktype (bs : Bytes) : Except Fault (BlockType × Bytes) :=
+def decBlocktype [authority : BinaryAuthority]
+    (bs : Bytes) : Except Fault (BlockType × Bytes) :=
   match bs with
   | [] => .error .eof
   | b :: r =>
@@ -380,7 +598,8 @@ def decBlocktype (bs : Bytes) : Except Fault (BlockType × Bytes) :=
          | .error e => .error e
          | .ok (t, r') => .ok (.result (some t), r'))
 
-theorem decBlocktype_sound : Sound Bblocktype decBlocktype := by
+theorem decBlocktype_sound [authority : BinaryAuthority] :
+    Sound Bblocktype decBlocktype := by
   intro bs bt r h
   cases bs with
   | nil => simp [decBlocktype] at h
@@ -407,7 +626,8 @@ theorem decBlocktype_sound : Sound Bblocktype decBlocktype := by
             exact ⟨bb, by rw [hbb, hr], by rw [← hv]; exact Bblocktype.val bb t hd⟩
 
 /-- Every `Bvaltype` byte lies in `[0x40, 0x80)` and is not `0x40`. -/
-theorem Bvaltype_head {bs : Bytes} {t : ValType} (h : Bvaltype bs t) :
+theorem Bvaltype_head [authority : BinaryAuthority]
+    {bs : Bytes} {t : ValType} (h : Bvaltype bs t) :
     ∃ b u, bs = b :: u ∧ ¬ (b.val = 0x40) ∧ ¬ (b.val < 0x40 ∨ 0x80 ≤ b.val) := by
   cases h with
   | num nt hn => cases hn <;> (refine ⟨_, [], rfl, ?_, ?_⟩ <;> decide)
@@ -418,7 +638,8 @@ theorem Bvaltype_head {bs : Bytes} {t : ValType} (h : Bvaltype bs t) :
       | nonNull bs' ht _ => exact ⟨tb 0x64, bs', rfl, by decide, by decide⟩
       | abs _bs ht ha => cases ha <;> (refine ⟨_, [], rfl, ?_, ?_⟩ <;> decide)
 
-theorem decBlocktype_complete : Complete Bblocktype decBlocktype := by
+theorem decBlocktype_complete [authority : BinaryAuthority] :
+    Complete Bblocktype decBlocktype := by
   intro b bt r h
   cases h with
   | empty => rfl
@@ -431,7 +652,7 @@ theorem decBlocktype_complete : Complete Bblocktype decBlocktype := by
       rw [decBlocktype, if_neg hne, if_neg hnr]
       simp only [hstep]
   | idx bs i x hs hnn hval =>
-      obtain ⟨b0, u0, hb0, hrange⟩ := Bs33_head hs hnn
+      obtain ⟨b0, u0, hb0, hrange⟩ := Bs33For_head hs hnn
       subst hb0
       show decBlocktype (b0 :: (u0 ++ r)) = _
       have hne : ¬ (b0.val = 0x40) := by omega
@@ -830,9 +1051,13 @@ theorem arg4_complete {α β γ δ : Type} {G : Bytes → α → Prop} {H : Byte
 
 /-! ## Single-byte opcodes with immediates -/
 
+section ImmediateAuthority
+
+variable [authority : BinaryAuthority]
+
 /-- Every one-byte opcode of the unprefixed space that carries an immediate,
 dispatched on the opcode byte and applied to the bytes after it. -/
-def decOp1 (v : Nat) (r : Bytes) : Except Fault (Instr × Bytes) :=
+def decOp1Base (v : Nat) (r : Bytes) : Except Fault (Instr × Bytes) :=
   match v with
   | 0x08 => arg1 decIdx (fun x => Instr.throw x) r
   | 0x0C => arg1 decIdx (fun l => Instr.br l) r
@@ -885,26 +1110,26 @@ def decOp1 (v : Nat) (r : Bytes) : Except Fault (Instr × Bytes) :=
   | 0xD6 => arg1 decIdx (fun l => Instr.brOnNonNull l) r
   | _ => Except.error Fault.opcode
 
-theorem decOp1_sound {v : Nat} {r : Bytes} {i : Instr} {r' : Bytes}
-    (h : decOp1 v r = .ok (i, r')) : ∃ bb, r = bb ++ r' ∧ Binstr (tb v :: bb) i := by
-  unfold decOp1 at h
+theorem decOp1Base_sound {v : Nat} {r : Bytes} {i : Instr} {r' : Bytes}
+    (h : decOp1Base v r = .ok (i, r')) : ∃ bb, r = bb ++ r' ∧ Binstr (tb v :: bb) i := by
+  unfold decOp1Base at h
   split at h
   · obtain ⟨bb, x, hb, hg, hi⟩ := arg1_sound decIdx_sound _ h
-    exact ⟨bb, hb, by rw [hi]; exact Binstr.ofControl _ _ (BinstrControl.throw bb x hg)⟩
+    exact ⟨bb, hb, by rw [hi]; exact Binstr.ofControl _ _ (BinstrControlFor.ofPinned (BinstrControl.throw bb x hg))⟩
   · obtain ⟨bb, x, hb, hg, hi⟩ := arg1_sound decIdx_sound _ h
-    exact ⟨bb, hb, by rw [hi]; exact Binstr.ofControl _ _ (BinstrControl.br bb x hg)⟩
+    exact ⟨bb, hb, by rw [hi]; exact Binstr.ofControl _ _ (BinstrControlFor.ofPinned (BinstrControl.br bb x hg))⟩
   · obtain ⟨bb, x, hb, hg, hi⟩ := arg1_sound decIdx_sound _ h
-    exact ⟨bb, hb, by rw [hi]; exact Binstr.ofControl _ _ (BinstrControl.brIf bb x hg)⟩
+    exact ⟨bb, hb, by rw [hi]; exact Binstr.ofControl _ _ (BinstrControlFor.ofPinned (BinstrControl.brIf bb x hg))⟩
   · obtain ⟨b₁, b₂, x, y, hb, hg₁, hg₂, hi⟩ := arg2_sound (decList_sound decIdx_sound) decIdx_sound _ h
-    exact ⟨b₁ ++ b₂, by simp [hb], by rw [hi]; exact Binstr.ofControl _ _ (BinstrControl.brTable b₁ b₂ x y hg₁ hg₂)⟩
+    exact ⟨b₁ ++ b₂, by simp [hb], by rw [hi]; exact Binstr.ofControl _ _ (BinstrControlFor.ofPinned (BinstrControl.brTable b₁ b₂ x y hg₁ hg₂))⟩
   · obtain ⟨bb, x, hb, hg, hi⟩ := arg1_sound decIdx_sound _ h
-    exact ⟨bb, hb, by rw [hi]; exact Binstr.ofControl _ _ (BinstrControl.call bb x hg)⟩
+    exact ⟨bb, hb, by rw [hi]; exact Binstr.ofControl _ _ (BinstrControlFor.ofPinned (BinstrControl.call bb x hg))⟩
   · obtain ⟨b₁, b₂, x, y, hb, hg₁, hg₂, hi⟩ := arg2_sound decIdx_sound decIdx_sound _ h
-    exact ⟨b₁ ++ b₂, by simp [hb], by rw [hi]; exact Binstr.ofControl _ _ (BinstrControl.callIndirect b₁ b₂ x y hg₁ hg₂)⟩
+    exact ⟨b₁ ++ b₂, by simp [hb], by rw [hi]; exact Binstr.ofControl _ _ (BinstrControlFor.ofPinned (BinstrControl.callIndirect b₁ b₂ x y hg₁ hg₂))⟩
   · obtain ⟨bb, x, hb, hg, hi⟩ := arg1_sound decIdx_sound _ h
-    exact ⟨bb, hb, by rw [hi]; exact Binstr.ofControl _ _ (BinstrControl.returnCall bb x hg)⟩
+    exact ⟨bb, hb, by rw [hi]; exact Binstr.ofControl _ _ (BinstrControlFor.ofPinned (BinstrControl.returnCall bb x hg))⟩
   · obtain ⟨b₁, b₂, x, y, hb, hg₁, hg₂, hi⟩ := arg2_sound decIdx_sound decIdx_sound _ h
-    exact ⟨b₁ ++ b₂, by simp [hb], by rw [hi]; exact Binstr.ofControl _ _ (BinstrControl.returnCallIndirect b₁ b₂ x y hg₁ hg₂)⟩
+    exact ⟨b₁ ++ b₂, by simp [hb], by rw [hi]; exact Binstr.ofControl _ _ (BinstrControlFor.ofPinned (BinstrControl.returnCallIndirect b₁ b₂ x y hg₁ hg₂))⟩
   · obtain ⟨bb, x, hb, hg, hi⟩ := arg1_sound (decList_sound decValtype_sound) _ h
     exact ⟨bb, hb, by rw [hi]; exact Binstr.ofParametric _ _ (BinstrParametric.selectT bb x hg)⟩
   · obtain ⟨bb, x, hb, hg, hi⟩ := arg1_sound decIdx_sound _ h
@@ -972,13 +1197,25 @@ theorem decOp1_sound {v : Nat} {r : Bytes} {i : Instr} {r' : Bytes}
   · obtain ⟨bb, x, hb, hg, hi⟩ := arg1_sound decIdx_sound _ h
     exact ⟨bb, hb, by rw [hi]; exact Binstr.ofMemory _ _ (BinstrMemory.grow bb x hg)⟩
   · obtain ⟨bb, x, hb, hg, hi⟩ := arg1_sound decU32_sound _ h
-    exact ⟨bb, hb, by rw [hi]; exact Binstr.ofNum _ _ (BinstrNum.i32Const bb x hg)⟩
+    refine ⟨bb, hb, ?_⟩
+    rw [hi]
+    exact Binstr.ofNum _ _
+      (BinstrNumFor.ofPinned (BinstrNum.i32Const bb x hg) (by intro hbad; cases hbad))
   · obtain ⟨bb, x, hb, hg, hi⟩ := arg1_sound decU64_sound _ h
-    exact ⟨bb, hb, by rw [hi]; exact Binstr.ofNum _ _ (BinstrNum.i64Const bb x hg)⟩
+    refine ⟨bb, hb, ?_⟩
+    rw [hi]
+    exact Binstr.ofNum _ _
+      (BinstrNumFor.ofPinned (BinstrNum.i64Const bb x hg) (by intro hbad; cases hbad))
   · obtain ⟨bb, x, hb, hg, hi⟩ := arg1_sound decF32_sound _ h
-    exact ⟨bb, hb, by rw [hi]; exact Binstr.ofNum _ _ (BinstrNum.f32Const bb x hg)⟩
+    refine ⟨bb, hb, ?_⟩
+    rw [hi]
+    exact Binstr.ofNum _ _
+      (BinstrNumFor.ofPinned (BinstrNum.f32Const bb x hg) (by intro hbad; cases hbad))
   · obtain ⟨bb, x, hb, hg, hi⟩ := arg1_sound decF64_sound _ h
-    exact ⟨bb, hb, by rw [hi]; exact Binstr.ofNum _ _ (BinstrNum.f64Const bb x hg)⟩
+    refine ⟨bb, hb, ?_⟩
+    rw [hi]
+    exact Binstr.ofNum _ _
+      (BinstrNumFor.ofPinned (BinstrNum.f64Const bb x hg) (by intro hbad; cases hbad))
   · obtain ⟨bb, x, hb, hg, hi⟩ := arg1_sound decHeaptype_sound _ h
     exact ⟨bb, hb, by rw [hi]; exact Binstr.ofRef _ _ (BinstrRef.null bb x hg)⟩
   · obtain ⟨bb, x, hb, hg, hi⟩ := arg1_sound decIdx_sound _ h
@@ -988,6 +1225,93 @@ theorem decOp1_sound {v : Nat} {r : Bytes} {i : Instr} {r' : Bytes}
   · obtain ⟨bb, x, hb, hg, hi⟩ := arg1_sound decIdx_sound _ h
     exact ⟨bb, hb, by rw [hi]; exact Binstr.ofRef _ _ (BinstrRef.brOnNonNull bb x hg)⟩
   · cases h
+
+end ImmediateAuthority
+
+/-- The explicit pinned one-immediate decoder. -/
+abbrev decOp1 : Nat → Bytes → Except Fault (Instr × Bytes) :=
+  @decOp1Base pinnedBinaryAuthority
+
+theorem decOp1_sound {v : Nat} {r : Bytes} {i : Instr} {r' : Bytes}
+    (h : decOp1 v r = .ok (i, r')) :
+    ∃ bb, r = bb ++ r' ∧ BinstrPinned (tb v :: bb) i :=
+  @decOp1Base_sound pinnedBinaryAuthority v r i r' h
+
+/-- Corrected one-immediate dispatch, adding the two AMD-010 typed-reference
+call opcodes while reusing the authority-parameterized base table. -/
+def decOp1' (v : Nat) (r : Bytes) : Except Fault (Instr × Bytes) :=
+  match v with
+  | 0x14 => arg1 decIdx (fun x => Instr.callRef (.idx x)) r
+  | 0x15 => arg1 decIdx (fun x => Instr.returnCallRef (.idx x)) r
+  | _ => @decOp1Base amendedBinaryAuthority v r
+
+theorem decOp1'_sound {v : Nat} {r : Bytes} {i : Instr} {r' : Bytes}
+    (h : decOp1' v r = .ok (i, r')) :
+    ∃ bb, r = bb ++ r' ∧ BinstrA (tb v :: bb) i := by
+  unfold decOp1' at h
+  split at h
+  · obtain ⟨bb, x, hb, hg, hi⟩ := arg1_sound decIdx_sound _ h
+    refine ⟨bb, hb, ?_⟩
+    rw [hi]
+    exact @Binstr.ofControl amendedBinaryAuthority _ _
+      (@BinstrControl'.callRef bb x hg)
+  · obtain ⟨bb, x, hb, hg, hi⟩ := arg1_sound decIdx_sound _ h
+    refine ⟨bb, hb, ?_⟩
+    rw [hi]
+    exact @Binstr.ofControl amendedBinaryAuthority _ _
+      (@BinstrControl'.returnCallRef bb x hg)
+  · exact @decOp1Base_sound amendedBinaryAuthority v r i r' h
+
+theorem decOp1'_callRef_complete {bs r : Bytes} {x : TypeIdx}
+    (h : Btypeidx bs x) :
+    decOp1' 0x14 (bs ++ r) = .ok (.callRef (.idx x), r) := by
+  simp only [decOp1', arg1, decIdx_complete bs x r h]
+
+theorem decOp1'_returnCallRef_complete {bs r : Bytes} {x : TypeIdx}
+    (h : Btypeidx bs x) :
+    decOp1' 0x15 (bs ++ r) = .ok (.returnCallRef (.idx x), r) := by
+  simp only [decOp1', arg1, decIdx_complete bs x r h]
+
+theorem decOp1'_of_other {v : Nat} (h14 : v ≠ 0x14) (h15 : v ≠ 0x15)
+    (r : Bytes) : decOp1' v r = @decOp1Base amendedBinaryAuthority v r := by
+  unfold decOp1'
+  split <;> simp_all
+
+/-- The one-immediate table selected by the current binary authority. -/
+def decOp1For [authority : BinaryAuthority]
+    (v : Nat) (r : Bytes) : Except Fault (Instr × Bytes) :=
+  match authority.revision with
+  | .pinned => decOp1 v r
+  | .amended => decOp1' v r
+
+theorem decOp1For_sound [authority : BinaryAuthority]
+    {v : Nat} {r : Bytes} {i : Instr} {r' : Bytes}
+    (h : decOp1For v r = .ok (i, r')) :
+    ∃ bb, r = bb ++ r' ∧ Binstr (tb v :: bb) i := by
+  cases authority with
+  | mk revision =>
+      cases revision with
+      | pinned => exact decOp1_sound h
+      | amended =>
+          change decOp1' v r = .ok (i, r') at h
+          exact decOp1'_sound h
+
+@[simp] theorem decOp1For_pinned :
+    @decOp1For pinnedBinaryAuthority = decOp1 := rfl
+
+@[simp] theorem decOp1For_amended :
+    @decOp1For amendedBinaryAuthority = decOp1' := rfl
+
+/-- Away from the two added typed-call opcodes, the selected one-immediate
+dispatcher is the authority-parameterized base table. -/
+theorem decOp1For_of_other [authority : BinaryAuthority]
+    {v : Nat} (h14 : v ≠ 0x14) (h15 : v ≠ 0x15) (r : Bytes) :
+    decOp1For v r = decOp1Base v r := by
+  cases authority with
+  | mk revision =>
+      cases revision with
+      | pinned => rfl
+      | amended => exact decOp1'_of_other h14 h15 r
 
 /-- Every `0xFC k` opcode of `5.3-binary.instructions.spectec` that carries an
 immediate. -/
@@ -1005,7 +1329,8 @@ def decFC (k : Nat) (r : Bytes) : Except Fault (Instr × Bytes) :=
   | 17 => arg1 decIdx (fun x => Instr.tableFill x) r
   | _ => Except.error Fault.opcode
 
-theorem decFC_sound {k : Nat} {r : Bytes} {i : Instr} {r' : Bytes}
+theorem decFC_sound [authority : BinaryAuthority]
+    {k : Nat} {r : Bytes} {i : Instr} {r' : Bytes}
     (h : decFC k r = .ok (i, r')) :
     ∃ bb, r = bb ++ r' ∧ ∀ bo, Bprefixed 0xFC k bo → Binstr (bo ++ bb) i := by
   unfold decFC at h
@@ -1061,7 +1386,8 @@ def decV128Const (r : Bytes) : Except Fault (Instr × Bytes) :=
         .ok (Instr.vconst .v128 ⟨leNat bl, h⟩, r')
       else .error .range
 
-theorem decV128Const_sound {r : Bytes} {i : Instr} {r' : Bytes}
+theorem decV128Const_sound [authority : BinaryAuthority]
+    {r : Bytes} {i : Instr} {r' : Bytes}
     (h : decV128Const r = .ok (i, r')) :
     ∃ bb, r = bb ++ r' ∧ ∀ bo, Bprefixed 0xFD 12 bo → Binstr (bo ++ bb) i := by
   rw [decV128Const] at h
@@ -1084,7 +1410,8 @@ def decShuffle (r : Bytes) : Except Fault (Instr × Bytes) :=
   | .error e => .error e
   | .ok (ls, r') => .ok (Instr.vshuffle bshI8x16 ls, r')
 
-theorem decShuffle_sound {r : Bytes} {i : Instr} {r' : Bytes}
+theorem decShuffle_sound [authority : BinaryAuthority]
+    {r : Bytes} {i : Instr} {r' : Bytes}
     (h : decShuffle r = .ok (i, r')) :
     ∃ bb, r = bb ++ r' ∧ ∀ bo, Bprefixed 0xFD 13 bo → Binstr (bo ++ bb) i := by
   rw [decShuffle] at h
@@ -1108,7 +1435,8 @@ def opFB0 : Nat → Option Instr
   | 30 => some (Instr.i31Get .u)
   | _ => none
 
-theorem opFB0_sound {k : Nat} {i : Instr} {bo : Bytes} (hk : opFB0 k = some i)
+theorem opFB0_sound [authority : BinaryAuthority]
+    {k : Nat} {i : Instr} {bo : Bytes} (hk : opFB0 k = some i)
     (hbo : Bprefixed 0xFB k bo) : Binstr bo i := by
   unfold opFB0 at hk
   split at hk
@@ -1123,7 +1451,8 @@ theorem opFB0_sound {k : Nat} {i : Instr} {bo : Bytes} (hk : opFB0 k = some i)
 
 /-- Every `0xFB k` opcode of `5.3-binary.instructions.spectec` that carries an
 immediate, dispatched on the `Bu32` selector. -/
-def decFB (k : Nat) (r : Bytes) : Except Fault (Instr × Bytes) :=
+def decFB [authority : BinaryAuthority]
+    (k : Nat) (r : Bytes) : Except Fault (Instr × Bytes) :=
   match k with
   | 0 => arg1 decIdx (fun x => Instr.structNew x) r
   | 1 => arg1 decIdx (fun x => Instr.structNewDefault x) r
@@ -1152,7 +1481,8 @@ def decFB (k : Nat) (r : Bytes) : Except Fault (Instr × Bytes) :=
   | 25 => arg4 decCastop decIdx decHeaptype decHeaptype (fun x y z w => Instr.brOnCastFail y (.ref x.1 z) (.ref x.2 w)) r
   | _ => Except.error Fault.opcode
 
-theorem decFB_sound {k : Nat} {r : Bytes} {i : Instr} {r' : Bytes}
+theorem decFB_sound [authority : BinaryAuthority]
+    {k : Nat} {r : Bytes} {i : Instr} {r' : Bytes}
     (h : decFB k r = .ok (i, r')) :
     ∃ bb, r = bb ++ r' ∧ ∀ bo, Bprefixed 0xFB k bo → Binstr (bo ++ bb) i := by
   unfold decFB at h
@@ -1271,9 +1601,9 @@ theorem decFB_sound {k : Nat} {r : Bytes} {i : Instr} {r' : Bytes}
     exact Binstr.ofCast _ _ (BinstrCast.brOnCastFail bo b1 b2 b3 b4 x.1 x.2 y z w hbo hg1 hg2 hg3 hg4)
   · cases h
 
-/-- Every `0xFD k` opcode of `5.3-binary.instructions.spectec` that carries no
-immediate, one entry per production. -/
-def opFD0 : Nat → Option Instr
+/-- Every `0xFD k` opcode that carries no immediate, selected by the finite
+binary authority.  AMD-012 changes only selector 275's operand shape. -/
+def opFD0For [authority : BinaryAuthority] : Nat → Option Instr
   | 14 => some (Instr.vswizzlop bshI8x16 .swizzle)
   | 256 => some (Instr.vswizzlop bshI8x16 .relaxedSwizzle)
   | 15 => some (Instr.vsplat shI8x16)
@@ -1417,7 +1747,10 @@ def opFD0 : Nat → Option Instr
   | 189 => some (Instr.vextbinop ishI32x4 ishI16x8 (.extmul .high .s))
   | 190 => some (Instr.vextbinop ishI32x4 ishI16x8 (.extmul .low .u))
   | 191 => some (Instr.vextbinop ishI32x4 ishI16x8 (.extmul .high .u))
-  | 275 => some (Instr.vextternop ishI32x4 ishI16x8 (.relaxedDotAdd .s))
+  | 275 =>
+      match authority.revision with
+      | .pinned => some (Instr.vextternop ishI32x4 ishI16x8 (.relaxedDotAdd .s))
+      | .amended => some (Instr.vextternop ishI32x4 ishI8x16 (.relaxedDotAdd .s))
   | 192 => some (Instr.vunop shI64x2 (.int .abs))
   | 193 => some (Instr.vunop shI64x2 (.int .neg))
   | 195 => some (Instr.vtestop shI64x2 (.int .allTrue))
@@ -1494,9 +1827,16 @@ def opFD0 : Nat → Option Instr
   | 260 => some (Instr.vcvtop shI32x4 shF64x2 (.fj (.relaxedTrunc .u (some .zero))))
   | _ => none
 
-theorem opFD0_sound {k : Nat} {i : Instr} {bo : Bytes} (hk : opFD0 k = some i)
+/-- The verbatim pinned no-immediate SIMD table. -/
+def opFD0 : Nat → Option Instr := @opFD0For pinnedBinaryAuthority
+
+@[simp] theorem opFD0For_pinned :
+    @opFD0For pinnedBinaryAuthority = opFD0 := rfl
+
+theorem opFD0For_sound [authority : BinaryAuthority]
+    {k : Nat} {i : Instr} {bo : Bytes} (hk : opFD0For k = some i)
     (hbo : Bprefixed 0xFD k bo) : Binstr bo i := by
-  unfold opFD0 at hk
+  unfold opFD0For at hk
   split at hk
   · cases hk; exact Binstr.ofVecMem _ _ (BinstrVecMem.i8x16Swizzle bo hbo)
   · cases hk; exact Binstr.ofVecMem _ _ (BinstrVecMem.i8x16RelaxedSwizzle bo hbo)
@@ -1616,50 +1956,104 @@ theorem opFD0_sound {k : Nat} {i : Instr} {bo : Bytes} (hk : opFD0 k = some i)
   · cases hk; exact Binstr.ofVecInt8And16 _ _ (BinstrVecInt8And16.i16x8ExtmulLowI8x16U bo hbo)
   · cases hk; exact Binstr.ofVecInt8And16 _ _ (BinstrVecInt8And16.i16x8ExtmulHighI8x16U bo hbo)
   · cases hk; exact Binstr.ofVecInt8And16 _ _ (BinstrVecInt8And16.i16x8RelaxedDotI8x16S bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i32x4ExtaddPairwiseI16x8S bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i32x4ExtaddPairwiseI16x8U bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i32x4Abs bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i32x4Neg bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i32x4AllTrue bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i32x4Bitmask bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i32x4ExtendLowI16x8S bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i32x4ExtendHighI16x8S bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i32x4ExtendLowI16x8U bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i32x4ExtendHighI16x8U bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i32x4Shl bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i32x4ShrS bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i32x4ShrU bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i32x4Add bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i32x4Sub bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i32x4Mul bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i32x4MinS bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i32x4MinU bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i32x4MaxS bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i32x4MaxU bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i32x4DotI16x8S bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i32x4ExtmulLowI16x8S bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i32x4ExtmulHighI16x8S bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i32x4ExtmulLowI16x8U bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i32x4ExtmulHighI16x8U bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i32x4RelaxedDotAddI16x8S bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i64x2Abs bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i64x2Neg bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i64x2AllTrue bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i64x2Bitmask bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i64x2ExtendLowI32x4S bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i64x2ExtendHighI32x4S bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i64x2ExtendLowI32x4U bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i64x2ExtendHighI32x4U bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i64x2Shl bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i64x2ShrS bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i64x2ShrU bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i64x2Add bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i64x2Sub bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i64x2Mul bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i64x2ExtmulLowI32x4S bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i64x2ExtmulHighI32x4S bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i64x2ExtmulLowI32x4U bo hbo)
-  · cases hk; exact Binstr.ofVecInt32And64 _ _ (BinstrVecInt32And64.i64x2ExtmulHighI32x4U bo hbo)
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i32x4ExtaddPairwiseI16x8S bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i32x4ExtaddPairwiseI16x8U bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i32x4Abs bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i32x4Neg bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i32x4AllTrue bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i32x4Bitmask bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i32x4ExtendLowI16x8S bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i32x4ExtendHighI16x8S bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i32x4ExtendLowI16x8U bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i32x4ExtendHighI16x8U bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i32x4Shl bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i32x4ShrS bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i32x4ShrU bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i32x4Add bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i32x4Sub bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i32x4Mul bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i32x4MinS bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i32x4MinU bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i32x4MaxS bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i32x4MaxU bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i32x4DotI16x8S bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i32x4ExtmulLowI16x8S bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i32x4ExtmulHighI16x8S bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i32x4ExtmulLowI16x8U bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i32x4ExtmulHighI16x8U bo hbo) (by decide))
+  ·
+    cases authority with
+    | mk revision =>
+        cases revision with
+        | pinned =>
+            cases hk
+            exact @Binstr.ofVecInt32And64 pinnedBinaryAuthority _ _
+              (BinstrVecInt32And64.i32x4RelaxedDotAddI16x8S bo hbo)
+        | amended =>
+            cases hk
+            exact @Binstr.ofVecInt32And64 amendedBinaryAuthority _ _
+              (BinstrVecInt32And64For.correctedRelaxedDotAdd hbo)
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i64x2Abs bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i64x2Neg bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i64x2AllTrue bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i64x2Bitmask bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i64x2ExtendLowI32x4S bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i64x2ExtendHighI32x4S bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i64x2ExtendLowI32x4U bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i64x2ExtendHighI32x4U bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i64x2Shl bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i64x2ShrS bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i64x2ShrU bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i64x2Add bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i64x2Sub bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i64x2Mul bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i64x2ExtmulLowI32x4S bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i64x2ExtmulHighI32x4S bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i64x2ExtmulLowI32x4U bo hbo) (by decide))
+  · cases hk; exact Binstr.ofVecInt32And64 _ _
+      (BinstrVecInt32And64For.ofPinned (BinstrVecInt32And64.i64x2ExtmulHighI32x4U bo hbo) (by decide))
   · cases hk; exact Binstr.ofVecFloat _ _ (BinstrVecFloat.f32x4Ceil bo hbo)
   · cases hk; exact Binstr.ofVecFloat _ _ (BinstrVecFloat.f32x4Floor bo hbo)
   · cases hk; exact Binstr.ofVecFloat _ _ (BinstrVecFloat.f32x4Trunc bo hbo)
@@ -1763,7 +2157,8 @@ def decFD (k : Nat) (r : Bytes) : Except Fault (Instr × Bytes) :=
   | 13 => decShuffle r
   | _ => Except.error Fault.opcode
 
-theorem decFD_sound {k : Nat} {r : Bytes} {i : Instr} {r' : Bytes}
+theorem decFD_sound [authority : BinaryAuthority]
+    {k : Nat} {r : Bytes} {i : Instr} {r' : Bytes}
     (h : decFD k r = .ok (i, r')) :
     ∃ bb, r = bb ++ r' ∧ ∀ bo, Bprefixed 0xFD k bo → Binstr (bo ++ bb) i := by
   unfold decFD at h
@@ -1960,7 +2355,8 @@ rather than five hundred, and it is what makes the completeness proof of
 plus five recursive constructors. -/
 
 /-- The `0xFB` opcode space, table and immediates together. -/
-def decFBbody (k : Nat) (r : Bytes) : Except Fault (Instr × Bytes) :=
+def decFBbody [authority : BinaryAuthority]
+    (k : Nat) (r : Bytes) : Except Fault (Instr × Bytes) :=
   match opFB0 k with
   | some i => .ok (i, r)
   | none => decFB k r
@@ -1972,17 +2368,19 @@ def decFCbody (k : Nat) (r : Bytes) : Except Fault (Instr × Bytes) :=
   | none => decFC k r
 
 /-- The `0xFD` opcode space, table and immediates together. -/
-def decFDbody (k : Nat) (r : Bytes) : Except Fault (Instr × Bytes) :=
-  match opFD0 k with
+def decFDbody [authority : BinaryAuthority]
+    (k : Nat) (r : Bytes) : Except Fault (Instr × Bytes) :=
+  match opFD0For k with
   | some i => .ok (i, r)
   | none => decFD k r
 
 /-- Every production of `Binstr` that does not recur into `Binstr`. -/
-def decInstrFlat (bs : Bytes) : Except Fault (Instr × Bytes) :=
+def decInstrFlat [authority : BinaryAuthority]
+    (bs : Bytes) : Except Fault (Instr × Bytes) :=
   match bs with
   | [] => Except.error Fault.eof
   | b :: r =>
-      match op0 b.val with
+      match op0For b.val with
       | some i => Except.ok (i, r)
       | none =>
           if b.val = 0xFB then
@@ -1997,9 +2395,10 @@ def decInstrFlat (bs : Bytes) : Except Fault (Instr × Bytes) :=
             (match decU32 r with
              | .error e => .error e
              | .ok (k, r₁) => decFDbody k.val r₁)
-          else decOp1 b.val r
+          else decOp1For b.val r
 
-theorem decInstrFlat_sound : Sound Binstr decInstrFlat := by
+theorem decInstrFlat_sound [authority : BinaryAuthority] :
+    Sound Binstr decInstrFlat := by
   intro bs i r h
   cases bs with
   | nil => cases h
@@ -2011,7 +2410,7 @@ theorem decInstrFlat_sound : Sound Binstr decInstrFlat := by
         refine ⟨[b], by rw [← hr]; rfl, ?_⟩
         have hb : b = tb b.val := byte_eq_tb b.property rfl
         rw [← hv, hb]
-        exact op0_sound hi'
+        exact op0For_sound hi'
       · split at h
         · -- 0xFB prefix
           rename_i hb
@@ -2068,18 +2467,19 @@ theorem decInstrFlat_sound : Sound Binstr decInstrFlat := by
                   obtain ⟨hv, hr⟩ := Prod.mk.inj (Except.ok.inj h)
                   refine ⟨b :: bk, by rw [hbk, hr]; rfl, ?_⟩
                   rw [← hv]
-                  exact opFD0_sound hi' hpref
+                  exact opFD0For_sound hi' hpref
                 · obtain ⟨bb, hbb, hfd⟩ := decFD_sound h
                   refine ⟨b :: bk ++ bb, by rw [hbk, hbb]; simp, ?_⟩
                   exact hfd (b :: bk) hpref
             · -- everything else
-              obtain ⟨bb, hbb, hd⟩ := decOp1_sound h
+              obtain ⟨bb, hbb, hd⟩ := decOp1For_sound h
               refine ⟨b :: bb, by rw [hbb]; rfl, ?_⟩
               rw [byte_eq_tb b.property rfl]
               exact hd
 
 /-- `grammar Binstr : instr`, bounded by a block-nesting depth. -/
-def decInstr : Nat → Bytes → Except Fault (Instr × Bytes)
+def decInstr [authority : BinaryAuthority] :
+    Nat → Bytes → Except Fault (Instr × Bytes)
   | 0, _ => .error .eof
   | d + 1, bs =>
       match bs with
@@ -2146,7 +2546,8 @@ def decInstr : Nat → Bytes → Except Fault (Instr × Bytes)
               else decInstrFlat (b :: r)
 
 /-- `grammar Bexpr : expr = | (in:Binstr)* 0x0B => in*`. -/
-def decExpr (d : Nat) (bs : Bytes) : Except Fault (Expr × Bytes) :=
+def decExpr [authority : BinaryAuthority]
+    (d : Nat) (bs : Bytes) : Except Fault (Expr × Bytes) :=
   match decInstrs (decInstr d) bs.length bs with
   | .error e => .error e
   | .ok (is, r) =>
@@ -2154,9 +2555,23 @@ def decExpr (d : Nat) (bs : Bytes) : Except Fault (Expr × Bytes) :=
       | .error e => .error e
       | .ok r' => .ok (InstrSeq.ofList is, r')
 
+/-- Explicit pinned and amended instances of the one recursive decoder family. -/
+abbrev decInstrPinned : Nat → Bytes → Except Fault (Instr × Bytes) :=
+  @decInstr pinnedBinaryAuthority
+
+abbrev decInstrA : Nat → Bytes → Except Fault (Instr × Bytes) :=
+  @decInstr amendedBinaryAuthority
+
+abbrev decExprPinned : Nat → Bytes → Except Fault (Expr × Bytes) :=
+  @decExpr pinnedBinaryAuthority
+
+abbrev decExprA : Nat → Bytes → Except Fault (Expr × Bytes) :=
+  @decExpr amendedBinaryAuthority
+
 /-! ## Soundness -/
 
-theorem decInstrs_sound {decI : Bytes → Except Fault (Instr × Bytes)}
+theorem decInstrs_sound [authority : BinaryAuthority]
+    {decI : Bytes → Except Fault (Instr × Bytes)}
     (hI : Sound Binstr decI) (n : Nat) : Sound Binstrs (decInstrs decI n) := by
   induction n with
   | zero =>
@@ -2185,7 +2600,8 @@ theorem decInstrs_sound {decI : Bytes → Except Fault (Instr × Bytes)}
             rw [← hv]
             exact Binstrs.cons b₁ b₂ i is' hd₁ hd₂
 
-theorem decInstr_sound : ∀ d : Nat, Sound Binstr (decInstr d) := by
+theorem decInstr_sound [authority : BinaryAuthority] :
+    ∀ d : Nat, Sound Binstr (decInstr d) := by
   intro d
   induction d with
   | zero => intro bs i r h; cases h
@@ -2308,7 +2724,8 @@ theorem decInstr_sound : ∀ d : Nat, Sound Binstr (decInstr d) := by
                 · -- every non-recursive production
                   exact decInstrFlat_sound (b :: bs) i r h
 
-theorem decExpr_sound (d : Nat) : Sound Bexpr (decExpr d) := by
+theorem decExpr_sound [authority : BinaryAuthority]
+    (d : Nat) : Sound Bexpr (decExpr d) := by
   intro bs e r h
   rw [decExpr] at h
   split at h
@@ -2323,5 +2740,11 @@ theorem decExpr_sound (d : Nat) : Sound Bexpr (decExpr d) := by
       refine ⟨bin ++ [tb 0x0B], by rw [hbin, hr₁, hr]; simp, ?_⟩
       rw [← hv]
       exact Bexpr.mk bin is hdin
+
+theorem decInstrA_sound (d : Nat) : Sound BinstrA (decInstrA d) :=
+  @decInstr_sound amendedBinaryAuthority d
+
+theorem decExprA_sound (d : Nat) : Sound BexprA (decExprA d) :=
+  @decExpr_sound amendedBinaryAuthority d
 
 end WasmGemmGnaf.Wasm.Core.Decode

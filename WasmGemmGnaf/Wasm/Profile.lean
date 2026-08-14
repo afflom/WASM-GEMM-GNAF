@@ -1,5 +1,6 @@
 /-
-  Wasm/Profile.lean --- the released portable profile.
+  Wasm/Profile.lean --- the portable-profile schema and canonical first-order
+  profile data.
 
   Normative sources: SPEC.md section 6.2 (the first-order body / lawfulness
   split and the canonical identity), section 7.1 (raw invocations), section 7.2
@@ -12,9 +13,16 @@
   (`ProfileLawful`) proved, never stored.  Nothing in this file states a
   conclusion of the release theorem, and nothing is assumed.
 
+  SCOPE OF THE COST-TABLE WITNESS.  `canonicalCostTableUnits` near the
+  end of this file carries rows for the 34-rule legacy `Wasm.Step`
+  machine plus its initialization events.  Those rows are not an inventory of
+  every amended-Core execution rule and do not by themselves instantiate
+  SPEC section 7.5's complete release cost table.
+
   Every declaration in this file is proved.
 -/
 import WasmGemmGnaf.Foundation.SchemaRegistry
+import WasmGemmGnaf.Wasm.AuthorityAmendments
 import WasmGemmGnaf.Wasm.Types
 import WasmGemmGnaf.Cost.Vector
 
@@ -469,12 +477,14 @@ theorem canonical_arraySize_refs (n : Nat) :
 
 /-! ## Cost table body (SPEC section 7.5)
 
-The cost table body is first-order: unit counts, the canonical widths, and one
-row per pinned rule identifier.  The contribution *law* is stated as proved
-theorems about a lawful table, never stored as a field. -/
+The cost table body is first-order: unit counts, canonical widths, and explicit
+rule rows.  Which rule universe a concrete table covers must be proved
+separately; the structure itself does not assert full Core coverage.  The
+contribution *law* is stated as proved theorems about a lawful table, never
+stored as a field. -/
 
-/-- One row of the cost table: a pinned rule identifier from the vendored
-conformance map, and the exact dynamic cost it contributes. -/
+/-- One row of a cost table: a rule identifier and its dynamic contribution.
+The structure does not assert the identifier's provenance. -/
 structure CostRuleRow where
   ruleId : String
   contribution : Cost.DynamicVector
@@ -536,7 +546,7 @@ structure CostTableBody where
   validationNodeUnit : Nat
   /-- Units per premise edge of that derivation. -/
   validationEdgeUnit : Nat
-  /-- `wasmRuleSteps` charged by one relational Core `Step`. -/
+  /-- `wasmRuleSteps` charged by one step of the selected machine. -/
   ruleStepUnit : Nat
   /-- `preparationSteps` charged by one raw installation. -/
   installationPreparationUnit : Nat
@@ -546,7 +556,7 @@ structure CostTableBody where
   wholeVectorShuffleLanes : Nat
   /-- The pinned abstract GC and exception widths. -/
   layout : GcLayoutConstants
-  /-- One row per pinned Core rule identifier. -/
+  /-- The explicit rows for the selected execution-rule universe. -/
   ruleRows : List CostRuleRow
   /-- One row per harness initialization event identifier. -/
   initializationRows : List CostRuleRow
@@ -608,8 +618,7 @@ unique canonical declarative-validation derivation. -/
 def validationCost (t : CostTableBody) (nodes edges : Nat) : Nat :=
   t.validationNodeUnit * nodes + t.validationEdgeUnit * edges
 
-/-- SPEC section 7.5: every relational Core `Step` contributes one
-`wasmRuleSteps` unit. -/
+/-- One `wasmRuleSteps` unit at the configured per-step rate. -/
 def stepCost (t : CostTableBody) : Nat := t.ruleStepUnit
 
 /-- SPEC section 7.5: raw installation contributes one `preparationSteps` and
@@ -617,7 +626,7 @@ one `bytesWritten` unit per installed byte. -/
 def installationCost (t : CostTableBody) (installedBytes : Nat) : Nat × Nat :=
   (t.installationPreparationUnit, t.installedByteWriteUnit * installedBytes)
 
-/-- Lookup of the row for a pinned rule identifier. -/
+/-- Lookup of a row by its stored identifier. -/
 def rowFor? (t : CostTableBody) (ruleId : String) : Option CostRuleRow :=
   t.ruleRows.find? (fun row => row.ruleId == ruleId)
 
@@ -715,22 +724,30 @@ end SemanticsLayer
 revision it transcribes, which layer it governs, and its rule-set version. -/
 structure SemanticsIdentityBody where
   revisionCommit : String
+  /-- The byte-identical vendored authority tree. -/
+  vendoredTreeId : CanonicalObjectId
+  /-- The exact, canonically ordered authority amendments applied to that tree. -/
+  amendmentSetId : CanonicalObjectId
   layer : SemanticsLayer
   ruleSetVersion : Nat
-  deriving DecidableEq, Repr, Inhabited
+  deriving DecidableEq, Inhabited
 
 namespace SemanticsIdentityBody
 
 def bytes (s : SemanticsIdentityBody) : List UInt8 :=
   Enc.stringBytes s.revisionCommit ++
-    (SemanticsLayer.bytes s.layer ++ Bytes.natBytes s.ruleSetVersion)
+    (CanonicalObjectId.bytes s.vendoredTreeId ++
+      (CanonicalObjectId.bytes s.amendmentSetId ++
+        (SemanticsLayer.bytes s.layer ++ Bytes.natBytes s.ruleSetVersion)))
 
 theorem bytes_prefixFree : Bytes.PrefixFree bytes := by
   intro x y r s h
   simp only [bytes, List.append_assoc] at h
   obtain ⟨h1, h⟩ := Enc.stringBytes_prefixFree _ _ _ _ h
-  obtain ⟨h2, h⟩ := SemanticsLayer.bytes_prefixFree _ _ _ _ h
-  obtain ⟨h3, h⟩ := Bytes.natBytes_prefixFree _ _ _ _ h
+  obtain ⟨h2, h⟩ := CanonicalObjectId.bytes_prefixFree _ _ _ _ h
+  obtain ⟨h3, h⟩ := CanonicalObjectId.bytes_prefixFree _ _ _ _ h
+  obtain ⟨h4, h⟩ := SemanticsLayer.bytes_prefixFree _ _ _ _ h
+  obtain ⟨h5, h⟩ := Bytes.natBytes_prefixFree _ _ _ _ h
   refine ⟨?_, h⟩
   cases x; cases y; simp_all
 
@@ -741,7 +758,19 @@ end SemanticsIdentityBody
 
 /-- The canonical semantics identity for one layer of the pinned revision. -/
 def canonicalSemanticsIdentity (layer : SemanticsLayer) : SemanticsIdentityBody :=
-  { revisionCommit := core3RevisionCommit, layer := layer, ruleSetVersion := 1 }
+  { revisionCommit := core3RevisionCommit
+    vendoredTreeId := VendoredTreeBody.identity core3VendoredTree
+    amendmentSetId := AuthorityAmendmentSetBody.identity core3AuthorityAmendmentSet
+    layer := layer
+    ruleSetVersion := 2 }
+
+@[simp] theorem canonicalSemanticsIdentity_vendoredTreeId (layer : SemanticsLayer) :
+    (canonicalSemanticsIdentity layer).vendoredTreeId =
+      VendoredTreeBody.identity core3VendoredTree := rfl
+
+@[simp] theorem canonicalSemanticsIdentity_amendmentSetId (layer : SemanticsLayer) :
+    (canonicalSemanticsIdentity layer).amendmentSetId =
+      AuthorityAmendmentSetBody.identity core3AuthorityAmendmentSet := rfl
 
 /-- A permitted import. -/
 structure ImportRequirement where
@@ -1033,7 +1062,7 @@ structure ProfileBody where
   executionSemantics : SemanticsIdentityBody
   /-- The cost semantics: one first-order cost table body. -/
   costTableBody : CostTableBody
-  deriving DecidableEq, Repr, Inhabited
+  deriving DecidableEq, Inhabited
 
 namespace ProfileBody
 
@@ -1374,6 +1403,30 @@ theorem executionSemantics_revision (profile : Profile) :
   rw [profile.lawful.executionSemantics]
   rfl
 
+theorem decodingSemantics_authority (profile : Profile) :
+    profile.body.decodingSemantics.vendoredTreeId =
+        VendoredTreeBody.identity core3VendoredTree ∧
+      profile.body.decodingSemantics.amendmentSetId =
+        AuthorityAmendmentSetBody.identity core3AuthorityAmendmentSet := by
+  rw [profile.lawful.decodingSemantics]
+  exact ⟨rfl, rfl⟩
+
+theorem validationSemantics_authority (profile : Profile) :
+    profile.body.validationSemantics.vendoredTreeId =
+        VendoredTreeBody.identity core3VendoredTree ∧
+      profile.body.validationSemantics.amendmentSetId =
+        AuthorityAmendmentSetBody.identity core3AuthorityAmendmentSet := by
+  rw [profile.lawful.validationSemantics]
+  exact ⟨rfl, rfl⟩
+
+theorem executionSemantics_authority (profile : Profile) :
+    profile.body.executionSemantics.vendoredTreeId =
+        VendoredTreeBody.identity core3VendoredTree ∧
+      profile.body.executionSemantics.amendmentSetId =
+        AuthorityAmendmentSetBody.identity core3AuthorityAmendmentSet := by
+  rw [profile.lawful.executionSemantics]
+  exact ⟨rfl, rfl⟩
+
 /-- The three semantics identities are distinct: a profile cannot satisfy its
 validation obligation with its decoding rule set. -/
 theorem semantics_identities_distinct (profile : Profile) :
@@ -1453,7 +1506,7 @@ theorem validationCost_eq (profile : Profile) (nodes edges : Nat) :
   rw [profile.lawful.validationNodeUnit, profile.lawful.validationEdgeUnit,
     Nat.one_mul, Nat.one_mul]
 
-/-- Every relational Core `Step` contributes exactly one `wasmRuleSteps`. -/
+/-- The configured per-step unit is exactly one `wasmRuleSteps`. -/
 theorem stepCost_eq (profile : Profile) : profile.costTableBody.stepCost = 1 :=
   profile.lawful.ruleStepUnit
 
@@ -1525,19 +1578,79 @@ theorem key_ne_of_domain_ne {a b : SchemaEntry}
   intro hk
   exact h (congrArg SchemaKey.domain hk)
 
+/-- Entries with different structural type tags have different registry keys. -/
+theorem key_ne_of_typeTag_ne {a b : SchemaEntry}
+    (h : a.schema.typeTag ≠ b.schema.typeTag) : a.key ≠ b.key := by
+  intro hk
+  exact h (congrArg SchemaKey.typeTag hk)
+
+/-- Distinct schema-tag names produce distinct structural leaf tags. -/
+theorem leafTypeTag_ne (left right : String) (h : left ≠ right) :
+    TypeTag.leaf (Enc.nameBytes left) ≠ TypeTag.leaf (Enc.nameBytes right) := by
+  intro heq
+  exact h (Enc.nameBytes_injective (TypeTag.leaf_injective heq))
+
 /-- The schemas this layer contributes to the release registry. -/
 def schemaEntries : List SchemaEntry :=
   [ { Body := RevisionBody, schema := RevisionBody.identitySchema }
+  , { Body := VendoredTreeBody, schema := VendoredTreeBody.identitySchema }
+  , { Body := AuthorityPatchBody, schema := AuthorityPatchBody.identitySchema }
+  , { Body := AuthorityAmendmentBody, schema := AuthorityAmendmentBody.identitySchema }
+  , { Body := AuthorityAmendmentSetBody, schema := AuthorityAmendmentSetBody.identitySchema }
   , { Body := CostTableBody, schema := CostTableBody.identitySchema }
   , { Body := ProfileBody, schema := ProfileBody.identitySchema } ]
 
 theorem schemaEntries_distinctKeys :
     schemaEntries.Pairwise (fun a b => a.key ≠ b.key) := by
   refine List.pairwise_cons.mpr ⟨?_, List.pairwise_cons.mpr ⟨?_,
-    List.pairwise_cons.mpr ⟨?_, List.Pairwise.nil⟩⟩⟩
+    List.pairwise_cons.mpr ⟨?_, List.pairwise_cons.mpr ⟨?_,
+      List.pairwise_cons.mpr ⟨?_, List.pairwise_cons.mpr ⟨?_,
+        List.pairwise_cons.mpr ⟨?_, List.Pairwise.nil⟩⟩⟩⟩⟩⟩⟩
   · intro b hb
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hb
-    rcases hb with rfl | rfl <;> exact key_ne_of_domain_ne (by decide)
+    rcases hb with rfl | rfl | rfl | rfl | rfl | rfl
+    all_goals first
+      | exact key_ne_of_domain_ne (by decide)
+      | apply key_ne_of_typeTag_ne
+        change TypeTag.leaf (Enc.nameBytes _) ≠ TypeTag.leaf (Enc.nameBytes _)
+        apply leafTypeTag_ne
+        decide
+  · intro b hb
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hb
+    rcases hb with rfl | rfl | rfl | rfl | rfl
+    all_goals first
+      | exact key_ne_of_domain_ne (by decide)
+      | apply key_ne_of_typeTag_ne
+        change TypeTag.leaf (Enc.nameBytes _) ≠ TypeTag.leaf (Enc.nameBytes _)
+        apply leafTypeTag_ne
+        decide
+  · intro b hb
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hb
+    rcases hb with rfl | rfl | rfl | rfl
+    all_goals first
+      | exact key_ne_of_domain_ne (by decide)
+      | apply key_ne_of_typeTag_ne
+        change TypeTag.leaf (Enc.nameBytes _) ≠ TypeTag.leaf (Enc.nameBytes _)
+        apply leafTypeTag_ne
+        decide
+  · intro b hb
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hb
+    rcases hb with rfl | rfl | rfl
+    all_goals first
+      | exact key_ne_of_domain_ne (by decide)
+      | apply key_ne_of_typeTag_ne
+        change TypeTag.leaf (Enc.nameBytes _) ≠ TypeTag.leaf (Enc.nameBytes _)
+        apply leafTypeTag_ne
+        decide
+  · intro b hb
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hb
+    rcases hb with rfl | rfl
+    all_goals first
+      | exact key_ne_of_domain_ne (by decide)
+      | apply key_ne_of_typeTag_ne
+        change TypeTag.leaf (Enc.nameBytes _) ≠ TypeTag.leaf (Enc.nameBytes _)
+        apply leafTypeTag_ne
+        decide
   · intro b hb
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hb
     rcases hb with rfl
@@ -1545,7 +1658,7 @@ theorem schemaEntries_distinctKeys :
   · intro b hb
     exact absurd hb (by simp)
 
-theorem schemaEntries_length : schemaEntries.length = 3 := rfl
+theorem schemaEntries_length : schemaEntries.length = 7 := rfl
 
 /-! ## The canonical release profile body
 
@@ -1602,21 +1715,22 @@ theorem canonicalCore3Wasm32ProfileBody_lawful (t : CostTableBody)
     hdecodeByte, hdecodeTerminal, hnode, hedge, hstep, hprep, hwrite, hshuffle,
     hrules, hinit⟩
 
-/-! ### The canonical rule rows (SPEC section 7.5)
+/-! ### The legacy subset rule-row witness
 
 SPEC section 7.5 requires one row per pinned Core rule identifier, carrying
-that rule's exact contribution.  The rows are literal first-order data here, so
-that the cost table is a *checked* object rather than a description of one.
+that rule's exact contribution.  The rows below do not meet that complete
+scope: they are literal first-order data for the legacy `Wasm.Step`
+universe.
 
 `Wasm/Costed.lean` owns the rule identifiers themselves (`Wasm.RuleId`, one
 constructor per constructor of `Wasm.Step`) and the harness initialization
 event identifiers (`Wasm.InitEventId`), and proves that the row list below is
-exactly a duplicate-free cover of them and that each row's contribution is
-exactly the contribution the cost law charges.  Those proofs cannot live here:
+exactly a duplicate-free cover of that local universe and that each row's
+contribution is exactly what the legacy cost function charges.  Those proofs cannot live here:
 `Wasm/Costed.lean` imports this file, not the other way round.  What lives here
 is the data and its duplicate-freedom. -/
 
-/-- The charge of one ordinary relational Core `Step` under the canonical
+/-- The charge of one ordinary legacy subset `Wasm.Step` under the canonical
 units: one `wasmRuleSteps` unit and nothing else. -/
 def canonicalRuleStepContribution : Cost.DynamicVector :=
   { Cost.DynamicVector.zero with wasmRuleSteps := 1 }
@@ -1655,8 +1769,9 @@ def canonicalRow (id : String) (v : Cost.DynamicVector) : CostRuleRow :=
 @[simp] theorem canonicalRow_contribution (id : String)
     (v : Cost.DynamicVector) : (canonicalRow id v).contribution = v := rfl
 
-/-- **SPEC section 7.5.**  One row per pinned Core rule identifier, in the
-pinned order of `Wasm.RuleId.all`.
+/-- One row per rule of the legacy subset machine, in the order of
+`Wasm.RuleId.all`.  This is an exact cover of that local inductive, not
+of the complete amended-Core rule universe.
 
 Reading the coordinates: every row charges exactly one `wasmRuleSteps` unit,
 because every row names one relational `Step`.  `dispatchSteps` is one exactly
@@ -1673,9 +1788,9 @@ whose transferred quantity is an operand rather than a constant of the rule;
 
 `vectorLaneOps` and `tableElementsAllocated` are zero in every row, and that is
 exact rather than lazy: the declared executed subset (`Wasm.Step`) contains no
-SIMD rule and no table, element or data rule at all — release validation
+  SIMD rule and no table, element or data rule at all — legacy subset validation
 rejects modules carrying tables, element segments or data segments
-(`Wasm.Module.checkClosed`), and the 128-bit lane charge lives in
+(`Wasm.Subset.Module.checkClosed`), and the 128-bit lane charge lives in
 `Wasm.wholeVectorShuffleCharge` over `wholeVectorShuffleLanes = 16`, which is
 not a `Step` rule. -/
 def canonicalRuleRows : List CostRuleRow :=
@@ -1729,8 +1844,8 @@ def canonicalRuleRows : List CostRuleRow :=
           bytesWritten := 1 }
   , canonicalRow "core3/step/install-trap" canonicalRuleStepContribution ]
 
-/-- **SPEC section 7.5.**  One row per harness initialization event, in the
-pinned order of `Wasm.InitEventId.all`.  The events are exactly the steps
+/-- One row per legacy harness initialization event, in the order of
+`Wasm.InitEventId.all`.  The events are exactly the steps
 `Wasm.initialConfig` performs and the three `Wasm.InstantiationFault` outcomes
 it can report.
 
@@ -1766,19 +1881,17 @@ theorem canonicalRuleRows_length : canonicalRuleRows.length = 34 := rfl
 theorem canonicalInitializationRows_length :
     canonicalInitializationRows.length = 9 := rfl
 
-/-- The pinned rule identifiers are duplicate-free.  SPEC section 7.5 admits
-only a duplicate-free cover, so this is a precondition of the table, machine
-checked. -/
+/-- The legacy subset rule identifiers are duplicate-free. -/
 theorem canonicalRuleRows_nodup :
     (canonicalRuleRows.map CostRuleRow.ruleId).Nodup := by decide
 
-/-- The pinned initialization identifiers are duplicate-free. -/
+/-- The legacy initialization identifiers are duplicate-free. -/
 theorem canonicalInitializationRows_nodup :
     (canonicalInitializationRows.map CostRuleRow.ruleId).Nodup := by decide
 
-/-- No row is degenerate: every pinned rule charges at least one
+/-- No row is degenerate: every legacy subset rule charges at least one
 `wasmRuleSteps` unit.  A cost table whose rows all charged zero would typecheck
-and be worthless; this rules that out for the released table. -/
+and be worthless; this rules that out for this witness table. -/
 theorem canonicalRuleRows_wasmRuleSteps_pos :
     ∀ row ∈ canonicalRuleRows, 0 < row.contribution.wasmRuleSteps := by decide
 
@@ -1787,9 +1900,9 @@ theorem canonicalInitializationRows_instantiationSteps_pos :
     ∀ row ∈ canonicalInitializationRows,
       0 < row.contribution.instantiationSteps := by decide
 
-/-- The canonical cost-table units, together with the exact duplicate-free
-cover of every pinned Core rule identifier and every harness initialization
-event identifier (SPEC section 7.5). -/
+/-- Canonical cost units with an exact duplicate-free cover of every legacy
+subset rule identifier and legacy harness initialization event.  Full
+amended-Core rule coverage is not claimed. -/
 def canonicalCostTableUnits : CostTableBody :=
   { decodeUnitPerByte := 1
     decodeTerminalUnit := 1
@@ -1810,8 +1923,8 @@ def canonicalCostTableUnits : CostTableBody :=
     canonicalCostTableUnits.initializationRows = canonicalInitializationRows :=
   rfl
 
-/-- Non-vacuity: the lawfulness conditions are satisfiable, with the full rule
-table in place. -/
+/-- Non-vacuity: the lawfulness conditions are satisfiable with the complete
+legacy subset rule table in place. -/
 theorem unitWitnessProfileBody_lawful :
     ProfileLawful
       (canonicalCore3Wasm32ProfileBody core3RevisionCommit

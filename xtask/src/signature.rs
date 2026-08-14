@@ -25,7 +25,7 @@
 //!     elaborate; nor does a narrowed quantifier, an added hypothesis, a dropped
 //!     conjunct, or a weakened conclusion.
 //!
-//! Four things that wiring can get wrong are enforced here:
+//! Five things that wiring can get wrong are enforced here:
 //!
 //!   1. a required name the environment credits, with no binding;
 //!   2. a binding closed by a tactic rather than by `:= @Name` -- `by exact @Name`
@@ -36,6 +36,8 @@
 //!      SPEC states the theorem in a fenced block, that block is re-read from
 //!      `SPEC.md` and must appear verbatim in the binding's docstring, so a SPEC
 //!      amendment cannot leave a stale binding looking authoritative.
+//!   5. theorem-shaped prose outside a Lean fence masquerading as SPEC's formal
+//!      statement and hiding a drift in the real fenced proposition.
 //!
 //! ## What this CANNOT check, stated because it matters
 //!
@@ -367,11 +369,13 @@ fn mentions(statement: &str, name: &str) -> bool {
     leaf.split('_').any(|part| part.len() >= 4 && statement.contains(part))
 }
 
-/// The fenced `theorem <leaf>` block `SPEC.md` states for this name, if any.
+/// The `theorem <leaf>` block inside a Lean fence in `SPEC.md`, if any.
 ///
 /// SPEC's blocks are separated by a blank line or by the next declaration
 /// keyword; `theorem decode_emit` follows `compile_cost_exact` with neither a
 /// blank line nor a fence between them, which is why both terminators are needed.
+/// The fence restriction is load-bearing: theorem-shaped prose is not a formal
+/// proposition and must not mask a later change to the fenced statement.
 pub fn spec_block(spec: &str, name: &str) -> Option<String> {
     const KEYWORDS: [&str; 8] = [
         "theorem ", "def ", "structure ", "inductive ", "instance ", "abbrev ", "end ",
@@ -380,15 +384,36 @@ pub fn spec_block(spec: &str, name: &str) -> Option<String> {
     let leaf = name.rsplit('.').next().unwrap_or(name);
     let head = format!("theorem {leaf}");
     let lines: Vec<&str> = crate::lean::splitlines(spec);
-    let start = lines.iter().position(|l| {
-        l.strip_prefix(&head)
-            .is_some_and(|rest| !rest.starts_with(|c: char| c.is_alphanumeric() || c == '_'))
-    })?;
+    let mut in_lean_fence = false;
+    let mut start = None;
+    for (index, line) in lines.iter().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("```") {
+            if in_lean_fence {
+                in_lean_fence = false;
+            } else {
+                in_lean_fence = trimmed == "```lean";
+            }
+            continue;
+        }
+        if !in_lean_fence {
+            continue;
+        }
+        let candidate = line.trim_start();
+        if candidate.strip_prefix(&head).is_some_and(|rest| {
+            !rest.starts_with(|c: char| c.is_alphanumeric() || c == '_')
+        }) {
+            start = Some(index);
+            break;
+        }
+    }
+    let start = start?;
     let mut block = vec![lines[start]];
     for line in &lines[start + 1..] {
+        let candidate = line.trim_start();
         if line.trim().is_empty()
-            || line.starts_with("```")
-            || KEYWORDS.iter().any(|k| line.starts_with(k))
+            || candidate.starts_with("```")
+            || KEYWORDS.iter().any(|k| candidate.starts_with(k))
         {
             break;
         }
@@ -728,6 +753,18 @@ theorem decode_sound
     }
 
     #[test]
+    fn theorem_like_prose_outside_a_lean_fence_is_not_authoritative() {
+        let original = spec_block(SPEC, "Wasm.decode_sound").expect("SPEC states this one");
+        let drifted = SPEC.replace("DeclarativeBinaryRelation", "SomeWeakerRelation");
+        let attacked = format!("{original}\n\n{drifted}");
+
+        let found = spec_block(&attacked, "Wasm.decode_sound").expect("fenced theorem remains");
+        assert!(found.contains("SomeWeakerRelation"));
+        assert!(!found.contains("DeclarativeBinaryRelation"));
+        assert!(spec_block(&original, "Wasm.decode_sound").is_none());
+    }
+
+    #[test]
     fn a_marker_over_an_unrelated_declaration_is_not_a_binding() {
         let source = "-- spec-signature: Wasm.decode_sound\n\
                       theorem unrelated : True :=\n  @Wasm.decode_sound\n";
@@ -780,7 +817,7 @@ theorem decode_sound
         // fifty-eight names; they are read from SPEC.md every run.
         let spec = repo_file("SPEC.md");
         let required = crate::required::required_names(&spec).expect("SPEC 15 parsed");
-        assert!(required.len() >= 58, "SPEC section 15 lists {}", required.len());
+        assert!(required.len() >= 60, "SPEC section 15 lists {}", required.len());
         assert!(required.contains(&"Artifact.released_wasm_gemm_gnaf_global_optimal"));
     }
 }

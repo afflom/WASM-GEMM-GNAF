@@ -15,29 +15,33 @@ must not be edited while the state holds.
 The repository's exact terminal answer for the requested claim is
 `WorkloadIncomplete` — a branch of the UOR-GNAF §10.9 total answer carrier, and the
 branch its §13.3 *requires* when the argmin proof is not closed. The full obligation
-ledger, including the two framings that adversarial review **refuted**, is in
+ledger, including framings narrowed or refuted by adversarial review, is in
 [CERTIFICATION.md](CERTIFICATION.md).
 
-`just vv` fails at gate step 9. That is the correct behavior. A green gate in this
-state would mean the gate had been weakened.
+`just vv` fails on the recorded open prerequisites and on gate step 9, where the
+final declaration is absent. That is the correct behavior. A green gate in this
+state would mean the gate had been weakened or the proof had genuinely closed.
 
 ## What is proved
 
 Kernel-checked in Lean 4.30.0, sorry-free; the live inventory is the first line of
-[CONFORMANCE.md](CONFORMANCE.md). Axiom closure is `propext`, `Quot.sound`, and `Classical.choice` on
-Prop-level results — all three Lean core axioms, named individually per `SPEC.md` §4.
+[CONFORMANCE.md](CONFORMANCE.md). Permitted formal-proof closure is `propext`,
+`Quot.sound`, and Prop-level `Classical.choice`, named individually per
+`SPEC.md` §4. Three input-enumeration declarations currently reach
+`Classical.choice` as executable witnesses; they are therefore recorded as
+uncredited and outstanding, not counted as formal proof.
 
 | Declaration | Content |
 | --- | --- |
-| `Universal.exists_globalOptimal_of_nonempty` | **some byte sequence satisfies `GlobalOptimal` in full**, given nonemptiness |
-| `Universal.systemEvaluation_subsingleton` | the evaluation type is a subsingleton — what makes `GlobalOptimal` satisfiable |
+| `Universal.exists_globalOptimal_of_nonempty` | generic finite-argmin existence for an explicitly nonempty, decidable instantiated universe |
+| `Universal.systemEvaluation_subsingleton` | uniqueness inside the current legacy-subset evaluation carrier when one exists |
 | `Cost.coordinate_le_score` | each of the 36 charged coordinates is ≤ the canonical score |
 | `Cost.CanonicalObjective.monotone` | componentwise ≤ implies score ≤ |
-| `Wasm.mem_successors_iff_step` | the successor enumerator *is* the `Step` relation |
-| `Wasm.encode_decode_roundtrip` | binary round-trip for the modelled subset |
-| `Wasm.costed_run_iff_plain_run` | cost instrumentation is transparent (§7.5) |
+| `Wasm.mem_successors_iff_step` | the legacy `Wasm.Subset` successor enumerator is its subset `Step` relation |
+| `Wasm.encode_decode_roundtrip` | canonical binary round-trip for every representable public amended-Core `Wasm.Module` |
+| `Wasm.costed_run_iff_plain_run` | legacy `Wasm.Subset` cost instrumentation is transparent |
 | `Atlas.semantic_closure_least` | least closure, and it equals the derivation closure |
-| `Atlas.incremental_eq_full_rebuild` | incremental accumulation = full rebuild |
+| `Atlas.incremental_eq_full_rebuild` | incremental accumulation = full rebuild for coherent unscoped state bodies |
 | `Atlas.universalCoverCompleteCheck_scope_blind` | the seal cannot stand in for coverage |
 
 `coordinate_le_score` is load-bearing twice over: it makes every score sublevel
@@ -45,23 +49,24 @@ finite, and it bounds minimizers to a finite carrier so the argmin exists.
 
 ## What is not proved, and what that now means
 
-The optimality *half* is discharged. `exists_globalOptimal_of_nonempty` proves that
-a canonical-least minimizer exists and satisfies `GlobalOptimal` — the lower bound
-falls out of the argmin rather than needing an analytic certificate, because the
-artifact is defined as the selection.
-
-What remains is **exhibition**, not bounding:
+The generic finite-argmin lemma is proved under explicit nonemptiness and
+decision hypotheses. It does not instantiate the released public-Core universe,
+construct its evaluation, cover its cost sublevel, select release bytes, or
+identify a committed artifact. Release-scope optimality, coverage/lower-bound,
+selection, and byte identification therefore remain open:
 
 | | |
 | --- | --- |
+| `UV-001` / `LB-001` | complete release-universe coverage or an attained universal lower bound |
 | `GO-006` | nonemptiness — one concrete module with proofs of the three extensional predicates (SPEC §13 Phase B) |
 | `GO-007` | identification — the committed literal equals the selected bytes |
-| `WS-001` | Core 3.0 semantics beyond the modelled `i32` subset |
+| `WS-001` | full public Core validation/execution/successor/progress/cost closure |
 | `BI-002` | the compiler covers all four arithmetic modes, not only modular-`u32` |
 
-Nothing outstanding is stubbed, axiomatized, or assumed — per `SPEC.md` §19 those
-declarations are simply **absent**, and the registry records them as `open`.
-Omission is the conforming representation of an undischarged obligation.
+Nothing outstanding is stubbed, axiomatized, or assumed as the required
+proposition. Exact release declarations are absent where omitted; present
+weaker/amended or choice-tainted declarations are explicitly uncredited, and
+the registry records the obligations as `open`.
 
 ## Scope of the word "optimal"
 
@@ -77,10 +82,11 @@ throughput measurement, or cross-engine run can discharge it.
 | --- | --- | --- |
 | UOR-GNAF | `UOR-GNAF-v1-draft.2.md`, SHA-256 `5c34…200a` | ✅ by content |
 | Lean | `leanprover/lean4:v4.30.0`, commit `d024af09…c622` | ✅ by toolchain |
-| WebAssembly Core | wg-3.0, commit `9d360199…74aa` | ✅ vendored, 40 files, by content |
+| WebAssembly Core | wg-3.0, commit `9d360199…74aa` | ✅ vendored, 374 files, by content |
 | Repository baseline | `fdd58db98edf5b0a28c04bada3e78cef99adece4` | ✅ |
 
-Digests are recomputed from file content by `just claims`, never trusted as strings.
+Digests are recomputed from file content by the release checks (`just vendor` and
+`just vv`), never trusted as strings.
 
 ## Layout
 

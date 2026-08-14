@@ -1,11 +1,17 @@
 /-
-  Wasm/Costed.lean --- the costed semantics of SPEC section 7.5.
+  Wasm/Costed.lean --- cost instrumentation for the legacy subset machine.
+
+  SCOPE.  Every relation in this file is built over the legacy `Wasm.Config`,
+  `Wasm.Step`, and `Wasm.Event` of `Wasm/Run.lean`.  The laws below
+  prove exact instrumentation for that machine; they are not a cost semantics
+  for the public amended-Core execution layer and do not establish full
+  SPEC section 7.5 rule coverage.
 
   Normative source: SPEC.md section 7.5, which requires that every semantic
   transition be labelled with exact abstract cost events, and fixes the total
   contribution law:
 
-      every relational Core `Step` contributes one `wasmRuleSteps` unit;
+      every relational step contributes one `wasmRuleSteps` unit;
       `dispatchSteps` additionally counts exactly branch, branch-table, direct
       or indirect call, return, exception transfer, tail-call transfer, and
       harness phase-transition rule identifiers; `scalarOps` is the number of
@@ -114,8 +120,8 @@ theorem successors_keys_nodup (c : Config) :
     · exact successorsOfInstr_keys_nodup c _ _
   · simp
 
-/-- **Event determinism.**  The permitted nondeterminism of the released
-profile is recorded entirely in the event label, so a configuration together
+/-- **Event determinism.**  The nondeterminism of the legacy subset machine is
+recorded entirely in the event label, so a configuration together
 with its event determines the successor configuration. -/
 theorem Step.deterministic {c c₁ c₂ : Config} {e : Event}
     (h₁ : Step c e c₁) (h₂ : Step c e c₂) : c₁ = c₂ :=
@@ -209,10 +215,10 @@ def livePages (c : Config) : Nat := c.store.memory.pages
 
 /-- The live table size of a configuration.
 
-**Scope.**  The released `Store` has exactly two components, memory zero and
-the globals (`Wasm/Store.lean`): the profile admits no table instance, so the
+**Scope.**  The legacy subset `Store` has exactly two components, memory
+zero and the globals (`Wasm/Store.lean`): this machine admits no table instance, so the
 live table size of every reachable configuration is exactly zero.  This does
-**not** establish that table operations are free; it records that the released
+**not** establish that table operations are free; it records that the legacy
 subset performs none, and `tableElementsAllocated` remains a summed coordinate
 of the cost vector for the rules that do. -/
 def tableSize (_c : Config) : Nat := 0
@@ -266,7 +272,7 @@ def snapshotOf (L : GcLayoutConstants) (c : Config) : ConfigResourceSnapshot :=
 
 /-! ## Rule identifiers -/
 
-/-- The rule identifier of every reduction rule of the released machine: one
+/-- The rule identifier of every reduction rule of the legacy subset machine: one
 constructor per constructor of `Wasm.Step`. -/
 inductive RuleId
   | unreachable | nop | i32Const | drop | iBinOp | iBinOpTrap | iTestOp
@@ -833,7 +839,7 @@ the exhaustive structural implementation; `EventContribution` is the same law as
 an inductive relation with one constructor per costed event and no default
 arm. -/
 
-/-- The charge every relational Core `Step` contributes: one `wasmRuleSteps`
+/-- The charge every legacy subset `Wasm.Step` contributes: one `wasmRuleSteps`
 unit and nothing else. -/
 def ruleStepCharge (t : CostTableBody) : Cost.DynamicVector :=
   { Cost.DynamicVector.zero with wasmRuleSteps := t.ruleStepUnit }
@@ -973,7 +979,7 @@ theorem wasm_cost_table_total (t : CostTableBody) (event : CostedEvent) :
 
 /-! ### Consequences of the contribution law -/
 
-/-- Every relational Core `Step` contributes exactly one `wasmRuleSteps`
+/-- Every legacy subset `Wasm.Step` contributes exactly one `wasmRuleSteps`
 unit. -/
 theorem eventContribution_wasmRuleSteps (P : Profile) (ce : CostedEvent) :
     (eventContribution P.costTableBody ce).wasmRuleSteps = 1 := by
@@ -1324,20 +1330,20 @@ theorem staticCost_validationSteps (P : Profile) (bytes : ByteArray)
 theorem staticCost_moduleBytes (t : CostTableBody) (bytes : ByteArray)
     (n e d : Nat) : (staticCost t bytes n e d).moduleBytes = bytes.size := rfl
 
-/-! ## The pinned cost-table rows (SPEC section 7.5)
+/-! ## Cost-table rows for the legacy subset machine
 
 `Wasm/Profile.lean` carries the row *data* (`Wasm.canonicalRuleRows`,
 `Wasm.canonicalInitializationRows`); it cannot name `RuleId`, because it is
 imported by this file rather than importing it.  This section supplies the
-pinned identifier of every rule, restates the row of every rule, and proves the
-three conditions SPEC section 7.5 requires of `buildCanonicalCostTable`'s
-argument: the rows are a *cover*, they are *duplicate free*, and the cover is
-*exact*.  It then proves the rows are not decorative, by showing every row's
-contribution is exactly what the contribution law charges. -/
+  identifier of every legacy `Wasm.RuleId`, restates each row, and proves
+  that this 34-rule list is an exact duplicate-free cover of that local
+  inductive.  It does not cover the complete amended-Core execution-rule
+  universe.  The final theorems also show these rows agree with this legacy
+  machine's contribution function. -/
 
 namespace RuleId
 
-/-- The pinned identifier of a Core rule. -/
+/-- The local identifier assigned to a legacy subset reduction rule. -/
 def name : RuleId → String
   | .unreachable => "core3/step/unreachable"
   | .nop => "core3/step/nop"
@@ -1504,14 +1510,14 @@ theorem canonicalCostTable_rowFor (r : RuleId) :
     CostTableBody.rowFor?_eq_of_mem canonicalCostTable_ruleRows_nodup hmem
   rwa [RuleId.row_ruleId] at h
 
-/-- **SPEC section 7.5, coverage.**  Every pinned Core rule identifier has a
-row.  This is the property CO-006 reported violated: with `ruleRows = []`,
-`rowFor?` returned `none` for every rule. -/
+/-- Every legacy `Wasm.RuleId` has a row.  This closes emptiness only for
+the local 34-rule subset universe; it is not coverage of every amended-Core
+execution rule and does not close the release-wide CO-006 obligation. -/
 theorem canonicalCostTable_covers_every_rule (r : RuleId) :
     (canonicalCostTableUnits.rowFor? r.name).isSome := by
   rw [canonicalCostTable_rowFor]; rfl
 
-/-- No two distinct Core rules share a pinned identifier. -/
+/-- No two distinct legacy subset rules share a local identifier. -/
 theorem RuleId.name_injective : Function.Injective RuleId.name := by
   intro a b h
   have hnd : (RuleId.all.map RuleId.name).Nodup := by
@@ -1576,9 +1582,8 @@ theorem canonicalCostTable_charges_row (ce : CostedEvent)
     eventContribution canonicalCostTableUnits ce = (ce.rule.row).contribution := by
   rw [canonicalCostTable_charges_exactly, h, scaleParametric_one]
 
-/-- Every row charges exactly one `wasmRuleSteps` unit: SPEC section 7.5's
-"every relational Core `Step` contributes one `wasmRuleSteps` unit", read off
-the table.  No row is a zero charge. -/
+/-- Every legacy row charges exactly one `wasmRuleSteps` unit.  This
+is the local table law; no row is a zero charge. -/
 theorem canonicalCostTable_row_wasmRuleSteps (r : RuleId) :
     (r.row).contribution.wasmRuleSteps = 1 := by cases r <;> rfl
 
@@ -1607,7 +1612,7 @@ theorem canonicalCostTable_row_vectorLaneOps (r : RuleId) :
 
 /-- Every row's `tableElementsAllocated` is zero, exactly: release validation
 rejects every module carrying a table, element or data section
-(`Wasm.Module.checkClosed`), so no table, element or data rule is reachable. -/
+(`Wasm.Subset.Module.checkClosed`), so no table, element or data rule is reachable. -/
 theorem canonicalCostTable_row_tableElementsAllocated (r : RuleId) :
     (r.row).contribution.tableElementsAllocated = 0 := by cases r <;> rfl
 
@@ -1877,102 +1882,102 @@ theorem exprDerivationEdges_le_cons (i : Instr) (e : Expr) :
     exprDerivationEdges e ≤ exprDerivationEdges (.cons i e) := by
   simp [exprDerivationEdges]
 
-namespace Module
+namespace Subset.Module
 
 /-- The node count of the canonical declarative-validation derivation. -/
-def validationNodes (m : Module) : Nat :=
+def validationNodes (m : Subset.Module) : Nat :=
   6 + m.globals.length + m.tags.length +
     (m.funcs.map (fun f => 1 + exprDerivationNodes f.body)).sum
 
 /-- The premise-edge count of the canonical declarative-validation
 derivation. -/
-def validationEdges (m : Module) : Nat :=
+def validationEdges (m : Subset.Module) : Nat :=
   5 + m.globals.length + m.tags.length +
     (m.funcs.map (fun f => 1 + exprDerivationEdges f.body)).sum
 
-theorem validationNodes_pos (m : Module) : 0 < m.validationNodes := by
+theorem validationNodes_pos (m : Subset.Module) : 0 < m.validationNodes := by
   unfold validationNodes; omega
 
-theorem validationNodes_cons_global (m : Module) (g : Global) :
+theorem validationNodes_cons_global (m : Subset.Module) (g : Global) :
     { m with globals := g :: m.globals }.validationNodes = m.validationNodes + 1 := by
   unfold validationNodes
   simp
   omega
 
-theorem validationNodes_cons_tag (m : Module) (t : TagType) :
+theorem validationNodes_cons_tag (m : Subset.Module) (t : TagType) :
     { m with tags := t :: m.tags }.validationNodes = m.validationNodes + 1 := by
   unfold validationNodes
   simp
   omega
 
-theorem validationNodes_cons_func (m : Module) (f : Func) :
+theorem validationNodes_cons_func (m : Subset.Module) (f : Func) :
     { m with funcs := f :: m.funcs }.validationNodes =
       m.validationNodes + (1 + exprDerivationNodes f.body) := by
   unfold validationNodes
   simp [List.sum_cons]
   omega
 
-theorem validationEdges_cons_func (m : Module) (f : Func) :
+theorem validationEdges_cons_func (m : Subset.Module) (f : Func) :
     { m with funcs := f :: m.funcs }.validationEdges =
       m.validationEdges + (1 + exprDerivationEdges f.body) := by
   unfold validationEdges
   simp [List.sum_cons]
   omega
 
-end Module
+end Subset.Module
 
 /-- **SPEC section 7.5, `Wasm.validationCost`.**  One unit per node plus one
 unit per premise edge of the canonical declarative-validation derivation of
 `m`, charged at the profile's node and edge units. -/
-def validationCost (t : CostTableBody) (m : Module) : Nat :=
+def validationCost (t : CostTableBody) (m : Subset.Module) : Nat :=
   t.validationCost m.validationNodes m.validationEdges
 
 /-- Totality: `validationCost` is a total function of the cost table and the
 module.  It is not partial, not `Option`-valued and has no side condition; it
 is defined on every module, valid or not. -/
-theorem validationCost_total (t : CostTableBody) (m : Module) :
+theorem validationCost_total (t : CostTableBody) (m : Subset.Module) :
     ∃ n : Nat, validationCost t m = n := ⟨_, rfl⟩
 
 /-- Under any lawful profile the charge is exactly nodes plus edges. -/
-theorem validationCost_module_eq (P : Profile) (m : Module) :
+theorem validationCost_module_eq (P : Profile) (m : Subset.Module) :
     validationCost P.costTableBody m = m.validationNodes + m.validationEdges :=
   P.validationCost_eq _ _
 
 /-- **Monotone in the node and edge counts.** -/
-theorem validationCost_mono (t : CostTableBody) {m m' : Module}
+theorem validationCost_mono (t : CostTableBody) {m m' : Subset.Module}
     (hn : m.validationNodes ≤ m'.validationNodes)
     (he : m.validationEdges ≤ m'.validationEdges) :
     validationCost t m ≤ validationCost t m' :=
   Nat.add_le_add (Nat.mul_le_mul_left _ hn) (Nat.mul_le_mul_left _ he)
 
 /-- **Monotone in the syntax: adding a function never lowers the charge.** -/
-theorem validationCost_le_cons_func (t : CostTableBody) (m : Module) (f : Func) :
+theorem validationCost_le_cons_func (t : CostTableBody) (m : Subset.Module) (f : Func) :
     validationCost t m ≤ validationCost t { m with funcs := f :: m.funcs } := by
   refine validationCost_mono t ?_ ?_
-  · rw [Module.validationNodes_cons_func]; omega
-  · rw [Module.validationEdges_cons_func]; omega
+  · rw [Subset.Module.validationNodes_cons_func]; omega
+  · rw [Subset.Module.validationEdges_cons_func]; omega
 
 /-- **Monotone in the syntax: adding a global never lowers the charge.** -/
-theorem validationCost_le_cons_global (t : CostTableBody) (m : Module)
+theorem validationCost_le_cons_global (t : CostTableBody) (m : Subset.Module)
     (g : Global) :
     validationCost t m ≤
       validationCost t { m with globals := g :: m.globals } := by
   refine validationCost_mono t ?_ ?_
-  · rw [Module.validationNodes_cons_global]; omega
-  · unfold Module.validationEdges; simp
+  · rw [Subset.Module.validationNodes_cons_global]; omega
+  · unfold Subset.Module.validationEdges; simp
 
 /-- **Monotone in the syntax: adding a tag never lowers the charge.** -/
-theorem validationCost_le_cons_tag (t : CostTableBody) (m : Module)
+theorem validationCost_le_cons_tag (t : CostTableBody) (m : Subset.Module)
     (tag : TagType) :
     validationCost t m ≤ validationCost t { m with tags := tag :: m.tags } := by
   refine validationCost_mono t ?_ ?_
-  · rw [Module.validationNodes_cons_tag]; omega
-  · unfold Module.validationEdges; simp
+  · rw [Subset.Module.validationNodes_cons_tag]; omega
+  · unfold Subset.Module.validationEdges; simp
 
 /-- **The charge is never silently zero.**  Under any lawful profile every
 module — in particular every module that validates — costs at least one
 validation unit: the root of the derivation is always there. -/
-theorem validationCost_pos (P : Profile) (m : Module) :
+theorem validationCost_pos (P : Profile) (m : Subset.Module) :
     0 < validationCost P.costTableBody m := by
   rw [validationCost_module_eq]
   have := m.validationNodes_pos
@@ -1980,18 +1985,18 @@ theorem validationCost_pos (P : Profile) (m : Module) :
 
 /-- The statement in the form SPEC section 7.5 asks for: a validating module
 costs at least one unit. -/
-theorem validationCost_pos_of_valid (P : Profile) (m : Module)
+theorem validationCost_pos_of_valid (P : Profile) (m : Subset.Module)
     (_ : DeclarativelyValid m) : 0 < validationCost P.costTableBody m :=
   validationCost_pos P m
 
 /-- Nor is it a constant: a module with one more function strictly costs
 more. -/
-theorem validationCost_lt_cons_func (P : Profile) (m : Module) (f : Func) :
+theorem validationCost_lt_cons_func (P : Profile) (m : Subset.Module) (f : Func) :
     validationCost P.costTableBody m <
       validationCost P.costTableBody { m with funcs := f :: m.funcs } := by
   rw [validationCost_module_eq, validationCost_module_eq,
-    Module.validationNodes_cons_func,
-    Module.validationEdges_cons_func]
+    Subset.Module.validationNodes_cons_func,
+    Subset.Module.validationEdges_cons_func]
   omega
 
 /-! ## The static bytes instantiation materialises (SPEC section 7.5) -/
@@ -2021,7 +2026,7 @@ def tableStaticBytes (P : Profile) (tb : Table) : Nat :=
 /-- **SPEC section 7.5, `Wasm.instantiatedStaticBytes`.**  The static bytes
 instantiation materialises: the data segments, the element segments, the
 globals, and the declared initial sizes of the memories and tables. -/
-def instantiatedStaticBytes (P : Profile) (m : Module) : Nat :=
+def instantiatedStaticBytes (P : Profile) (m : Subset.Module) : Nat :=
   (m.datas.map dataStaticBytes).sum +
   (m.elems.map (elemStaticBytes P)).sum +
   (m.globals.map (globalStaticBytes P)).sum +
@@ -2030,17 +2035,17 @@ def instantiatedStaticBytes (P : Profile) (m : Module) : Nat :=
 
 /-- Totality: defined on every profile and every module, with no side
 condition. -/
-theorem instantiatedStaticBytes_total (P : Profile) (m : Module) :
+theorem instantiatedStaticBytes_total (P : Profile) (m : Subset.Module) :
     ∃ n : Nat, instantiatedStaticBytes P m = n := ⟨_, rfl⟩
 
-theorem instantiatedStaticBytes_cons_data (P : Profile) (m : Module) (d : Data) :
+theorem instantiatedStaticBytes_cons_data (P : Profile) (m : Subset.Module) (d : Data) :
     instantiatedStaticBytes P { m with datas := d :: m.datas } =
       instantiatedStaticBytes P m + dataStaticBytes d := by
   unfold instantiatedStaticBytes
   simp [List.sum_cons]
   omega
 
-theorem instantiatedStaticBytes_cons_global (P : Profile) (m : Module)
+theorem instantiatedStaticBytes_cons_global (P : Profile) (m : Subset.Module)
     (g : Global) :
     instantiatedStaticBytes P { m with globals := g :: m.globals } =
       instantiatedStaticBytes P m + globalStaticBytes P g := by
@@ -2048,21 +2053,21 @@ theorem instantiatedStaticBytes_cons_global (P : Profile) (m : Module)
   simp [List.sum_cons]
   omega
 
-theorem instantiatedStaticBytes_cons_mem (P : Profile) (m : Module) (mem : Mem) :
+theorem instantiatedStaticBytes_cons_mem (P : Profile) (m : Subset.Module) (mem : Mem) :
     instantiatedStaticBytes P { m with mems := mem :: m.mems } =
       instantiatedStaticBytes P m + memStaticBytes mem := by
   unfold instantiatedStaticBytes
   simp [List.sum_cons]
   omega
 
-theorem instantiatedStaticBytes_cons_elem (P : Profile) (m : Module) (e : Elem) :
+theorem instantiatedStaticBytes_cons_elem (P : Profile) (m : Subset.Module) (e : Elem) :
     instantiatedStaticBytes P { m with elems := e :: m.elems } =
       instantiatedStaticBytes P m + elemStaticBytes P e := by
   unfold instantiatedStaticBytes
   simp [List.sum_cons]
   omega
 
-theorem instantiatedStaticBytes_cons_table (P : Profile) (m : Module)
+theorem instantiatedStaticBytes_cons_table (P : Profile) (m : Subset.Module)
     (tb : Table) :
     instantiatedStaticBytes P { m with tables := tb :: m.tables } =
       instantiatedStaticBytes P m + tableStaticBytes P tb := by
@@ -2071,35 +2076,35 @@ theorem instantiatedStaticBytes_cons_table (P : Profile) (m : Module)
   omega
 
 /-- **Monotone: materialising one more data segment never lowers the count.** -/
-theorem instantiatedStaticBytes_le_cons_data (P : Profile) (m : Module)
+theorem instantiatedStaticBytes_le_cons_data (P : Profile) (m : Subset.Module)
     (d : Data) :
     instantiatedStaticBytes P m ≤
       instantiatedStaticBytes P { m with datas := d :: m.datas } := by
   rw [instantiatedStaticBytes_cons_data]; omega
 
 /-- **Monotone: one more global never lowers the count.** -/
-theorem instantiatedStaticBytes_le_cons_global (P : Profile) (m : Module)
+theorem instantiatedStaticBytes_le_cons_global (P : Profile) (m : Subset.Module)
     (g : Global) :
     instantiatedStaticBytes P m ≤
       instantiatedStaticBytes P { m with globals := g :: m.globals } := by
   rw [instantiatedStaticBytes_cons_global]; omega
 
 /-- **Monotone: one more declared memory never lowers the count.** -/
-theorem instantiatedStaticBytes_le_cons_mem (P : Profile) (m : Module)
+theorem instantiatedStaticBytes_le_cons_mem (P : Profile) (m : Subset.Module)
     (mem : Mem) :
     instantiatedStaticBytes P m ≤
       instantiatedStaticBytes P { m with mems := mem :: m.mems } := by
   rw [instantiatedStaticBytes_cons_mem]; omega
 
 /-- **Monotone: one more element segment never lowers the count.** -/
-theorem instantiatedStaticBytes_le_cons_elem (P : Profile) (m : Module)
+theorem instantiatedStaticBytes_le_cons_elem (P : Profile) (m : Subset.Module)
     (e : Elem) :
     instantiatedStaticBytes P m ≤
       instantiatedStaticBytes P { m with elems := e :: m.elems } := by
   rw [instantiatedStaticBytes_cons_elem]; omega
 
 /-- **Monotone: one more declared table never lowers the count.** -/
-theorem instantiatedStaticBytes_le_cons_table (P : Profile) (m : Module)
+theorem instantiatedStaticBytes_le_cons_table (P : Profile) (m : Subset.Module)
     (tb : Table) :
     instantiatedStaticBytes P m ≤
       instantiatedStaticBytes P { m with tables := tb :: m.tables } := by
@@ -2107,7 +2112,7 @@ theorem instantiatedStaticBytes_le_cons_table (P : Profile) (m : Module)
 
 /-- Strictly monotone where it must be: a global really is charged, because
 every canonical width is positive. -/
-theorem instantiatedStaticBytes_lt_cons_global (P : Profile) (m : Module)
+theorem instantiatedStaticBytes_lt_cons_global (P : Profile) (m : Subset.Module)
     (g : Global) :
     instantiatedStaticBytes P m <
       instantiatedStaticBytes P { m with globals := g :: m.globals } := by
@@ -2120,7 +2125,7 @@ theorem instantiatedStaticBytes_lt_cons_global (P : Profile) (m : Module)
 materialises.**  A successfully allocated store's memory is exactly the
 declared minimum size, and that is one of the summands. -/
 theorem allocated_memory_size_le_instantiatedStaticBytes (P : Profile)
-    {m : Module} {s : Store} {mem : Mem} (hm : m.mems = [mem])
+    {m : Subset.Module} {s : Store} {mem : Mem} (hm : m.mems = [mem])
     (h : Store.alloc m = some s) :
     s.memory.size ≤ instantiatedStaticBytes P m := by
   rw [Store.alloc_memory_size hm h]

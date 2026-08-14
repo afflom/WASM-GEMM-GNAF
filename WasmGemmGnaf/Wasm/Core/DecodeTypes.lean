@@ -17,6 +17,7 @@
   and a NON-NEGATIVE `Bs33`; `Bs33_head` below is the lemma that separates them.
 -/
 import WasmGemmGnaf.Wasm.Core.DecodeUtf8
+import WasmGemmGnaf.Wasm.Core.DecodeParserAmended
 
 set_option autoImplicit false
 set_option maxRecDepth 8000
@@ -231,16 +232,39 @@ theorem Bs33_head {bs : Bytes} {i : Int} (h : Bs33 bs i) (hi : 0 ≤ i) :
       omega
   | more n bs i h1 h2 h3 => exact ⟨n, bs, rfl, Or.inr (by omega)⟩
 
+theorem Bs33'_head {bs : Bytes} {i : Int} (h : Bs33' bs i) (hi : 0 ≤ i) :
+    ∃ b t, bs = b :: t ∧ (b.val < 0x40 ∨ 0x80 ≤ b.val) := by
+  cases h
+  case pos n h1 h2 => exact ⟨n, [], rfl, Or.inl (by omega)⟩
+  case neg n h1 h2 h3 =>
+    exfalso
+    have : (n.val : Int) - (2 : Int) ^ 7 < 0 := by
+      have : (n.val : Int) < (2 : Int) ^ 7 := by exact_mod_cast h2
+      omega
+    omega
+  case more n bs i h1 h2 h3 => exact ⟨n, bs, rfl, Or.inr (by omega)⟩
+
+theorem Bs33For_head [authority : BinaryAuthority]
+    {bs : Bytes} {i : Int} (h : Bs33For bs i) (hi : 0 ≤ i) :
+    ∃ b t, bs = b :: t ∧ (b.val < 0x40 ∨ 0x80 ≤ b.val) := by
+  cases authority with
+  | mk revision =>
+      cases revision with
+      | pinned => exact Bs33_head h hi
+      | amended => exact Bs33'_head h hi
+
 /-- The `_IDX` alternative of `Bheaptype` and of `Bblocktype`. -/
-def decS33Idx (bs : Bytes) : Except Fault (TypeIdx × Bytes) :=
-  match decS33 bs with
+def decS33Idx [authority : BinaryAuthority]
+    (bs : Bytes) : Except Fault (TypeIdx × Bytes) :=
+  match decS33For bs with
   | .error e => .error e
   | .ok (i, r) =>
       if h : 0 ≤ i ∧ i.toNat < 2 ^ 32 then .ok (⟨i.toNat, h.2⟩, r) else .error .range
 
-theorem decS33Idx_sound {bs : Bytes} {x : TypeIdx} {r : Bytes}
+theorem decS33Idx_sound [authority : BinaryAuthority]
+    {bs : Bytes} {x : TypeIdx} {r : Bytes}
     (h : decS33Idx bs = .ok (x, r)) :
-    ∃ b i, bs = b ++ r ∧ Bs33 b i ∧ 0 ≤ i ∧ (x.val : Int) = i := by
+    ∃ b i, bs = b ++ r ∧ Bs33For b i ∧ 0 ≤ i ∧ (x.val : Int) = i := by
   rw [decS33Idx] at h
   split at h
   · simp at h
@@ -248,18 +272,19 @@ theorem decS33Idx_sound {bs : Bytes} {x : TypeIdx} {r : Bytes}
     split at h
     · rename_i hcond
       obtain ⟨h1, h2⟩ := Prod.mk.inj (Except.ok.inj h)
-      obtain ⟨b, hb, hd⟩ := decS33_sound bs i r' hi
+      obtain ⟨b, hb, hd⟩ := decS33For_sound bs i r' hi
       refine ⟨b, i, by rw [hb, h2], hd, hcond.1, ?_⟩
       rw [← h1]
       exact Int.toNat_of_nonneg hcond.1
     · simp at h
 
-theorem decS33Idx_complete {b : Bytes} {i : Int} {x : TypeIdx} (r : Bytes)
-    (hd : Bs33 b i) (hi : 0 ≤ i) (hx : (x.val : Int) = i) :
+theorem decS33Idx_complete [authority : BinaryAuthority]
+    {b : Bytes} {i : Int} {x : TypeIdx} (r : Bytes)
+    (hd : Bs33For b i) (hi : 0 ≤ i) (hx : (x.val : Int) = i) :
     decS33Idx (b ++ r) = .ok (x, r) := by
   have hnat : i.toNat = x.val := by omega
   have hcond : 0 ≤ i ∧ i.toNat < 2 ^ 32 := ⟨hi, by rw [hnat]; exact x.property⟩
-  rw [decS33Idx, decS33_complete b i r hd]
+  rw [decS33Idx, decS33For_complete b i r hd]
   show (if h : 0 ≤ i ∧ i.toNat < 2 ^ 32 then
           Except.ok ((⟨i.toNat, h.2⟩ : TypeIdx), r) else Except.error Fault.range)
         = Except.ok (x, r)
@@ -268,7 +293,8 @@ theorem decS33Idx_complete {b : Bytes} {i : Int} {x : TypeIdx} (r : Bytes)
   rw [hx2]
 
 /-- `grammar Bheaptype : heaptype`. -/
-def decHeaptype (bs : Bytes) : Except Fault (HeapType × Bytes) :=
+def decHeaptype [authority : BinaryAuthority]
+    (bs : Bytes) : Except Fault (HeapType × Bytes) :=
   match bs with
   | [] => .error .eof
   | b :: r =>
@@ -281,7 +307,7 @@ def decHeaptype (bs : Bytes) : Except Fault (HeapType × Bytes) :=
          | some ht => .ok (ht, r)
          | none => .error .opcode)
 
-theorem decHeaptype_sound : Sound Bheaptype decHeaptype := by
+theorem decHeaptype_sound [authority : BinaryAuthority] : Sound Bheaptype decHeaptype := by
   intro bs ht r h
   cases bs with
   | nil => simp [decHeaptype] at h
@@ -302,13 +328,13 @@ theorem decHeaptype_sound : Sound Bheaptype decHeaptype := by
           exact Bheaptype.abs _ _ (absheaptypeOf_sound hht)
         · simp at h
 
-theorem decHeaptype_complete : Complete Bheaptype decHeaptype := by
+theorem decHeaptype_complete [authority : BinaryAuthority] : Complete Bheaptype decHeaptype := by
   intro b ht r h
   cases h with
   | abs _ht habs =>
       cases habs <;> rfl
   | idx i x hs hnn hval =>
-      obtain ⟨b0, t0, hb0, hrange⟩ := Bs33_head hs hnn
+      obtain ⟨b0, t0, hb0, hrange⟩ := Bs33For_head hs hnn
       subst hb0
       show decHeaptype (b0 :: (t0 ++ r)) = _
       rw [decHeaptype, if_pos hrange]
@@ -321,7 +347,8 @@ theorem decHeaptype_complete : Complete Bheaptype decHeaptype := by
 /-! ## Reference and value types -/
 
 /-- `grammar Breftype : reftype`. -/
-def decReftype (bs : Bytes) : Except Fault (RefType × Bytes) :=
+def decReftype [authority : BinaryAuthority]
+    (bs : Bytes) : Except Fault (RefType × Bytes) :=
   match bs with
   | [] => .error .eof
   | b :: r =>
@@ -338,7 +365,7 @@ def decReftype (bs : Bytes) : Except Fault (RefType × Bytes) :=
          | some ht => .ok (.ref (some .null) ht, r)
          | none => .error .opcode)
 
-theorem decReftype_sound : Sound Breftype decReftype := by
+theorem decReftype_sound [authority : BinaryAuthority] : Sound Breftype decReftype := by
   intro bs rt r h
   cases bs with
   | nil => simp [decReftype] at h
@@ -373,7 +400,7 @@ theorem decReftype_sound : Sound Breftype decReftype := by
             exact Breftype.abs _ _ (absheaptypeOf_sound hht)
           · simp at h
 
-theorem decReftype_complete : Complete Breftype decReftype := by
+theorem decReftype_complete [authority : BinaryAuthority] : Complete Breftype decReftype := by
   intro b rt r h
   cases h with
   | null bs ht hd =>
@@ -385,7 +412,8 @@ theorem decReftype_complete : Complete Breftype decReftype := by
   | abs _bs ht hd => cases hd <;> rfl
 
 /-- `grammar Bvaltype : valtype`. -/
-def decValtype (bs : Bytes) : Except Fault (ValType × Bytes) :=
+def decValtype [authority : BinaryAuthority]
+    (bs : Bytes) : Except Fault (ValType × Bytes) :=
   match bs with
   | [] => .error .eof
   | b :: r =>
@@ -398,7 +426,7 @@ def decValtype (bs : Bytes) : Except Fault (ValType × Bytes) :=
              | .error e => .error e
              | .ok (rt, r') => .ok (.ref rt, r'))
 
-theorem decValtype_sound : Sound Bvaltype decValtype := by
+theorem decValtype_sound [authority : BinaryAuthority] : Sound Bvaltype decValtype := by
   intro bs t r h
   cases bs with
   | nil => simp [decValtype] at h
@@ -423,7 +451,7 @@ theorem decValtype_sound : Sound Bvaltype decValtype := by
             obtain ⟨bb, hbb, hd⟩ := decReftype_sound (b :: bs) rt r' hrt
             exact ⟨bb, by rw [hbb, h2], by rw [← h1]; exact Bvaltype.ref bb rt hd⟩
 
-theorem decValtype_complete : Complete Bvaltype decValtype := by
+theorem decValtype_complete [authority : BinaryAuthority] : Complete Bvaltype decValtype := by
   intro b t r h
   have key : ∀ (b0 : Bytes) (rt : RefType), Breftype b0 rt →
       decValtype (b0 ++ r) = .ok (.ref rt, r) := by
@@ -446,12 +474,13 @@ theorem decValtype_complete : Complete Bvaltype decValtype := by
   | ref rt hd => exact key b rt hd
 
 /-- `grammar Bresulttype : resulttype`. -/
-def decResulttype (bs : Bytes) : Except Fault (ValTypes × Bytes) :=
+def decResulttype [authority : BinaryAuthority]
+    (bs : Bytes) : Except Fault (ValTypes × Bytes) :=
   match decList decValtype bs with
   | .error e => .error e
   | .ok (ts, r) => .ok (ValTypes.ofList ts, r)
 
-theorem decResulttype_sound : Sound Bresulttype decResulttype := by
+theorem decResulttype_sound [authority : BinaryAuthority] : Sound Bresulttype decResulttype := by
   intro bs ts r h
   rw [decResulttype] at h
   split at h
@@ -464,7 +493,7 @@ theorem decResulttype_sound : Sound Bresulttype decResulttype := by
     rw [← h1, ValTypes.toList_ofList]
     exact hd
 
-theorem decResulttype_complete : Complete Bresulttype decResulttype := by
+theorem decResulttype_complete [authority : BinaryAuthority] : Complete Bresulttype decResulttype := by
   intro b ts r h
   simp only [decResulttype, decList_complete decValtype_complete b ts.toList r h,
     ValTypes.ofList_toList]
@@ -504,7 +533,8 @@ theorem decMut_complete : Complete Bmut decMut := by
   cases h <;> rfl
 
 /-- `grammar Bstoragetype : storagetype`. -/
-def decStoragetype (bs : Bytes) : Except Fault (StorageType × Bytes) :=
+def decStoragetype [authority : BinaryAuthority]
+    (bs : Bytes) : Except Fault (StorageType × Bytes) :=
   match bs with
   | [] => .error .eof
   | b :: r =>
@@ -515,7 +545,7 @@ def decStoragetype (bs : Bytes) : Except Fault (StorageType × Bytes) :=
            | .error e => .error e
            | .ok (t, r') => .ok (.val t, r'))
 
-theorem decStoragetype_sound : Sound Bstoragetype decStoragetype := by
+theorem decStoragetype_sound [authority : BinaryAuthority] : Sound Bstoragetype decStoragetype := by
   intro bs zt r h
   cases bs with
   | nil => simp [decStoragetype] at h
@@ -534,7 +564,7 @@ theorem decStoragetype_sound : Sound Bstoragetype decStoragetype := by
           obtain ⟨bb, hbb, hd⟩ := decValtype_sound (b :: bs) t r' ht
           exact ⟨bb, by rw [hbb, h2], by rw [← h1]; exact Bstoragetype.val bb t hd⟩
 
-theorem decStoragetype_complete : Complete Bstoragetype decStoragetype := by
+theorem decStoragetype_complete [authority : BinaryAuthority] : Complete Bstoragetype decStoragetype := by
   intro b zt r h
   cases h with
   | pack pt hd => cases hd <;> rfl
@@ -557,7 +587,8 @@ theorem decStoragetype_complete : Complete Bstoragetype decStoragetype := by
       simp only [hstep]
 
 /-- `grammar Bfieldtype : fieldtype`. -/
-def decFieldtype (bs : Bytes) : Except Fault (FieldType × Bytes) :=
+def decFieldtype [authority : BinaryAuthority]
+    (bs : Bytes) : Except Fault (FieldType × Bytes) :=
   match decStoragetype bs with
   | .error e => .error e
   | .ok (zt, r) =>
@@ -565,7 +596,7 @@ def decFieldtype (bs : Bytes) : Except Fault (FieldType × Bytes) :=
       | .error e => .error e
       | .ok (mo, r') => .ok (.mk mo zt, r')
 
-theorem decFieldtype_sound : Sound Bfieldtype decFieldtype := by
+theorem decFieldtype_sound [authority : BinaryAuthority] : Sound Bfieldtype decFieldtype := by
   intro bs ft r h
   rw [decFieldtype] at h
   split at h
@@ -581,7 +612,7 @@ theorem decFieldtype_sound : Sound Bfieldtype decFieldtype := by
       rw [← h1]
       exact Bfieldtype.mk b1 b2 zt mo hd1 hd2
 
-theorem decFieldtype_complete : Complete Bfieldtype decFieldtype := by
+theorem decFieldtype_complete [authority : BinaryAuthority] : Complete Bfieldtype decFieldtype := by
   intro b ft r h
   cases h with
   | mk bz bm zt mo hz hm =>
@@ -592,7 +623,8 @@ theorem decFieldtype_complete : Complete Bfieldtype decFieldtype := by
 /-! ## Composite, sub and recursive types -/
 
 /-- `grammar Bcomptype : comptype`. -/
-def decComptype (bs : Bytes) : Except Fault (CompType × Bytes) :=
+def decComptype [authority : BinaryAuthority]
+    (bs : Bytes) : Except Fault (CompType × Bytes) :=
   match bs with
   | [] => .error .eof
   | b :: r =>
@@ -613,7 +645,7 @@ def decComptype (bs : Bytes) : Except Fault (CompType × Bytes) :=
              | .ok (t₂, r₂) => .ok (.func t₁ t₂, r₂))
       else .error .opcode
 
-theorem decComptype_sound : Sound Bcomptype decComptype := by
+theorem decComptype_sound [authority : BinaryAuthority] : Sound Bcomptype decComptype := by
   intro bs ct r h
   cases bs with
   | nil => simp [decComptype] at h
@@ -657,7 +689,7 @@ theorem decComptype_sound : Sound Bcomptype decComptype := by
                 exact Bcomptype.func b₁ b₂ t₁ t₂ hd₁ hd₂
           · simp at h
 
-theorem decComptype_complete : Complete Bcomptype decComptype := by
+theorem decComptype_complete [authority : BinaryAuthority] : Complete Bcomptype decComptype := by
   intro b ct r h
   cases h with
   | array bs ft hd =>
@@ -676,7 +708,8 @@ theorem decComptype_complete : Complete Bcomptype decComptype := by
         decResulttype_complete b₂ t₂ r hd₂]
 
 /-- `grammar Bsubtype : subtype`. -/
-def decSubtype (bs : Bytes) : Except Fault (SubType × Bytes) :=
+def decSubtype [authority : BinaryAuthority]
+    (bs : Bytes) : Except Fault (SubType × Bytes) :=
   match bs with
   | [] => .error .eof
   | b :: r =>
@@ -701,7 +734,7 @@ def decSubtype (bs : Bytes) : Except Fault (SubType × Bytes) :=
          | .error e => .error e
          | .ok (ct, r') => .ok (.sub (some .final) .nil ct, r'))
 
-theorem decSubtype_sound : Sound Bsubtype decSubtype := by
+theorem decSubtype_sound [authority : BinaryAuthority] : Sound Bsubtype decSubtype := by
   intro bs st r h
   cases bs with
   | nil => simp [decSubtype] at h
@@ -746,7 +779,8 @@ theorem decSubtype_sound : Sound Bsubtype decSubtype := by
 
 /-- The first byte of a `Bcomptype` is `0x5E`, `0x5F` or `0x60`, so the `bare`
 alternative of `Bsubtype` never collides with `0x4F` or `0x50`. -/
-theorem Bcomptype_head {bs : Bytes} {ct : CompType} (h : Bcomptype bs ct) :
+theorem Bcomptype_head [authority : BinaryAuthority]
+    {bs : Bytes} {ct : CompType} (h : Bcomptype bs ct) :
     ∃ b t, bs = b :: t ∧ (b.val = 0x5E ∨ b.val = 0x5F ∨ b.val = 0x60) := by
   cases h with
   | array bb ft _ => exact ⟨tb 0x5E, bb, rfl, Or.inl (by decide)⟩
@@ -754,7 +788,7 @@ theorem Bcomptype_head {bs : Bytes} {ct : CompType} (h : Bcomptype bs ct) :
   | func b₁ b₂ t₁ t₂ _ _ =>
       exact ⟨tb 0x60, b₁ ++ b₂, rfl, Or.inr (Or.inr (by decide))⟩
 
-theorem decSubtype_complete : Complete Bsubtype decSubtype := by
+theorem decSubtype_complete [authority : BinaryAuthority] : Complete Bsubtype decSubtype := by
   intro b st r h
   cases h with
   | finalSub bx bc xs tus ct hx hc htus =>
@@ -785,7 +819,8 @@ theorem decSubtype_complete : Complete Bsubtype decSubtype := by
       simp only [hstep]
 
 /-- `grammar Brectype : rectype`. -/
-def decRectype (bs : Bytes) : Except Fault (RecType × Bytes) :=
+def decRectype [authority : BinaryAuthority]
+    (bs : Bytes) : Except Fault (RecType × Bytes) :=
   match bs with
   | [] => .error .eof
   | b :: r =>
@@ -798,7 +833,7 @@ def decRectype (bs : Bytes) : Except Fault (RecType × Bytes) :=
          | .error e => .error e
          | .ok (st, r') => .ok (.recr (.cons st .nil), r'))
 
-theorem decRectype_sound : Sound Brectype decRectype := by
+theorem decRectype_sound [authority : BinaryAuthority] : Sound Brectype decRectype := by
   intro bs qt r h
   cases bs with
   | nil => simp [decRectype] at h
@@ -825,7 +860,8 @@ theorem decRectype_sound : Sound Brectype decRectype := by
 
 /-- The first byte of a `Bsubtype` is `0x4F`, `0x50`, `0x5E`, `0x5F` or `0x60`,
 never `0x4E`, so the `single` alternative of `Brectype` never collides. -/
-theorem Bsubtype_head {bs : Bytes} {st : SubType} (h : Bsubtype bs st) :
+theorem Bsubtype_head [authority : BinaryAuthority]
+    {bs : Bytes} {st : SubType} (h : Bsubtype bs st) :
     ∃ b t, bs = b :: t ∧ b.val ≠ 0x4E := by
   cases h with
   | finalSub bx bc _ _ _ _ _ => exact ⟨tb 0x4F, bx ++ bc, rfl, by decide⟩
@@ -834,7 +870,7 @@ theorem Bsubtype_head {bs : Bytes} {st : SubType} (h : Bsubtype bs st) :
       obtain ⟨b0, t0, hb0, hrange⟩ := Bcomptype_head hc
       exact ⟨b0, t0, hb0, by omega⟩
 
-theorem decRectype_complete : Complete Brectype decRectype := by
+theorem decRectype_complete [authority : BinaryAuthority] : Complete Brectype decRectype := by
   intro b qt r h
   cases h with
   | recGroup bs sts hd =>
@@ -994,7 +1030,8 @@ theorem decTagtype_complete : Complete Btagtype decTagtype := by
       simp [decTagtype, tb, Byte.ofNat, decIdx_complete bs x r hd]
 
 /-- `grammar Bglobaltype : globaltype`. -/
-def decGlobaltype (bs : Bytes) : Except Fault (GlobalType × Bytes) :=
+def decGlobaltype [authority : BinaryAuthority]
+    (bs : Bytes) : Except Fault (GlobalType × Bytes) :=
   match decValtype bs with
   | .error e => .error e
   | .ok (t, r₁) =>
@@ -1002,7 +1039,7 @@ def decGlobaltype (bs : Bytes) : Except Fault (GlobalType × Bytes) :=
       | .error e => .error e
       | .ok (mo, r₂) => .ok ({ mutability := mo, valtype := t }, r₂)
 
-theorem decGlobaltype_sound : Sound Bglobaltype decGlobaltype := by
+theorem decGlobaltype_sound [authority : BinaryAuthority] : Sound Bglobaltype decGlobaltype := by
   intro bs gt r h
   rw [decGlobaltype] at h
   split at h
@@ -1018,7 +1055,7 @@ theorem decGlobaltype_sound : Sound Bglobaltype decGlobaltype := by
       rw [← hv]
       exact Bglobaltype.mk b₁ b₂ t mo hd₁ hd₂
 
-theorem decGlobaltype_complete : Complete Bglobaltype decGlobaltype := by
+theorem decGlobaltype_complete [authority : BinaryAuthority] : Complete Bglobaltype decGlobaltype := by
   intro b gt r h
   cases h with
   | mk bt bm t mo ht hm =>
@@ -1048,7 +1085,8 @@ theorem decMemtype_complete : Complete Bmemtype decMemtype := by
   | mk at' lim hd => simp [decMemtype, decLimits_complete b (at', lim) r hd]
 
 /-- `grammar Btabletype : tabletype`. -/
-def decTabletype (bs : Bytes) : Except Fault (TableType × Bytes) :=
+def decTabletype [authority : BinaryAuthority]
+    (bs : Bytes) : Except Fault (TableType × Bytes) :=
   match decReftype bs with
   | .error e => .error e
   | .ok (rt, r₁) =>
@@ -1056,7 +1094,7 @@ def decTabletype (bs : Bytes) : Except Fault (TableType × Bytes) :=
       | .error e => .error e
       | .ok ((at', lim), r₂) => .ok ({ addr := at', lim := lim, elem := rt }, r₂)
 
-theorem decTabletype_sound : Sound Btabletype decTabletype := by
+theorem decTabletype_sound [authority : BinaryAuthority] : Sound Btabletype decTabletype := by
   intro bs tt r h
   rw [decTabletype] at h
   split at h
@@ -1072,7 +1110,7 @@ theorem decTabletype_sound : Sound Btabletype decTabletype := by
       rw [← hv]
       exact Btabletype.mk b₁ b₂ rt at' lim hd₁ hd₂
 
-theorem decTabletype_complete : Complete Btabletype decTabletype := by
+theorem decTabletype_complete [authority : BinaryAuthority] : Complete Btabletype decTabletype := by
   intro b tt r h
   cases h with
   | mk br bl rt at' lim hr hl =>
@@ -1081,7 +1119,8 @@ theorem decTabletype_complete : Complete Btabletype decTabletype := by
         decLimits_complete bl (at', lim) r hl]
 
 /-- `grammar Bexterntype : externtype`. -/
-def decExterntype (bs : Bytes) : Except Fault (ExternType × Bytes) :=
+def decExterntype [authority : BinaryAuthority]
+    (bs : Bytes) : Except Fault (ExternType × Bytes) :=
   match bs with
   | [] => .error .eof
   | b :: r =>
@@ -1107,7 +1146,7 @@ def decExterntype (bs : Bytes) : Except Fault (ExternType × Bytes) :=
          | .ok (jt, r') => .ok (.tag jt, r'))
       else .error .opcode
 
-theorem decExterntype_sound : Sound Bexterntype decExterntype := by
+theorem decExterntype_sound [authority : BinaryAuthority] : Sound Bexterntype decExterntype := by
   intro bs xt r h
   cases bs with
   | nil => simp [decExterntype] at h
@@ -1165,7 +1204,7 @@ theorem decExterntype_sound : Sound Bexterntype decExterntype := by
                   exact Bexterntype.tag bb jt hd
               · simp at h
 
-theorem decExterntype_complete : Complete Bexterntype decExterntype := by
+theorem decExterntype_complete [authority : BinaryAuthority] : Complete Bexterntype decExterntype := by
   intro b xt r h
   cases h with
   | func bs x hd =>

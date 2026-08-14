@@ -196,7 +196,8 @@ fn truncate(text: &str, limit: usize, keep: usize) -> String {
 }
 
 fn take_chars(text: &str, n: usize) -> String {
-    text.chars().take(n).collect()
+    let clipped: String = text.chars().take(n).collect();
+    clipped.trim_end().to_owned()
 }
 
 /// Thousands separators, as Python's `format(n, ",")` writes them.
@@ -236,6 +237,11 @@ mod tests {
         // Multi-byte characters must not be split mid-character.
         let wide = "é".repeat(200);
         assert_eq!(truncate(&wide, 110, 107).chars().count(), 110);
+    }
+
+    #[test]
+    fn fixed_width_excerpt_does_not_emit_trailing_space() {
+        assert_eq!(take_chars("abc def", 4), "abc");
     }
 
     #[test]

@@ -36,6 +36,8 @@ set_option autoImplicit false
 
 namespace WasmGemmGnaf.Wasm.Core.Binary
 
+variable [authority : BinaryAuthority]
+
 /-! ## Operand grammars
 
 `blocktype`, `catch`, `memidxop`, `castop` and `laneidx`, which the instruction
@@ -43,14 +45,14 @@ fragments share. -/
 
 /-- `grammar Bblocktype : blocktype`.
 
-The `_IDX` alternative repeats the `Bs33` caveat recorded on `BsN`: the value has
+The `_IDX` alternative repeats the selected `Bs33For` caveat recorded on `BsN`: the value has
 to land in `typeidx`, which is what demanding a `TypeIdx` witness says. -/
 inductive Bblocktype : Bytes → BlockType → Prop where
   -- core-opcode: 0x40 _RESULT
   | empty : Bblocktype [tb 0x40] (.result none)
   | val (bs : Bytes) (t : ValType) : Bvaltype bs t → Bblocktype bs (.result (some t))
   | idx (bs : Bytes) (i : Int) (x : TypeIdx) :
-      Bs33 bs i → 0 ≤ i → (x.val : Int) = i → Bblocktype bs (.idx x)
+      Bs33For bs i → 0 ≤ i → (x.val : Int) = i → Bblocktype bs (.idx x)
 
 /-- `grammar Bcatch : catch`. -/
 inductive Bcatch : Bytes → Catch → Prop where

@@ -67,6 +67,128 @@ def substTypeVar : TypeVar → List TypeVar → List TypeUse → TypeUse
   | tv, tv₁ :: tvs, tu₁ :: tus => if tv = tv₁ then tu₁ else substTypeVar tv tvs tus
   | tv, _, _ => tv.toTypeUse
 
+/-! ### Exact lookup laws for rolling and unrolling
+
+The validation relation supplies a non-wrapping bound for every recursive type
+group.  Under that bound, the parallel substitutions used by `rollRt` and
+`unrollRt` have the ordinary interval-lookup behavior suggested by the source
+notation.  These lemmas make that fact reusable by validation and runtime
+type-origin proofs; none of them decides a typing judgment. -/
+
+/-- `TypeIdx.ofNat` is exact, rather than merely congruent modulo `2^32`, on
+the source type-index range. -/
+theorem TypeIdx.ofNat_val_of_lt (n : Nat) (h : n < 2 ^ 32) :
+    (TypeIdx.ofNat n).val = n := by
+  simp [TypeIdx.ofNat, Nat.mod_eq_of_lt h]
+
+/-- Lookup in a non-wrapping slice of the rolling substitution. -/
+private theorem substTypeVar_rollRange' (x y : TypeIdx) (start n : Nat)
+    (hbound : x.val + start + n ≤ 2 ^ 32) :
+    substTypeVar (.idx y)
+      ((List.range' start n).map
+        (fun j => TypeVar.idx (TypeIdx.ofNat (x.val + j))))
+      ((List.range' start n).map (fun j => TypeUse.recu j)) =
+      if x.val + start ≤ y.val ∧ y.val < x.val + start + n then
+        .recu (y.val - x.val)
+      else .idx y := by
+  induction n generalizing start with
+  | zero =>
+      rw [if_neg (by omega)]
+      rfl
+  | succ n ih =>
+      rw [List.range'_succ]
+      simp only [List.map_cons, substTypeVar]
+      have hhead : x.val + start < 2 ^ 32 := by omega
+      have hval : (TypeIdx.ofNat (x.val + start)).val = x.val + start :=
+        TypeIdx.ofNat_val_of_lt _ hhead
+      by_cases heq : y.val = x.val + start
+      · have hidx : y = TypeIdx.ofNat (x.val + start) :=
+          Subtype.ext (by simpa [hval] using heq)
+        rw [if_pos (by simp [hidx])]
+        simp [heq]
+      · have hidx : y ≠ TypeIdx.ofNat (x.val + start) := by
+          intro h
+          apply heq
+          simpa [hval] using congrArg Subtype.val h
+        rw [if_neg (by simpa using hidx)]
+        rw [ih (start := start + 1) (by omega)]
+        by_cases hrange :
+            x.val + (start + 1) ≤ y.val ∧
+              y.val < x.val + (start + 1) + n
+        · rw [if_pos hrange, if_pos (by omega)]
+        · rw [if_neg hrange, if_neg (by omega)]
+
+/-- The rolling substitution turns exactly the indices occupied by the current
+non-wrapping group into their corresponding `REC` variables. -/
+theorem substTypeVar_rollVars (x y : TypeIdx) (n : Nat)
+    (hbound : x.val + n ≤ 2 ^ 32) :
+    substTypeVar (.idx y)
+      ((List.range n).map
+        (fun j => TypeVar.idx (TypeIdx.ofNat (x.val + j))))
+      ((List.range n).map (fun j => TypeUse.recu j)) =
+      if x.val ≤ y.val ∧ y.val < x.val + n then
+        .recu (y.val - x.val)
+      else .idx y := by
+  rw [List.range_eq_range']
+  simpa using substTypeVar_rollRange' x y 0 n (by omega)
+
+/-- An ordinary type index is untouched by the recursive-variable substitution
+used by `unrollRt`. -/
+private theorem substTypeVar_unrollIdxRange' (y : TypeIdx) (qt : RecType)
+    (start n : Nat) :
+    substTypeVar (.idx y)
+      ((List.range' start n).map TypeVar.recv)
+      ((List.range' start n).map (fun j => TypeUse.defd (.defd qt j))) =
+      .idx y := by
+  induction n generalizing start with
+  | zero => rfl
+  | succ n ih =>
+      rw [List.range'_succ]
+      simp only [List.map_cons, substTypeVar, reduceCtorEq, ↓reduceIte]
+      exact ih (start + 1)
+
+theorem substTypeVar_unrollIdxVars (y : TypeIdx) (n : Nat) (qt : RecType) :
+    substTypeVar (.idx y)
+      ((List.range n).map TypeVar.recv)
+      ((List.range n).map (fun j => TypeUse.defd (.defd qt j))) =
+      .idx y := by
+  rw [List.range_eq_range']
+  exact substTypeVar_unrollIdxRange' y qt 0 n
+
+/-- Lookup in a slice of the recursive-variable substitution used by
+`unrollRt`. -/
+private theorem substTypeVar_unrollRecRange' (j start n : Nat) (qt : RecType) :
+    substTypeVar (.recv j)
+      ((List.range' start n).map TypeVar.recv)
+      ((List.range' start n).map (fun k => TypeUse.defd (.defd qt k))) =
+      if start ≤ j ∧ j < start + n then .defd (.defd qt j) else .recu j := by
+  induction n generalizing start with
+  | zero =>
+      rw [if_neg (by omega)]
+      rfl
+  | succ n ih =>
+      rw [List.range'_succ]
+      simp only [List.map_cons, substTypeVar]
+      by_cases heq : j = start
+      · subst j
+        rw [if_pos rfl]
+        simp
+      · rw [if_neg (by simpa using heq)]
+        rw [ih (start + 1)]
+        by_cases hrange : start + 1 ≤ j ∧ j < start + 1 + n
+        · rw [if_pos hrange, if_pos (by omega)]
+        · rw [if_neg hrange, if_neg (by omega)]
+
+/-- `unrollRt` closes exactly the in-range `REC` variables with the matching
+member of its own recursive group. -/
+theorem substTypeVar_unrollRecVars (j n : Nat) (qt : RecType) :
+    substTypeVar (.recv j)
+      ((List.range n).map TypeVar.recv)
+      ((List.range n).map (fun k => TypeUse.defd (.defd qt k))) =
+      if j < n then .defd (.defd qt j) else .recu j := by
+  rw [List.range_eq_range']
+  simpa using substTypeVar_unrollRecRange' j 0 n qt
+
 /-- `def $minus_recs(typevar*, typeuse*) : (typevar*, typeuse*)`: drop every
 `REC n` variable, together with the `typeuse` opposite it. -/
 def minusRecs : List TypeVar → List TypeUse → List TypeVar × List TypeUse

@@ -1,8 +1,11 @@
 /-
-  Wasm/Binary.lean --- the Core 3.0 binary format: LEB128, sections,
-  `Wasm.encode` and `Wasm.decode`.
+  Wasm/Binary.lean --- the legacy SUBSET codec: LEB128, sections,
+  `Wasm.Subset.encode` and `Wasm.Subset.decode`.
 
-  Normative source: SPEC.md section 7.3.
+  This is proof support for the pre-Core subset seam, not the release codec of
+  SPEC section 7.3.  The public amended-Core decoder and encoder are
+  `Wasm.decode` in `Wasm/CoreFrontEnd.lean` and `Wasm.encode` in
+  `Wasm/CoreBackEnd.lean`.
 
   ## What is proved
 
@@ -20,7 +23,7 @@
   malformed byte string can only produce `Except.error fault`, never a module
   that does not re-encode to those very bytes.
 
-  ## Declared scope of the byte format
+  ## Declared scope of the legacy byte format
 
   The instruction subset is the one declared in `Wasm/Syntax.lean`.  Within it,
   the serialisation is the canonical one fixed by this file:
@@ -36,7 +39,7 @@
   * ULEB128 and SLEB128 are *canonical*: a redundant continuation byte is
     rejected with `DecodeFault.nonCanonicalLeb128`, which is what makes decoding
     injective (a permissive decoder cannot be injective, and SPEC section 7.3
-    asks for `encode_decode_roundtrip`);
+    asks for an encoder round trip);
   * names are raw byte strings, length-prefixed; UTF-8 well-formedness is a
     validation condition, not a syntactic one;
   * instruction opcodes come from `Wasm.Opcode`, a pinned dense enumeration
@@ -49,14 +52,15 @@
   `decode_complete` against the vendored `Wasm.DeclarativeBinaryRelation` of
   SPEC section 7.3 --- that relation is not defined in this layer, and claiming
   it would be a fake proof.  What *is* proved is the self-contained
-  inverse-pair specification above, in both directions, for the whole declared
-  subset:
+  inverse-pair specification above, in both directions, for this legacy model:
 
   * `Wasm.leb128_roundtrip`, `Wasm.decULEB_sound`, `Wasm.decSLEB_encodeSLEB`,
     `Wasm.decSLEB_sound`;
   * `Wasm.decInstr_decExpr_enc`, `Wasm.decInstr_decExpr_sound`;
-  * `Wasm.encode_decode_roundtrip`, `Wasm.decode_is_encode`,
-    `Wasm.encode_injective`, `Wasm.decode_error_or_encode`.
+  * `Wasm.Subset.encode_decode_roundtrip`,
+    `Wasm.Subset.decode_is_encode`,
+    `Wasm.Subset.encode_injective`,
+    `Wasm.Subset.decode_error_or_encode`.
 
   Every declaration in this file is proved.  Nothing is assumed.
 -/
@@ -3023,7 +3027,7 @@ def exprC : Codec Expr where
   dec_sound fuel s a r h := (decInstr_decExpr_sound fuel).2 s a r h
   cost_le _ := Nat.le_refl _
 
-/-! ## Module component codecs -/
+/-! ## Subset.Module component codecs -/
 
 /-- Sum view of an import description. -/
 def toSumImportDesc :
@@ -3193,7 +3197,7 @@ def moduleTupleC : Codec ModuleTuple :=
 def magicBytes : List UInt8 := [0, 0x61, 0x73, 0x6D, 1, 0, 0, 0]
 
 /-- The verified codec of a whole module. -/
-def moduleC : Codec Module :=
+def moduleC : Codec Subset.Module :=
   Codec.prefixed magicBytes .badMagic
     (Codec.iso moduleTupleC
       (fun m => (m.types, m.imports, m.funcs, m.tables, m.mems, m.tags,
@@ -3205,42 +3209,40 @@ def moduleC : Codec Module :=
 
 /-! ## The SUBSET codec: `Wasm.Subset.encode` and `Wasm.Subset.decode`
 
-These used to be `Wasm.encode` and `Wasm.decode`.  They are not any more, and
-the rename is the point.  SPEC section 7.2 asks for a decoder that "SHALL
-recognize the complete pinned Core 3.0 binary grammar"; the codec below
-recognizes the eleven-section, canonical-LEB128, custom-section-free subset
-this file's header describes, and `Wasm/CoreGap.lean` proves it accepts modules
-the pinned syntax cannot even express.  The public names `Wasm.decode` and
-`Wasm.DeclarativeBinaryRelation` now denote the Core 3.0 decoder and the pinned
-binary grammar (`Wasm/CoreFrontEnd.lean`), so a reader who sees `Wasm.decode`
-in a SPEC section 15 theorem is looking at the pinned format and not at this.
+These used to be `Wasm.encode` and `Wasm.decode`.  The rename records that
+this codec recognizes an eleven-section, canonical-LEB128,
+custom-section-free format that is not byte-identical to WebAssembly Core 3.0.
+The public `Wasm.decode` and `Wasm.DeclarativeBinaryRelation` instead use
+the amended Core grammar in `Wasm/CoreFrontEnd.lean`, and the public
+`Wasm.encode` is the amended Core encoder in `Wasm/CoreBackEnd.lean`.
 
-Everything here is still proved and still used: `Artifact/Emit.lean` and the
-competitor universe of `Universal/` are built on this codec, and they now say
-so in their types. -/
+Everything here remains proved and supports explicitly legacy paths, including
+the subset relation in `Wasm/Declarative.lean` and the current subset
+competitor seam in `Universal/`.  `Artifact/Emit.lean` does not use this
+codec; it uses the public amended-Core encoder. -/
 
 namespace Subset
 
 /-- The canonical byte-list encoding of a module. -/
-def encodeList (m : Module) : List UInt8 := moduleC.enc m
+def encodeList (m : Subset.Module) : List UInt8 := moduleC.enc m
 
 /-- The canonical binary encoding of a module. -/
-def encode (m : Module) : ByteArray := Bytes.pack (encodeList m)
+def encode (m : Subset.Module) : ByteArray := Bytes.pack (encodeList m)
 
 /-- The decoder.  Every failure path returns a typed `DecodeFault`. -/
-def decode (b : ByteArray) : Except DecodeFault Module :=
+def decode (b : ByteArray) : Except DecodeFault Subset.Module :=
   match moduleC.dec b.size b.toList with
   | .error e => .error e
   | .ok (m, r) => if r = [] then .ok m else .error (.trailingBytes r.length)
 
-@[simp] theorem toList_encode (m : Module) : (encode m).toList = encodeList m :=
+@[simp] theorem toList_encode (m : Subset.Module) : (encode m).toList = encodeList m :=
   Bytes.toList_pack _
 
-@[simp] theorem size_encode (m : Module) : (encode m).size = (encodeList m).length :=
+@[simp] theorem size_encode (m : Subset.Module) : (encode m).size = (encodeList m).length :=
   Bytes.size_pack _
 
 /-- **Round trip.**  Decoding an encoded module returns exactly that module. -/
-theorem encode_decode_roundtrip (m : Module) : decode (encode m) = .ok m := by
+theorem encode_decode_roundtrip (m : Subset.Module) : decode (encode m) = .ok m := by
   have hcost : moduleC.cost m ≤ (encodeList m).length := moduleC.cost_le m
   have hdec : moduleC.dec (encodeList m).length (encodeList m) = .ok (m, []) := by
     have h := moduleC.dec_enc m (encodeList m).length [] hcost
@@ -3255,7 +3257,7 @@ a wrong module.
 This is deliberately *not* named `decode_sound`: the theorem of that name in
 SPEC section 7.3 is stated against the vendored `DeclarativeBinaryRelation`,
 which this layer does not define and therefore does not claim. -/
-theorem decode_is_encode {b : ByteArray} {m : Module} (h : decode b = .ok m) :
+theorem decode_is_encode {b : ByteArray} {m : Subset.Module} (h : decode b = .ok m) :
     b = encode m := by
   revert h
   unfold decode
@@ -3287,13 +3289,13 @@ byte string either produces a typed fault, or produces the unique module whose
 encoding it is. -/
 theorem decode_error_or_encode (b : ByteArray) :
     (∃ f : DecodeFault, decode b = .error f) ∨
-    (∃ m : Module, decode b = .ok m ∧ b = encode m) := by
+    (∃ m : Subset.Module, decode b = .ok m ∧ b = encode m) := by
   cases h : decode b with
   | error e => exact Or.inl ⟨e, rfl⟩
   | ok m => exact Or.inr ⟨m, rfl, decode_is_encode h⟩
 
 /-- Two byte strings that decode to the same module are equal. -/
-theorem decode_injective {b c : ByteArray} {m : Module}
+theorem decode_injective {b c : ByteArray} {m : Subset.Module}
     (hb : decode b = .ok m) (hc : decode c = .ok m) : b = c := by
   rw [decode_is_encode hb, decode_is_encode hc]
 
@@ -3301,13 +3303,13 @@ theorem decode_injective {b c : ByteArray} {m : Module}
 theorem magicBytes_eq : magicBytes = [0, 0x61, 0x73, 0x6D, 1, 0, 0, 0] := rfl
 
 /-- Every encoded module starts with the pinned preamble. -/
-theorem encodeList_prefix (m : Module) :
+theorem encodeList_prefix (m : Subset.Module) :
     ∃ t : List UInt8, encodeList m = magicBytes ++ t :=
   ⟨_, rfl⟩
 
 /-- The empty module round trips. -/
-theorem decode_encode_empty : decode (encode Module.empty) = .ok Module.empty :=
-  encode_decode_roundtrip Module.empty
+theorem decode_encode_empty : decode (encode Subset.Module.empty) = .ok Subset.Module.empty :=
+  encode_decode_roundtrip Subset.Module.empty
 
 /-! ## Further consequences -/
 
@@ -3324,14 +3326,14 @@ theorem Expr.enc_injective : Function.Injective Expr.enc := exprC.enc_injective
 /-- Instruction encoding is prefix-free. -/
 theorem Instr.enc_prefixFree : Bytes.PrefixFree Instr.enc := instrC.enc_prefixFree
 
-/-- Module encoding is prefix-free. -/
+/-- Subset.Module encoding is prefix-free. -/
 theorem encodeList_prefixFree : Bytes.PrefixFree encodeList := moduleC.enc_prefixFree
 
 /-- A byte string that is not the encoding of any module cannot decode: the
 decoder returns a typed fault.  This is the contrapositive of `decode_is_encode`
 and is the precise sense in which a malformed input never yields a wrong
 module. -/
-theorem decode_error_of_not_encode (b : ByteArray) (h : ∀ m : Module, b ≠ encode m) :
+theorem decode_error_of_not_encode (b : ByteArray) (h : ∀ m : Subset.Module, b ≠ encode m) :
     ∃ f : DecodeFault, decode b = .error f := by
   rcases decode_error_or_encode b with hf | ⟨m, _, hm⟩
   · exact hf

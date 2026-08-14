@@ -236,7 +236,32 @@ inductive AllocModule :
              datas := da, elems := ea, exports := xis } →
       AllocModule s m xas valG refT refE s₇ mm
 
+/-! ## Closed type-section origin
+
+Runtime subtype search sees the closed `DefType`s stored in a module instance,
+not the indexed source type section.  The equality below is the structural
+origin certificate that connects those two presentations.  It is deliberately
+weaker than a subtype-completeness assertion: completeness must be proved from
+this equality together with the module's `Types_okA` derivation. -/
+
+/-- A module instance carries exactly the closed types produced by the pinned
+allocation function from its source module. -/
+def ModuleInst.AllocatedTypesFrom (m : Module) (mm : ModuleInst) : Prop :=
+  mm.types = allocTypes m.types
+
+/-- The allocation relation fixes the module instance's closed type section;
+it cannot be supplied independently by a runtime caller. -/
+theorem AllocModule.allocatedTypesFrom {s s' : Store} {m : Module}
+    {xas : List ExternAddr} {valG : List Val} {refT : List Ref}
+    {refE : List (List Ref)} {mm : ModuleInst}
+    (h : AllocModule s m xas valG refT refE s' mm) :
+    mm.AllocatedTypesFrom m := by
+  cases h
+  simp_all [ModuleInst.AllocatedTypesFrom]
+
 /-! ## Instantiation -/
+
+variable [authority : ExecutionAuthority]
 
 /-- `def $rundata_(x, DATA b^n (PASSIVE)) = eps`,
 `def $rundata_(x, DATA b^n (ACTIVE y instr*)) =
@@ -325,6 +350,18 @@ inductive Instantiate (Nm : Numerics) : Store → Module → List ExternAddr →
         (⟨s', { mod := mm }⟩,
          plains instrE ++ plains instrD ++ plains instrS.toList)
 
+omit authority in
+/-- Every instantiated configuration exposes the allocation-derived closed
+type section in its active module frame.  This is the runtime origin half of
+the later fixed-fuel subtype-completeness theorem. -/
+theorem Instantiate.allocatedTypesFrom {execAuthority : ExecutionAuthority}
+    {Nm : Numerics} {s : Store} {m : Module} {xas : List ExternAddr}
+    {core : Config} (h : @Instantiate execAuthority Nm s m xas core) :
+    core.1.frame.mod.AllocatedTypesFrom m := by
+  cases h
+  apply AllocModule.allocatedTypesFrom
+  assumption
+
 /-! ## Invocation -/
 
 /-- `def $invoke(s, funcaddr, val*) =
@@ -342,5 +379,22 @@ inductive Invoke : Store → FuncAddr → List Val → Config → Prop where
       Invoke s a vs
         (⟨s, { mod := {} }⟩,
          vals vs ++ [.addrref (.funcAddr a), .plain (.callRef (.defd fi.type))])
+
+/-! ## Explicit released endpoints -/
+
+/-- Byte-identical pinned instantiation, retained as the authority reference. -/
+abbrev InstantiatePinned := @Instantiate pinnedExecutionAuthority
+
+/-- AMD-011 instantiation with an explicit numeric provider. -/
+abbrev InstantiateAmendedFor := @Instantiate amendedExecutionAuthority
+
+/-- Released instantiation: amended runtime typing and released numerics. -/
+abbrev InstantiateA := InstantiateAmendedFor releasedNumerics
+
+/-- Byte-identical pinned invocation, retained as the authority reference. -/
+abbrev InvokePinned := @Invoke pinnedExecutionAuthority
+
+/-- Released invocation with amended runtime typing fixed. -/
+abbrev InvokeA := @Invoke amendedExecutionAuthority
 
 end WasmGemmGnaf.Wasm.Core.Exec

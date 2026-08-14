@@ -1,17 +1,17 @@
 /-
-  The unified machine fault of SPEC §7.1.
+  Wasm/Fault.lean --- a fault sum for the legacy subset machine.
 
-  `Wasm.SpecMachine` exposes a single `Fault` type used by both
-  `decode : ByteArray → Except Fault Module` and
-  `initial : Module → Invocation → Except Fault Config`.
+  This declaration joins the legacy subset `DecodeFault` of
+  `Wasm/Binary.lean` with the legacy `InstantiationFault` of
+  `Wasm/Config.lean`.  It is not the public fault type required by SPEC
+  §7.1: public `Wasm.decode` uses `CoreDecodeFault` and the public
+  amended-Core machine interface has not been assembled here.
 
   The concrete model keeps the two failure domains as separate inductives —
   `DecodeFault` in `Wasm/Binary.lean` (malformed bytes) and
   `InstantiationFault` in `Wasm/Config.lean` (allocation and export failures) —
-  because they are genuinely different sets of outcomes and SPEC §7.1's ownership
-  rule assigns them to different modules.  This module joins them into the single
-  `Fault` the machine interface requires, without either module depending on the
-  other.
+  because they are genuinely different sets of outcomes.  This module joins
+  them without either legacy module depending on the other.
 
   Both injections are proved injective and their images provably disjoint, so a
   decoding failure can never be silently reported as an instantiation failure.
@@ -23,12 +23,12 @@ set_option autoImplicit false
 
 namespace WasmGemmGnaf.Wasm
 
-/-- The machine fault of SPEC §7.1: either the bytes failed to decode, or a
-decoded module failed to instantiate. -/
+/-- A legacy subset-machine fault: either subset bytes failed to decode or a
+subset module failed to instantiate. -/
 inductive Fault
-  /-- The byte sequence did not decode under the pinned binary grammar. -/
+  /-- The byte sequence did not decode under the legacy subset codec. -/
   | decoding (fault : DecodeFault)
-  /-- The decoded module did not instantiate under the release profile. -/
+  /-- The decoded subset module did not instantiate in the legacy machine. -/
   | instantiation (fault : InstantiationFault)
   deriving DecidableEq, Repr, Inhabited
 

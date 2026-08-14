@@ -1,5 +1,10 @@
 /-
-  Wasm/Erasure.lean --- cost instrumentation is transparent.
+  Wasm/Erasure.lean --- erasure for the legacy subset cost instrumentation.
+
+  SCOPE.  `Run` and `CostedRun` below are over
+  `Wasm.Subset.Module` and the legacy `Wasm.Config` machine.  The
+  results are not the public amended-Core erasure theorem required by SPEC
+  section 7.5.
 
   Normative source: SPEC.md section 7.5:
 
@@ -28,16 +33,16 @@
   grown page count and the rule identity to the configuration they are taken
   from.
 
-  That is not an argument this file asks the reader to accept.  SPEC section
-  7.5's literal biconditional is *refuted* here, by an explicit witness:
-  `Counterexample.minimalModule` is a module that passes release validation,
+  For this legacy trace representation, the biconditional without a
+  machine-produced-labelling condition is refuted by an explicit witness:
+  `Counterexample.minimalModule` is a module that passes legacy subset validation,
   `Counterexample.forgedTrace` is a costed trace whose erasure is exactly the
   plain trace of a maximal run of that module, and
   `not_costed_erase_iff_plain_run` proves --- for every profile whatsoever ---
   that the right-hand side holds of it while the left-hand side does not.  The
   forged label differs from the one the machine computes only in a payload that
   `CostedEvent.erase` discards, which is the whole of the matter.  This is
-  deviation `DEV-001` of `model/spec-deviations.json`.
+  local mismatch is recorded as deviation `DEV-001`.
 
   What is proved instead is the strongest true form of the display:
 
@@ -68,7 +73,7 @@ open WasmGemmGnaf.Foundation
 /-- **SPEC section 7.5.**  The plain run relation: the module and raw
 invocation initialize to `initial`, and a finite execution of `initial` along
 `trace` produces `observation`. -/
-def Run (module : Module) (invocation : RawInvocation) (trace : List Event)
+def Run (module : Subset.Module) (invocation : RawInvocation) (trace : List Event)
     (observation : ExecutionObservation) : Prop :=
   ∃ initial : Config,
     initialConfig module invocation = .ok initial ∧
@@ -78,7 +83,7 @@ def Run (module : Module) (invocation : RawInvocation) (trace : List Event)
 /-- **SPEC section 7.5.**  The costed run relation: the same initialization,
 and a costed finite execution whose recorded snapshots are the snapshots of the
 configurations actually visited. -/
-def CostedRun (P : Profile) (module : Module) (invocation : RawInvocation)
+def CostedRun (P : Profile) (module : Subset.Module) (invocation : RawInvocation)
     (costedTrace : List CostedEvent) (observation : ExecutionObservation) : Prop :=
   ∃ (initial : Config) (configs : List ConfigResourceSnapshot),
     initialConfig module invocation = .ok initial ∧
@@ -88,7 +93,7 @@ def CostedRun (P : Profile) (module : Module) (invocation : RawInvocation)
 sequence of an actual reduction out of the initial configuration.  This is a
 condition on labels alone: it mentions no observation, no store, and no
 terminal status. -/
-def CostedLabelling (module : Module) (invocation : RawInvocation)
+def CostedLabelling (module : Subset.Module) (invocation : RawInvocation)
     (costedTrace : List CostedEvent) : Prop :=
   ∃ (initial final : Config) (visited : List Config),
     initialConfig module invocation = .ok initial ∧
@@ -96,7 +101,7 @@ def CostedLabelling (module : Module) (invocation : RawInvocation)
 
 /-- Initialization is a function: two initial configurations of the same module
 and raw invocation are equal. -/
-theorem initialConfig_unique {module : Module} {invocation : RawInvocation}
+theorem initialConfig_unique {module : Subset.Module} {invocation : RawInvocation}
     {a b : Config} (ha : initialConfig module invocation = .ok a)
     (hb : initialConfig module invocation = .ok b) : a = b := by
   rw [ha] at hb
@@ -106,7 +111,7 @@ theorem initialConfig_unique {module : Module} {invocation : RawInvocation}
 
 /-- The costed trace of a costed run erases to exactly the observation's plain
 trace. -/
-theorem costedRun_erase_trace {P : Profile} {module : Module}
+theorem costedRun_erase_trace {P : Profile} {module : Subset.Module}
     {invocation : RawInvocation} {costedTrace : List CostedEvent}
     {observation : ExecutionObservation}
     (h : CostedRun P module invocation costedTrace observation) :
@@ -116,7 +121,7 @@ theorem costedRun_erase_trace {P : Profile} {module : Module}
 
 /-- **Erasure soundness.**  Removing the cost labels of a costed run yields the
 ordinary run of the erased trace. -/
-theorem costedRun_erase {P : Profile} {module : Module}
+theorem costedRun_erase {P : Profile} {module : Subset.Module}
     {invocation : RawInvocation} {costedTrace : List CostedEvent}
     {observation : ExecutionObservation}
     (h : CostedRun P module invocation costedTrace observation) :
@@ -126,7 +131,7 @@ theorem costedRun_erase {P : Profile} {module : Module}
 
 /-- **Erasure completeness.**  Every plain run carries a costed labelling that
 erases back to it, with the same observation. -/
-theorem costedRun_of_run {P : Profile} {module : Module}
+theorem costedRun_of_run {P : Profile} {module : Subset.Module}
     {invocation : RawInvocation} {trace : List Event}
     {observation : ExecutionObservation}
     (h : Run module invocation trace observation) :
@@ -141,14 +146,14 @@ theorem costedRun_of_run {P : Profile} {module : Module}
   · rw [htr, hct]
   · exact hobs
 
-/-! ## The decisive theorem -/
+/-! ## The exact legacy erasure theorem -/
 
-/-- **SPEC section 7.5, the decisive theorem.**  A costed run of `costedTrace`
+/-- A costed legacy run of `costedTrace`
 holds exactly when the ordinary run of `eraseCosts costedTrace` holds and
 `costedTrace` is a labelling the machine produces.  Cost instrumentation
 therefore does not alter control, values, traps, memory, or observable results:
 the whole difference between the two sides is a condition on labels. -/
-theorem costed_erase_iff_plain_run {P : Profile} {module : Module}
+theorem costed_erase_iff_plain_run {P : Profile} {module : Subset.Module}
     {invocation : RawInvocation} {costedTrace : List CostedEvent}
     {observation : ExecutionObservation} :
     CostedRun P module invocation costedTrace observation ↔
@@ -174,7 +179,7 @@ theorem costed_erase_iff_plain_run {P : Profile} {module : Module}
 existentially quantified the side condition disappears: an observation is
 reachable by a costed run exactly when it is reachable by the ordinary run of
 its own trace. -/
-theorem costed_run_iff_plain_run {P : Profile} {module : Module}
+theorem costed_run_iff_plain_run {P : Profile} {module : Subset.Module}
     {invocation : RawInvocation} {observation : ExecutionObservation} :
     (∃ costedTrace : List CostedEvent,
         CostedRun P module invocation costedTrace observation) ↔
@@ -190,7 +195,7 @@ theorem costed_run_iff_plain_run {P : Profile} {module : Module}
 
 /-- The same statement against the plain relational execution of
 `Wasm/Run.lean`: instrumentation adds no observation and removes none. -/
-theorem costed_run_iff_finiteExecution {P : Profile} {module : Module}
+theorem costed_run_iff_finiteExecution {P : Profile} {module : Subset.Module}
     {invocation : RawInvocation} {initial : Config}
     {observation : ExecutionObservation}
     (hinit : initialConfig module invocation = .ok initial) :
@@ -206,7 +211,7 @@ theorem costed_run_iff_finiteExecution {P : Profile} {module : Module}
   · intro h
     exact ⟨initial, hinit, rfl, h⟩
 
-/-! ## SPEC section 7.5's literal biconditional is false
+/-! ## Why the unrestricted biconditional fails for this legacy trace type
 
 The display in SPEC section 7.5 reads, with its free variables universally
 quantified as a Lean theorem statement does:
@@ -223,7 +228,7 @@ the whole of the ordinary-rule family in `Event.step`.  Any labelling in the
 fibre over a genuine plain trace therefore satisfies the right-hand side, while
 `CostedStep` admits exactly the one the machine computes.
 
-The witness below is a real module of the released profile: it passes
+The witness below is a real module of the legacy subset: it passes
 `Wasm.validate`, it has a three-step maximal run, and the forged trace differs
 from the true labelling of that run in exactly one payload. -/
 
@@ -235,11 +240,11 @@ theorem erase_enterGemm_eq (n m : Nat) :
 
 namespace Counterexample
 
-/-- A module of the released profile: one recursive type group holding the
+/-- A legacy subset module: one recursive type group holding the
 pinned GEMM ABI type, one exported `gemm` returning `i32.const 0`, a zero-page
 memory, and exactly the two required exports.  It is not a contrivance:
-`minimalModule_validate` proves it passes the release validator. -/
-def minimalModule : Module where
+`minimalModule_validate` proves it passes the legacy subset validator. -/
+def minimalModule : Subset.Module where
   types := [⟨[⟨true, [], .func gemmFuncType⟩]⟩]
   imports := []
   funcs := [⟨0, [], .cons (.i32Const 0) .nil⟩]
@@ -253,22 +258,22 @@ def minimalModule : Module where
   datas := []
 
 theorem minimalModule_exportsMemory :
-    Module.exportsMemory minimalModule = true := by
-  simp [Module.exportsMemory, minimalModule]
+    Subset.Module.exportsMemory minimalModule = true := by
+  simp [Subset.Module.exportsMemory, minimalModule]
 
-theorem minimalModule_gemmIndex : Module.gemmIndex? minimalModule = some 0 := by
-  simp [Module.gemmIndex?, minimalModule]
+theorem minimalModule_gemmIndex : Subset.Module.gemmIndex? minimalModule = some 0 := by
+  simp [Subset.Module.gemmIndex?, minimalModule]
 
 theorem minimalModule_checkGemmExport :
-    Module.checkGemmExport minimalModule = true := by
-  rw [Module.checkGemmExport, minimalModule_gemmIndex]
+    Subset.Module.checkGemmExport minimalModule = true := by
+  rw [Subset.Module.checkGemmExport, minimalModule_gemmIndex]
   decide
 
-theorem minimalModule_checkExports : Module.checkExports minimalModule = true := by
-  simp [Module.checkExports, minimalModule, Module.distinctExportNames,
+theorem minimalModule_checkExports : Subset.Module.checkExports minimalModule = true := by
+  simp [Subset.Module.checkExports, minimalModule, Subset.Module.distinctExportNames,
     Ne.symm gemmExportName_ne_memoryExportName]
 
-/-- **The witness module passes release validation.** -/
+/-- **The witness module passes legacy subset validation.** -/
 theorem minimalModule_validate : validate minimalModule = true := by
   rw [validate, minimalModule_exportsMemory, minimalModule_checkGemmExport,
     minimalModule_checkExports]
@@ -351,7 +356,7 @@ and what `costed_erase_iff_plain_run` repairs with a condition on labels alone;
 `costed_run_iff_plain_run` carries SPEC's intended content with no side
 condition at all. -/
 theorem not_costed_erase_iff_plain_run (P : Profile) :
-    ¬ ∀ (module : Module) (invocation : RawInvocation)
+    ¬ ∀ (module : Subset.Module) (invocation : RawInvocation)
         (costedTrace : List CostedEvent) (observation : ExecutionObservation),
         CostedRun P module invocation costedTrace observation ↔
           Run module invocation (eraseCosts costedTrace) observation := by
@@ -364,7 +369,7 @@ theorem not_costed_erase_iff_plain_run (P : Profile) :
 /-- The failure is one-sided: the forward direction of SPEC's display is
 `costedRun_erase`, proved unconditionally.  Only the backward direction fails,
 and it fails on the labels. -/
-theorem costed_erase_forward {P : Profile} {module : Module}
+theorem costed_erase_forward {P : Profile} {module : Subset.Module}
     {invocation : RawInvocation} {costedTrace : List CostedEvent}
     {observation : ExecutionObservation}
     (h : CostedRun P module invocation costedTrace observation) :
@@ -379,7 +384,7 @@ effects.  Erasure preserves it exactly --- not up to a projection. -/
 
 /-- **Erasure preserves the observation.**  The plain run of an erased costed
 trace delivers literally the observation the costed run delivered. -/
-theorem costed_observation_eq_plain {P : Profile} {module : Module}
+theorem costed_observation_eq_plain {P : Profile} {module : Subset.Module}
     {invocation : RawInvocation} {costedTrace : List CostedEvent}
     {costed plain : ExecutionObservation}
     (hc : CostedRun P module invocation costedTrace costed)
@@ -398,7 +403,7 @@ theorem costed_observation_eq_plain {P : Profile} {module : Module}
 
 /-- Consequently the deterministic semantic observation --- terminal status,
 final ABI-visible store, external effects --- is preserved by erasure. -/
-theorem costed_semantic_eq_plain {P : Profile} {module : Module}
+theorem costed_semantic_eq_plain {P : Profile} {module : Subset.Module}
     {invocation : RawInvocation} {costedTrace : List CostedEvent}
     {costed plain : ExecutionObservation}
     (hc : CostedRun P module invocation costedTrace costed)
@@ -407,7 +412,7 @@ theorem costed_semantic_eq_plain {P : Profile} {module : Module}
   rw [costed_observation_eq_plain hc hp]
 
 /-- The entry store snapshot is preserved by erasure. -/
-theorem costed_entryStore_eq_plain {P : Profile} {module : Module}
+theorem costed_entryStore_eq_plain {P : Profile} {module : Subset.Module}
     {invocation : RawInvocation} {costedTrace : List CostedEvent}
     {costed plain : ExecutionObservation}
     (hc : CostedRun P module invocation costedTrace costed)
@@ -416,7 +421,7 @@ theorem costed_entryStore_eq_plain {P : Profile} {module : Module}
   rw [costed_observation_eq_plain hc hp]
 
 /-- The final ABI-visible store is preserved by erasure. -/
-theorem costed_finalStore_eq_plain {P : Profile} {module : Module}
+theorem costed_finalStore_eq_plain {P : Profile} {module : Subset.Module}
     {invocation : RawInvocation} {costedTrace : List CostedEvent}
     {costed plain : ExecutionObservation}
     (hc : CostedRun P module invocation costedTrace costed)
@@ -425,7 +430,7 @@ theorem costed_finalStore_eq_plain {P : Profile} {module : Module}
   rw [costed_observation_eq_plain hc hp]
 
 /-- A costed observation is maximal, exactly as a plain one is. -/
-theorem costedRun_maximal {P : Profile} {module : Module}
+theorem costedRun_maximal {P : Profile} {module : Subset.Module}
     {invocation : RawInvocation} {costedTrace : List CostedEvent}
     {observation : ExecutionObservation}
     (_h : CostedRun P module invocation costedTrace observation) :

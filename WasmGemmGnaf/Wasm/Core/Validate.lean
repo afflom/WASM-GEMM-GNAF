@@ -1,21 +1,18 @@
 /-
-  Wasm/Core/Validate.lean --- the executable module validator: the validation
-  ALGORITHM of `vendor/wasm-spec/document/core/appendix/algorithm.rst` wrapped in
-  the module-level checks of `2.4-validation.modules.spectec`.
+  Wasm/Core/Validate.lean --- the executable module validator for the amended
+  declarative Core hierarchy.
 
   WHAT THIS FILE IS.  `Wasm.Core.validate : Module -> Bool` is a total,
-  computable function.  Its instruction-level core is `Core/ValidateInstr.lean`'s
-  `checkSeq`, which is the appendix's single pass --- operand stack, control
-  frames through `Context.pushLabel`, `unreachable()` and the `Bot` type --- and
-  its module level follows `Module_ok` premise by premise: the staged contexts
-  `C'` and `C`, `$rolldt` on the type section, the `REFS` component from
-  `$funcidx_nonfuncs`, `Limits_ok` on memories, `Expr_ok_const` on the
-  initialisers and offsets, `Externidx_ok` on the exports and `$disjoint_` on
-  their names.
+  computable function.  It combines the module-level checks of
+  `2.4-validation.modules.spectec` with the corrected amended type
+  hierarchy, and it checks every module section, including tables and element
+  segments.  Its accepted instruction language remains conservative where the
+  module checker calls the older stack pass.  Unconditional soundness against
+  `Module_okA` is proved in `Core/ValidateModule.lean`.
 
   WHAT THIS FILE DOES NOT CLAIM, AND WHY.  There is no
   `validate_iff_declarative` here, and no soundness theorem AGAINST THE PINNED
-  `Module_ok`.  (Soundness against the AMENDED `Module_ok'` is a theorem, but it
+  `Module_ok`.  (Soundness against the combined AMENDED `Module_okA` is a theorem, but it
   is `validate_sound` in `Core/ValidateModule.lean`, a later file; see the last
   paragraph of this header.)  The reason no theorem here mentions the pinned
   relation is a DEFECT IN THE PINNED DECLARATIVE RULES, proved in
@@ -51,90 +48,64 @@
   `Instr_ok`, un-framed and un-subsumed.  `Instrs_ok.cons_untypable_of_arity` is
   the rejection schema; `const_binop_untypable` is its `n = 2` instance.
 
-  `Core/Validation/InstructionsAmended.lean` states the amended judgment the
-  repository uses, `Instrs_ok'`: one modified premise --- the frame carried
-  INSIDE the composition rule --- and no new rule, propagated through
-  `Instr_ok/block`, `Instr_ok/loop` and `Instr_ok/if` so the vacuity does not
-  survive one nesting level down.  It is proved to CONTAIN the pinned judgment
-  (`Instrs_ok.to_amended`), to derive what the pinned rules cannot
-  (`Instrs_ok'.const_binop` and the block, br and stack-polymorphic witnesses
-  beside it), and NOT to have widened the arity discipline in doing so
-  (`Instrs_ok'.binop_dom_length` is the pinned negative lemma re-proved against
-  the amendment).  A soundness or `validate_iff_declarative` theorem may be
-  attempted over `Instrs_ok'` with DEV-006 cited; it may NOT be stated over the
-  pinned relation, where it is false.
+  `Core/Validation/InstructionsCombinedAmended.lean` states the corrected
+  hierarchy used by the proof path: `Instr_okA`/`Instrs_okA`.  The module
+  checker below is proved sound against that hierarchy for every module it
+  accepts.  The older `checkSeq` pass and the broader
+  `checkInstrA`/`checkSeqA` pass coexist in
+  `Core/ValidateInstr.lean`; their presence does not by itself establish
+  completeness of this module validator.
 
-  WHAT HAS SINCE BEEN CLOSED, AND WHERE.  `Core/ValidateSeq.lean` proves the
-  instruction-level equivalence of `checkSeq` with `Instrs_ok'` in both
-  directions --- `checkSeq_sound` (every context, no fragment hypothesis) and
-  `checkSeq_complete` (over `Context.frag` / `Instr.frag`) --- together with
-  `checkExpr_sound` and `checkExpr_complete`.  `Core/ValidateModule.lean` then
-  proves `validate_sound : validate m = true -> exists mt, Module_ok' m mt`, at
-  the whole-module level, for every module and with no side hypothesis.
-  `Core/ValidateComplete.lean` proves the CONVERSE, `validate_complete`, and
-  the equivalence `validate_iff_declarative`:
+  COMPLETENESS STATUS.  `Module.frag` is retained below only as the
+  historical sufficient condition used by the reverse-direction proof in
+  `Core/ValidateComplete.lean`.  The validator does not compute or require
+  that Boolean; in particular it checks tables and element segments.  The
+  repository also contains an executable amended `Heaptype_sub` decision
+  procedure.  What remains open is a proof that every amended declaratively
+  valid module is accepted, not the existence of that decision procedure.
 
-      `validate m = true <-> Module.frag m = true /\ exists mt, Module_ok' m mt`
+  The exact current endpoint is therefore:
 
-  with no hypothesis --- the fragment condition is a conjunct, because
-  `validate` decides it.
+  * `Wasm.Core.validate_sound` is unconditional for every accepted module;
+  * `Wasm.Core.validate_complete` requires explicit `Module.wf` and
+    legacy `Validate.Module.frag` hypotheses;
+  * `Wasm.Core.validate_iff_declarative_fragment` is the corresponding
+    explicitly restricted equivalence.
 
-  WHAT `Module.frag` STILL EXCLUDES, AND WHAT IT NO LONGER DOES.  IMPORTS and
-  TAGS are now INSIDE the decided fragment: neither carries an expression, so
-  neither needs the instruction algorithm, and every judgment they reach
-  (`Typeuse_ok`, `Expand_use`, `Valtype_ok`, `Limits_ok`, `Reftype_ok`) is
-  decided outright below.  The guard on them is per entry, not per section: a
-  `FUNC` or `TAG` writes its function type as a type index, a `TABLE` its
-  element type as an abstract heap type or a type index, and a `GLOBAL` --- which
-  the module's own `GLOBAL.GET` reads --- has a value type of the instruction
-  fragment.  What remains excluded outright is the TABLE and ELEMENT sections,
-  and the reason is exact: both carry an initialiser of REFERENCE type, so both
-  need reference instructions, and those need `Heaptype_sub`.
-
-  SPEC 15's `Wasm.validate_iff_declarative` is a different declaration, in
-  `Wasm/Declarative.lean`, over the i32-subset model; it stays OUTSTANDING
-  until the release path is migrated onto `Wasm.Core`.
-
-  So what this file delivers is the ALGORITHM, executable and checked on
-  concrete modules, plus the exact statement of what stands between it and the
-  equivalence the repository wants.  The `example`s at the end are
-  kernel-checked evaluations, not tests: they pin down what the algorithm
-  accepts and rejects, including the stack-polymorphic cases the previous
-  i32-only validator could not express.
+  There is no hypothesis-free `Wasm.Core.validate_iff_declarative`.  The
+  similarly named declaration in `Wasm/Declarative.lean` is over the
+  non-release subset model and remains outstanding.  The examples at the end
+  are kernel-checked evaluations of this validator, not completeness evidence.
 -/
 import WasmGemmGnaf.Wasm.Core.ValidateInstr
-import WasmGemmGnaf.Wasm.Core.Validation.Modules
+import WasmGemmGnaf.Wasm.Core.ValidateTypes
+import WasmGemmGnaf.Wasm.Core.Validation.ModulesCombinedAmended
 
 set_option autoImplicit false
 
 namespace WasmGemmGnaf.Wasm.Core
 namespace Validate
 
-/-! ## The module fragment
+/-! ## The legacy completeness fragment
 
-The instruction fragment of `Core/ValidateInstr.lean` fixes which instructions
-the algorithm decides; these are the module-level consequences.  Tables and
-element segments are outside it, because both carry an initialiser of REFERENCE
-type and every reference instruction needs `Heaptype_sub`.
+`Module.frag` and its component predicates record the syntactic fragment for
+which the existing reverse-direction lemmas were proved.  They are retained as
+explicit hypotheses of `validate_complete` and
+`validate_iff_declarative_fragment`.  They are not called by `validate`
+and do not characterize its accepted modules: failure of a `frag` predicate
+does not imply validator rejection. -/
 
-TAGS AND IMPORTS ARE INSIDE IT.  Neither carries an expression: a tag is a
-`typeuse`, an import is an `externtype`, and the only judgments they reach are
-`Typeuse_ok`, `Expand_use`, `Valtype_ok`, `Limits_ok` and `Reftype_ok` --- all
-of them decidable without any subtyping.  What they DO carry into the module is
-context: an imported global is a `C.GLOBALS` entry the function bodies may read
-and an imported function is a `C.FUNCS` entry they may call, so the residual
-restriction on them is exactly `Context.frag`'s, and it is stated per entry
-rather than by excluding the section.
-
-The residual guard is therefore a per-entry admissibility test on the tag and
-import sections, and `isEmpty` only on the two sections whose initialisers are
-reference-typed. -/
-
-/-- A type section entry of the fragment: one final, supertype-free function
-type over `numtype`s and `vectype`s. -/
+/-- A type section entry of the fragment: one supertype-free function type over
+`numtype`s and `vectype`s.  FINAL OR NOT: `Subtype_ok` reads the `FINAL?` flag
+nowhere --- its premises are the supertype list, `Comptype_ok` and one
+`Comptype_sub` per declared supertype --- and `$rollrt` / `$unrollrt` /
+`$subst_all_deftype` carry the flag through untouched, so a NON-final function
+type is decided by exactly the same argument as a final one.  What is still
+excluded is a DECLARED SUPERTYPE, because `Subtype_ok` then has a `Comptype_sub`
+premise, hence `Heaptype_sub`. -/
 def TypeDef.frag (td : TypeDef) : Bool :=
   match td.rectype with
-  | .recr (.cons (.sub (some .final) .nil (.func dom cod)) .nil) =>
+  | .recr (.cons (.sub _ .nil (.func dom cod)) .nil) =>
       nvs (ValTypes.toList dom) && nvs (ValTypes.toList cod)
   | _ => false
 
@@ -175,7 +146,8 @@ def ExternType.frag : ExternType → Bool
 /-- An import of the fragment. -/
 def Import.frag (i : Import) : Bool := ExternType.frag i.externtype
 
-/-- The modules the algorithm decides. -/
+/-- The legacy syntactic fragment used as a sufficient hypothesis by the
+current completeness proof.  The validator itself does not compute it. -/
 def Module.frag (m : Module) : Bool :=
   m.imports.all Import.frag && m.tags.all Tag.frag &&
   m.tables.isEmpty && m.elems.isEmpty &&
@@ -199,6 +171,20 @@ def rollTypes : List DefType → List TypeDef → List DefType
   | acc, [] => acc
   | acc, td :: tds => rollTypes (acc ++ rollDt (TypeIdx.ofNat acc.length) td.rectype) tds
 
+/-- The legacy accumulator presentation and the proof-oriented staged fold in
+`ValidateTypes` compute the same type sequence. -/
+theorem rollTypes_eq_append_checkedTypes (C : Context) (tds : List TypeDef) :
+    rollTypes C.types tds = C.types ++ checkedTypes C tds := by
+  induction tds generalizing C with
+  | nil => simp [rollTypes, checkedTypes]
+  | cons td tds ih =>
+      let dts := rollDt (TypeIdx.ofNat C.types.length) td.rectype
+      rw [rollTypes]
+      have hC : (Context.append C { types := dts }).types = C.types ++ dts := rfl
+      rw [← hC, ih]
+      rw [checkedTypes]
+      exact List.append_assoc _ _ _
+
 /-! ## Constant expressions
 
 `Expr_ok_const: C |- expr : t CONST` is `Expr_ok` and `Expr_const` together, so
@@ -208,6 +194,16 @@ the check is the algorithm's plus the syntactic `Instr_const` test. -/
 def Instr.isConst (C : Context) : Instr → Bool
   | .const nt c => Num_.wf nt c
   | .vconst _ _ => true
+  | .refNull _ => true
+  | .refI31 => true
+  | .refFunc _ => true
+  | .structNew _ => true
+  | .structNewDefault _ => true
+  | .arrayNew _ => true
+  | .arrayNewDefault _ => true
+  | .arrayNewFixed _ _ => true
+  | .anyConvertExtern => true
+  | .externConvertAny => true
   | .globalGet x =>
       match C.globals[x.val]? with
       | some ⟨none, _⟩ => true
@@ -224,6 +220,23 @@ def Instr.isConst (C : Context) : Instr → Bool
 /-- `Expr_ok_const: C |- expr : t CONST`, decided. -/
 def checkConstExpr (C : Context) (e : Expr) (t : ValType) : Bool :=
   checkExpr C e [t] && (InstrSeq.toList e).all (Instr.isConst C)
+
+/-- Reference-valued singleton constant expressions whose source type is
+well-formed without consulting a module type certificate.  This is folded into
+the table/element checks while the general reference stack dispatcher is being
+completed. -/
+def checkRefConstExprA (C : Context) (e : Expr) (t : ValType) : Bool :=
+  checkValtypeOkA C t &&
+  match e with
+  | .cons (.refNull ht) .nil =>
+      checkHeaptypeOkA C ht &&
+        subOfA C (.ref (.ref (some .null) ht)) t
+  | _ => false
+
+/-- Constant-expression validation including the reference singleton cases
+already supported by the combined amended type hierarchy. -/
+def checkConstExprA (C : Context) (e : Expr) (t : ValType) : Bool :=
+  (ValType.nv t && checkConstExpr C e t) || checkRefConstExprA C e t
 
 /-! ## The remaining module-level judgments -/
 
@@ -345,6 +358,29 @@ def checkStart (C : Context) (s : Start) : Bool :=
       | _ => false
   | none => false
 
+/-- `Table_okA`: the table type and its reference-typed constant initializer. -/
+def checkTable (C : Context) (t : Table) : Bool :=
+  checkLimits t.tabletype.lim (2 ^ 32 - 1) &&
+  checkRefType C t.tabletype.elem &&
+  checkConstExprA C t.init (.ref t.tabletype.elem)
+
+/-- `Elemmode_okA`, including the active segment's element-type inclusion. -/
+def checkElemMode (C : Context) (rt : RefType) : ElemMode → Bool
+  | .passive => true
+  | .declare => true
+  | .active x e =>
+      match C.tables[x.val]? with
+      | some tt =>
+          decReftypeSubN C C.subtypeFuel rt tt.elem &&
+          checkConstExpr C e tt.addr.toValType
+      | none => false
+
+/-- `Elem_okA`: element type validity, constant initializers, and mode. -/
+def checkElem (C : Context) (e : Elem) : Bool :=
+  checkRefType C e.reftype &&
+  e.init.all (fun ex => checkConstExprA C ex (.ref e.reftype)) &&
+  checkElemMode C e.reftype e.mode
+
 /-! ## The module validator -/
 
 /-- `{TYPES dt'*}`: the context `Module_ok` types the import section in --- the
@@ -379,7 +415,7 @@ def Module.contexts (m : Module) : Option (Context × Context) :=
             { types := rollTypes [] m.types,
               globals := ExternType.globals (Module.importTypes m),
               funcs := dtsI ++ fdts,
-              refs := funcidxNonfuncs m.globals m.mems m.tables m.elems }
+              refs := funcidxNonfuncs' m.globals m.mems m.tables m.elems }
           match checkGlobals C' m.globals with
           | none => none
           | some gts =>
@@ -390,24 +426,29 @@ def Module.contexts (m : Module) : Option (Context × Context) :=
                     globals := gts,
                     mems := ExternType.mems (Module.importTypes m) ++
                             m.mems.map Mem.memtype,
-                    tables := ExternType.tables (Module.importTypes m),
-                    datas := m.datas.map (fun _ => DataType.ok) })
+                    tables := ExternType.tables (Module.importTypes m) ++
+                              m.tables.map Table.tabletype,
+                    datas := m.datas.map (fun _ => DataType.ok),
+                    elems := m.elems.map Elem.reftype })
 
-/-- **The validator.**  `validate m = true` means the algorithm of
-`appendix/algorithm.rst` accepts `m` under the module-level checks of
-`2.4-validation.modules.spectec`.  Everything outside the decided fragment is
-rejected, so the function is total and computable with no fuel and no
-assumption. -/
+/-- **The validator.**  This total computable checker uses the amended type
+hierarchy and performs the module-level checks, including tables and element
+segments.  It does not consult `Module.frag`.  Its unconditional
+soundness is `Wasm.Core.validate_sound`; the currently proved reverse
+direction remains explicitly fragment-scoped. -/
 def validate (m : Module) : Bool :=
-  Module.frag m &&
+  Module.wf m &&
+  checkTypesOkA Context.empty m.types &&
   (match Module.contexts m with
    | none => false
    | some (C', C) =>
        m.imports.all (fun i => checkExternType (Module.typeContext m) i.externtype) &&
        m.tags.all (checkTag C') &&
        m.mems.all (fun mem => checkLimits mem.memtype.lim (2 ^ 16)) &&
+       m.tables.all (checkTable C') &&
        m.funcs.all (checkFunc C) &&
        m.datas.all (checkData C) &&
+       m.elems.all (checkElem C) &&
        (match m.start with
         | none => true
         | some s => checkStart C s) &&
@@ -444,13 +485,13 @@ def fn (i : Nat) (locals : List ValType) (body : List Instr) : Func :=
   { typeidx := TypeIdx.ofNat i, locals := locals.map (fun t => { valtype := t }),
     body := InstrSeq.ofList body }
 
-/-! ## The gap, at the module level
+/-! ## The pinned-rule gap, at the module level
 
 `validate` accepts a module that `Module_ok` cannot type.  Both halves are
 kernel-checked: the acceptance by evaluation, the rejection by the negative
-result of `Core/ValidateInstr.lean`.  This pair is the precise obstruction to
-`validate_iff_declarative`, and it is a statement about the PINNED RULES, not
-about the algorithm. -/
+result of `Core/ValidateInstr.lean`.  This pair rules out soundness against
+the unamended pinned `Module_ok`.  It does not obstruct soundness against
+`Module_okA`, which is proved downstream. -/
 
 /-- `(func (result i32) i32.const 0  i32.const 0  i32.add)`. -/
 def gapModule : Module :=
@@ -561,6 +602,84 @@ example :
         (.func .nil (ValTypes.ofList [ValType.v128]))) .nil) }]
       [fn 0 [] [.vconst .v128 default,
                .vunop { lane := .num .i32, dim := .d4 } (.int .popcnt)]]) = false := by
+  decide
+
+/-! ### Branch tables, tail calls and non-final type definitions
+
+The three families the decided fragment gained.  Every module below is rejected
+outright by the previous `Instr.frag` / `TypeDef.frag`. -/
+
+/-- BR_TABLE.  `(func (result i32) (block (result i32) i32.const 0  i32.const 0
+br_table 0 0))`: the table's operand is the block's result type, the index is
+consumed, and the rest of the block is unreachable. -/
+example :
+    validate (modOf [{ rectype := .recr (.cons (.sub (some .final) .nil
+        (.func .nil (ValTypes.ofList [ValType.i32]))) .nil) }]
+      [fn 0 [] [.block (.result (some ValType.i32))
+                  (InstrSeq.ofList [.const .i32 default, .const .i32 default,
+                                    .brTable [default] default])]]) = true := by
+  decide
+
+/-- ... and the operand type is the PRINCIPAL one, not any single label's.  In
+UNREACHABLE code the frame supplies `BOT`, so a `br_table` may name two labels
+whose types DISAGREE: `Instr_ok/br_table` derives it with `t* = BOT`, which is
+below both.  A checker that compared the labels with each other rather than with
+the frame would reject this module, and Core 3.0 accepts it. -/
+example :
+    validate (modOf [ty0]
+      [fn 0 [] [.block (.result (some ValType.i32))
+                  (InstrSeq.ofList
+                    [.block (.result (some (ValType.num .f32)))
+                      (InstrSeq.ofList [.unreachable,
+                                        .brTable [default] ⟨1, by decide⟩]),
+                     .drop, .const .i32 default]),
+                .drop]]) = true := by
+  decide
+
+/-- ... and the polymorphism is not unsound: in REACHABLE code the two labels
+must both accept the operands the frame really has, and an ARITY disagreement is
+rejected outright --- `Resulttype_sub` fixes `|t*|`, so no `t*` is below both a
+one-operand and a zero-operand label. -/
+example :
+    validate (modOf [{ rectype := .recr (.cons (.sub (some .final) .nil
+        (.func .nil (ValTypes.ofList [ValType.i32]))) .nil) }]
+      [fn 0 [] [.block (.result none)
+                  (InstrSeq.ofList [.const .i32 default, .const .i32 default,
+                                    .brTable [default] ⟨1, by decide⟩]),
+                .const .i32 default]]) = false := by
+  decide
+
+/-- RETURN_CALL.  A function tail-calls itself: `Instr_ok/return_call` requires
+the callee's results to be below `C.RETURN`, and here they are equal. -/
+example :
+    validate (modOf [ty2i32]
+      [fn 0 [] [.localGet default, .localGet ⟨1, by decide⟩, .returnCall default]]) = true := by
+  decide
+
+/-- ... and a tail call whose callee returns nothing, from a function that
+returns `i32`, is rejected: `Resulttype_sub: C |- eps <: (I32)` fails on
+length. -/
+example :
+    validate (modOf [ty2i32, ty0]
+      [fn 0 [] [.returnCall ⟨1, by decide⟩], fn 1 [] []]) = false := by
+  decide
+
+/-- A NON-FINAL type definition is inside the fragment.  `Subtype_ok` reads the
+`FINAL?` flag nowhere, and `$rollrt` / `$unrollrt` / `$subst_all_deftype` carry
+it through untouched, so `(type (sub (func)))` is decided by exactly the
+argument that decides `(type (sub final (func)))`. -/
+example :
+    validate (modOf [{ rectype := .recr (.cons (.sub none .nil
+        (.func .nil .nil)) .nil) }] [fn 0 [] []]) = true := by
+  decide
+
+/-- What the type section still excludes is a DECLARED SUPERTYPE, because
+`Subtype_ok` then carries a `Comptype_sub` premise, hence `Heaptype_sub`. -/
+example :
+    Module.frag (modOf [{ rectype := .recr (.cons (.sub none .nil
+        (.func .nil .nil)) .nil) },
+      { rectype := .recr (.cons (.sub (some .final)
+          (TypeUses.ofList [TypeUse.idx default]) (.func .nil .nil)) .nil) }] []) = false := by
   decide
 
 /-! ### Imports and tags
