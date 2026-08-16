@@ -23,9 +23,8 @@ const CLAUSE: &str = "5";
 /// `sha256sum -c --quiet` reports them, so a red gate reads the same as before.
 pub fn recompute(dir: &str) -> Result<std::result::Result<String, String>> {
     let sums = Path::new(dir).join("SHA256SUMS");
-    let text = std::fs::read_to_string(&sums).map_err(|e| {
-        SpecError::io(CLAUSE, "cannot read the vendored digest manifest", &sums, e)
-    })?;
+    let text = std::fs::read_to_string(&sums)
+        .map_err(|e| SpecError::io(CLAUSE, "cannot read the vendored digest manifest", &sums, e))?;
 
     let mut failures = Vec::new();
     let mut checked = 0usize;
@@ -60,7 +59,9 @@ pub fn recompute(dir: &str) -> Result<std::result::Result<String, String>> {
         ));
     }
     if failures.is_empty() {
-        Ok(Ok(format!("{checked} vendored digests recomputed from content")))
+        Ok(Ok(format!(
+            "{checked} vendored digests recomputed from content"
+        )))
     } else {
         Ok(Err(failures.join("\n")))
     }
@@ -166,15 +167,27 @@ impl Binding {
                 self.files_listed,
                 self.content_failures.len()
             ),
-            format!("  manifest digest recomputed: {}", self.recomputed_manifest_digest),
-            format!("  Lean core3VendorManifestSha256: {}", self.lean_manifest_digest),
+            format!(
+                "  manifest digest recomputed: {}",
+                self.recomputed_manifest_digest
+            ),
+            format!(
+                "  Lean core3VendorManifestSha256: {}",
+                self.lean_manifest_digest
+            ),
             format!(
                 "  pinned blob ids recomputed: {} files ({} not the pinned blob)",
                 self.blobs_listed,
                 self.blob_failures.len()
             ),
-            format!("  blob manifest digest recomputed: {}", self.recomputed_blob_digest),
-            format!("  Lean core3VendorBlobManifestSha256: {}", self.lean_blob_digest),
+            format!(
+                "  blob manifest digest recomputed: {}",
+                self.recomputed_blob_digest
+            ),
+            format!(
+                "  Lean core3VendorBlobManifestSha256: {}",
+                self.lean_blob_digest
+            ),
             format!(
                 "  Lean core3VendoredTree.fileCount: {} (manifest lists {})",
                 self.lean_file_count, self.files_listed
@@ -225,7 +238,12 @@ impl Binding {
 pub fn binding(vendor_dir: &Path, lean_root: &Path) -> Result<Binding> {
     let sums_path = vendor_dir.join("SHA256SUMS");
     let sums = std::fs::read(&sums_path).map_err(|e| {
-        SpecError::io(CLAUSE, "cannot read the vendored digest manifest", &sums_path, e)
+        SpecError::io(
+            CLAUSE,
+            "cannot read the vendored digest manifest",
+            &sums_path,
+            e,
+        )
     })?;
     let sums_text = String::from_utf8_lossy(&sums).into_owned();
 
@@ -276,8 +294,10 @@ pub fn binding(vendor_dir: &Path, lean_root: &Path) -> Result<Binding> {
     collect_relative(vendor_dir, vendor_dir, &mut present)?;
     present.retain(|p| p != "SHA256SUMS" && p != "BLOBS");
     present.sort();
-    let mut unlisted: Vec<&String> =
-        present.iter().filter(|p| !listed_names.iter().any(|l| l == *p)).collect();
+    let mut unlisted: Vec<&String> = present
+        .iter()
+        .filter(|p| !listed_names.iter().any(|l| l == *p))
+        .collect();
     unlisted.sort();
     for path in &unlisted {
         findings.push(format!(
@@ -285,16 +305,23 @@ pub fn binding(vendor_dir: &Path, lean_root: &Path) -> Result<Binding> {
              without changing any recorded digest"
         ));
     }
-    let mut vanished: Vec<&String> =
-        listed_names.iter().filter(|l| !present.iter().any(|p| p == *l)).collect();
+    let mut vanished: Vec<&String> = listed_names
+        .iter()
+        .filter(|l| !present.iter().any(|p| p == *l))
+        .collect();
     vanished.sort();
     for path in &vanished {
-        findings.push(format!("digest manifest lists a file the tree does not have: {path}"));
+        findings.push(format!(
+            "digest manifest lists a file the tree does not have: {path}"
+        ));
     }
     if files_listed == 0 {
         return Err(SpecError::new(
             CLAUSE,
-            format!("{}: lists no vendored file to recompute", sums_path.display()),
+            format!(
+                "{}: lists no vendored file to recompute",
+                sums_path.display()
+            ),
         ));
     }
     for failure in &content_failures {
@@ -306,8 +333,8 @@ pub fn binding(vendor_dir: &Path, lean_root: &Path) -> Result<Binding> {
 
     let revision_path = lean_root.join(REVISION_MODULE);
     let revision = crate::repo::read_lossy(CLAUSE, &revision_path)?;
-    let lean_manifest_digest = string_literal(&revision, "core3VendorManifestSha256")
-        .ok_or_else(|| {
+    let lean_manifest_digest =
+        string_literal(&revision, "core3VendorManifestSha256").ok_or_else(|| {
             SpecError::new(
                 CLAUSE,
                 format!(
@@ -320,13 +347,19 @@ pub fn binding(vendor_dir: &Path, lean_root: &Path) -> Result<Binding> {
     let lean_commit = string_literal(&revision, "core3RevisionCommit").ok_or_else(|| {
         SpecError::new(
             CLAUSE,
-            format!("{}: no `def core3RevisionCommit` literal", revision_path.display()),
+            format!(
+                "{}: no `def core3RevisionCommit` literal",
+                revision_path.display()
+            ),
         )
     })?;
     let lean_file_count = field_nat(&revision, "fileCount").ok_or_else(|| {
         SpecError::new(
             CLAUSE,
-            format!("{}: `core3VendoredTree` records no `fileCount`", revision_path.display()),
+            format!(
+                "{}: `core3VendoredTree` records no `fileCount`",
+                revision_path.display()
+            ),
         )
     })?;
 
@@ -356,7 +389,12 @@ pub fn binding(vendor_dir: &Path, lean_root: &Path) -> Result<Binding> {
     // file under. Recomputing it needs no network and no `git`.
     let blobs_path = vendor_dir.join("BLOBS");
     let blobs = std::fs::read(&blobs_path).map_err(|e| {
-        SpecError::io(CLAUSE, "cannot read the vendored blob manifest", &blobs_path, e)
+        SpecError::io(
+            CLAUSE,
+            "cannot read the vendored blob manifest",
+            &blobs_path,
+            e,
+        )
     })?;
     let blobs_text = String::from_utf8_lossy(&blobs).into_owned();
     let mut blob_failures = Vec::new();
@@ -386,7 +424,10 @@ pub fn binding(vendor_dir: &Path, lean_root: &Path) -> Result<Binding> {
     if blobs_listed == 0 {
         return Err(SpecError::new(
             CLAUSE,
-            format!("{}: lists no vendored blob to recompute", blobs_path.display()),
+            format!(
+                "{}: lists no vendored blob to recompute",
+                blobs_path.display()
+            ),
         ));
     }
     for failure in &blob_failures {
@@ -394,8 +435,8 @@ pub fn binding(vendor_dir: &Path, lean_root: &Path) -> Result<Binding> {
     }
 
     let recomputed_blob_digest = sha256::hex(&blobs);
-    let lean_blob_digest = string_literal(&revision, "core3VendorBlobManifestSha256")
-        .ok_or_else(|| {
+    let lean_blob_digest =
+        string_literal(&revision, "core3VendorBlobManifestSha256").ok_or_else(|| {
             SpecError::new(
                 CLAUSE,
                 format!(
@@ -483,7 +524,11 @@ pub fn binding(vendor_dir: &Path, lean_root: &Path) -> Result<Binding> {
 pub fn run(list: bool) -> Result<crate::spec::Outcome> {
     let binding = binding(Path::new("vendor/wasm-spec"), Path::new("."))?;
     println!("{}", binding.render(list));
-    Ok(if binding.is_ok() { crate::spec::Outcome::Pass } else { crate::spec::Outcome::Fail })
+    Ok(if binding.is_ok() {
+        crate::spec::Outcome::Pass
+    } else {
+        crate::spec::Outcome::Fail
+    })
 }
 
 /// The string literal of `def <name> : String :=\n  "..."`.
@@ -544,12 +589,18 @@ fn vendored_labels(dir: &Path) -> Result<(Vec<String>, usize)> {
     collect_files(dir, &mut files)?;
     files.sort();
     for path in files {
-        let Ok(bytes) = std::fs::read(&path) else { continue };
+        let Ok(bytes) = std::fs::read(&path) else {
+            continue;
+        };
         let text = String::from_utf8_lossy(&bytes);
         macros += text.matches("${rule:").count();
         for line in text.lines() {
-            let Some(rest) = line.strip_prefix(".. _") else { continue };
-            let Some(label) = rest.strip_suffix(':') else { continue };
+            let Some(rest) = line.strip_prefix(".. _") else {
+                continue;
+            };
+            let Some(label) = rest.strip_suffix(':') else {
+                continue;
+            };
             if !label.is_empty() && !label.contains(' ') {
                 labels.push(label.to_string());
             }
@@ -616,8 +667,14 @@ mod tests {
     #[test]
     fn parses_both_coreutils_forms() {
         let hex = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
-        assert_eq!(split_entry(&format!("{hex}  ./LICENSE")), Some((hex, "./LICENSE")));
-        assert_eq!(split_entry(&format!("{hex} *./LICENSE")), Some((hex, "./LICENSE")));
+        assert_eq!(
+            split_entry(&format!("{hex}  ./LICENSE")),
+            Some((hex, "./LICENSE"))
+        );
+        assert_eq!(
+            split_entry(&format!("{hex} *./LICENSE")),
+            Some((hex, "./LICENSE"))
+        );
         assert_eq!(split_entry("short  ./LICENSE"), None);
         assert_eq!(split_entry(&format!("{hex}  ")), None);
     }
@@ -630,8 +687,14 @@ mod tests {
                    \x20 { root := \"vendor/wasm-spec/\"\n\
                    \x20   fileCount := 40\n\
                    \x20   manifestSha256 := core3VendorManifestSha256 }\n";
-        assert_eq!(string_literal(src, "core3VendorManifestSha256").as_deref(), Some("a343"));
-        assert_eq!(string_literal(src, "core3RevisionCommit").as_deref(), Some("9d36"));
+        assert_eq!(
+            string_literal(src, "core3VendorManifestSha256").as_deref(),
+            Some("a343")
+        );
+        assert_eq!(
+            string_literal(src, "core3RevisionCommit").as_deref(),
+            Some("9d36")
+        );
         assert_eq!(field_nat(src, "fileCount"), Some(40));
         assert_eq!(string_literal(src, "absent"), None);
     }
@@ -681,12 +744,19 @@ mod tests {
     /// Build a minimal vendored tree and Lean root that the binding accepts,
     /// with `anchor` cited by the conformance map and `defined` defined by the
     /// vendored source.
-    fn fixture(scratch: &Scratch, anchor: &str, defined: &str) -> (std::path::PathBuf, std::path::PathBuf) {
+    fn fixture(
+        scratch: &Scratch,
+        anchor: &str,
+        defined: &str,
+    ) -> (std::path::PathBuf, std::path::PathBuf) {
         let vendor_dir = scratch.0.join("vendor");
         let core = vendor_dir.join("document").join("core");
         std::fs::create_dir_all(&core).expect("core");
-        std::fs::write(core.join("instructions.rst"), format!(".. _{defined}:\n\ntext\n"))
-            .expect("rst");
+        std::fs::write(
+            core.join("instructions.rst"),
+            format!(".. _{defined}:\n\ntext\n"),
+        )
+        .expect("rst");
         std::fs::write(vendor_dir.join("PINNED-COMMIT"), "deadbeef\n").expect("commit");
         std::fs::write(vendor_dir.join("LICENSE"), "licence\n").expect("licence");
 
@@ -761,7 +831,10 @@ mod tests {
         assert!(!report.is_ok());
         assert_eq!(report.anchors_found, 0);
         assert_eq!(report.anchors_missing, vec!["valid-invented".to_string()]);
-        assert!(report.findings.iter().any(|f| f.contains("does not define as a label")));
+        assert!(report
+            .findings
+            .iter()
+            .any(|f| f.contains("does not define as a label")));
     }
 
     #[test]
@@ -775,8 +848,14 @@ mod tests {
         std::fs::write(&sums, format!("{text}\n")).expect("append");
 
         let report = binding(&vendor_dir, &lean_root).expect("binds");
-        assert!(report.content_failures.is_empty(), "every listed file still checks out");
-        assert!(report.findings.iter().any(|f| f.contains("have drifted apart")));
+        assert!(
+            report.content_failures.is_empty(),
+            "every listed file still checks out"
+        );
+        assert!(report
+            .findings
+            .iter()
+            .any(|f| f.contains("have drifted apart")));
     }
 
     #[test]
@@ -785,6 +864,9 @@ mod tests {
         let (vendor_dir, lean_root) = fixture(&scratch, "valid-nop", "valid-nop");
         std::fs::write(vendor_dir.join("PINNED-COMMIT"), "0000000\n").expect("commit");
         let report = binding(&vendor_dir, &lean_root).expect("binds");
-        assert!(report.findings.iter().any(|f| f.contains("core3RevisionCommit")));
+        assert!(report
+            .findings
+            .iter()
+            .any(|f| f.contains("core3RevisionCommit")));
     }
 }

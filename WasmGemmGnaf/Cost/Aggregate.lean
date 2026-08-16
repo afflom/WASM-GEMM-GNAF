@@ -4,16 +4,14 @@
   ("The release workload is the canonical finite ordering of every raw
   invocation under the released profile").
 
-  The WebAssembly semantics layer does not exist yet, so the three
-  profile-dependent static quantities (`Wasm.decodeCost`,
-  `Wasm.validationCost`, `Wasm.instantiatedStaticBytes`) and the decode
-  equation are taken as explicit parameters of `ExactAggregateCost`, to be
-  instantiated by that layer.  Nothing about them is assumed here.
+  The predicate below is stated directly over the public amended-Core carrier
+  and its executable decode and static-cost functions.
 
   Every declaration in this file is proved. Nothing is assumed.
 -/
 import WasmGemmGnaf.Cost.Trace
 import WasmGemmGnaf.Foundation.Finite
+import WasmGemmGnaf.Wasm.Core.CostAccounting
 
 set_option autoImplicit false
 
@@ -160,6 +158,39 @@ theorem le_maxOverCosts {v : DynamicVector} : ∀ {l : List DynamicVector}, v �
       · exact Nat.le_max_left _ _
       · exact Nat.le_trans (ih hmem dc) (Nat.le_max_right _ _)
 
+/-- A componentwise bound on every list member also bounds the finite
+componentwise maximum. -/
+theorem maxOverCosts_le {l : List DynamicVector} {bound : DynamicVector}
+    (h : ∀ v ∈ l, DynamicVector.ComponentwiseLE v bound) :
+    DynamicVector.ComponentwiseLE (maxOverCosts l) bound := by
+  induction l with
+  | nil => exact DynamicVector.zero_componentwiseLE bound
+  | cons v rest ih =>
+      intro dc
+      rw [maxOverCosts_cons, value_componentwiseMax]
+      exact Nat.max_le.mpr ⟨(h v (by simp)) dc,
+        ih (fun w hw => h w (by simp [hw])) dc⟩
+
+/-- If initialization itself and every initialized branch are bounded, then
+initialization followed by the componentwise worst branch is bounded. -/
+theorem sequentialCompose_maxOverCosts_le {initial bound : DynamicVector}
+    {l : List DynamicVector}
+    (hinitial : DynamicVector.ComponentwiseLE initial bound)
+    (h : ∀ v ∈ l,
+      DynamicVector.ComponentwiseLE (sequentialCompose initial v) bound) :
+    DynamicVector.ComponentwiseLE
+      (sequentialCompose initial (maxOverCosts l)) bound := by
+  induction l with
+  | nil => simpa [maxOverCosts_nil, sequentialCompose_zero_right] using hinitial
+  | cons v rest ih =>
+      intro dc
+      have hv := (h v (by simp)) dc
+      have hr := ih (fun w hw => h w (by simp [hw])) dc
+      cases dc <;>
+        simp only [maxOverCosts_cons, ComponentwiseMax,
+          DynamicCoordinate.value, sequentialCompose] at hv hr ⊢ <;>
+        omega
+
 /--
   SPEC 9.2 / 10.1: the worst-case cost of one raw invocation.  Nondeterministic
   execution cost is the componentwise maximum over all permitted terminating
@@ -255,79 +286,78 @@ theorem le_fullDomainMax {Raw : Type} [Foundation.Fintype Raw]
 /--
   SPEC 9.1, `Cost.ExactAggregateCost`.
 
-  `decodes` stands for the decode equation `Wasm.Subset.decode bytes = .ok module`,
-  and `decodeSteps`, `validationSteps`, `staticDataBytes` stand for
-  `Wasm.decodeCost P.costTableBody bytes`,
-  `Wasm.validationCost P.costTableBody module` and
-  `Wasm.instantiatedStaticBytes P module` respectively.  They are parameters
-  because the WebAssembly semantics layer is not yet mechanized; the predicate
-  is otherwise transcribed exactly.
+  Every static coordinate is tied to the same public profile, byte sequence,
+  and amended-Core module.  The dynamic sum and maximum range over the complete
+  finite raw-input carrier.
 -/
 def ExactAggregateCost {Raw : Type} [Foundation.Fintype Raw]
+    (P : Wasm.Profile)
     (bytes : ByteArray)
-    (decodes : Prop)
-    (decodeSteps validationSteps staticDataBytes : Nat)
+    (module : Wasm.Module)
     (repetitions : Nat)
     (dynamicFor : Raw → DynamicVector)
     (cost : CompleteSystemCost) : Prop :=
   1 ≤ repetitions ∧
-  decodes ∧
+  Wasm.decode bytes = .ok module ∧
   cost.static.moduleBytes = bytes.size ∧
-  cost.static.decodeSteps = decodeSteps ∧
-  cost.static.validationSteps = validationSteps ∧
-  cost.static.staticDataBytes = staticDataBytes ∧
-  cost.dynamicSum = scale repetitions (fullDomainSum dynamicFor) ∧
-  cost.dynamicMax = fullDomainMax dynamicFor
+  cost.static.decodeSteps = Wasm.decodeCost P.costTableBody bytes ∧
+  cost.static.validationSteps = Wasm.validationCost P.costTableBody module ∧
+  cost.static.staticDataBytes = Wasm.instantiatedStaticBytes P module ∧
+  cost.dynamicSum =
+    scale repetitions
+      (Foundation.Finite.fold ComponentwiseAdd DynamicVector.zero dynamicFor) ∧
+  cost.dynamicMax =
+    Foundation.Finite.fold ComponentwiseMax DynamicVector.zero dynamicFor
 
 section Exact
 
 variable {Raw : Type} [Foundation.Fintype Raw]
-  {bytes : ByteArray} {decodes : Prop}
-  {decodeSteps validationSteps staticDataBytes repetitions : Nat}
+  {P : Wasm.Profile} {bytes : ByteArray} {module : Wasm.Module}
+  {repetitions : Nat}
   {dynamicFor : Raw → DynamicVector} {cost : CompleteSystemCost}
 
 /-- SPEC 9.3: `evaluation.cost.static.moduleBytes = bytes.size`. -/
 theorem module_bytes_exact
-    (h : ExactAggregateCost bytes decodes decodeSteps validationSteps
-      staticDataBytes repetitions dynamicFor cost) :
+    (h : ExactAggregateCost P bytes module repetitions dynamicFor cost) :
     cost.static.moduleBytes = bytes.size := h.2.2.1
 
 theorem repetitions_positive
-    (h : ExactAggregateCost bytes decodes decodeSteps validationSteps
-      staticDataBytes repetitions dynamicFor cost) :
+    (h : ExactAggregateCost P bytes module repetitions dynamicFor cost) :
     1 ≤ repetitions := h.1
 
+/-- The aggregate's bytes decode to the same public amended-Core module used by
+all other static coordinates. -/
+theorem decode_exact
+    (h : ExactAggregateCost P bytes module repetitions dynamicFor cost) :
+    Wasm.decode bytes = .ok module := h.2.1
+
 theorem decode_steps_exact
-    (h : ExactAggregateCost bytes decodes decodeSteps validationSteps
-      staticDataBytes repetitions dynamicFor cost) :
-    cost.static.decodeSteps = decodeSteps := h.2.2.2.1
+    (h : ExactAggregateCost P bytes module repetitions dynamicFor cost) :
+    cost.static.decodeSteps = Wasm.decodeCost P.costTableBody bytes := h.2.2.2.1
 
 theorem validation_steps_exact
-    (h : ExactAggregateCost bytes decodes decodeSteps validationSteps
-      staticDataBytes repetitions dynamicFor cost) :
-    cost.static.validationSteps = validationSteps := h.2.2.2.2.1
+    (h : ExactAggregateCost P bytes module repetitions dynamicFor cost) :
+    cost.static.validationSteps = Wasm.validationCost P.costTableBody module :=
+  h.2.2.2.2.1
 
 theorem static_data_bytes_exact
-    (h : ExactAggregateCost bytes decodes decodeSteps validationSteps
-      staticDataBytes repetitions dynamicFor cost) :
-    cost.static.staticDataBytes = staticDataBytes := h.2.2.2.2.2.1
+    (h : ExactAggregateCost P bytes module repetitions dynamicFor cost) :
+    cost.static.staticDataBytes = Wasm.instantiatedStaticBytes P module :=
+  h.2.2.2.2.2.1
 
 theorem dynamic_sum_exact
-    (h : ExactAggregateCost bytes decodes decodeSteps validationSteps
-      staticDataBytes repetitions dynamicFor cost) :
+    (h : ExactAggregateCost P bytes module repetitions dynamicFor cost) :
     cost.dynamicSum = scale repetitions (fullDomainSum dynamicFor) :=
   h.2.2.2.2.2.2.1
 
 theorem dynamic_max_exact
-    (h : ExactAggregateCost bytes decodes decodeSteps validationSteps
-      staticDataBytes repetitions dynamicFor cost) :
+    (h : ExactAggregateCost P bytes module repetitions dynamicFor cost) :
     cost.dynamicMax = fullDomainMax dynamicFor := h.2.2.2.2.2.2.2
 
 /-- Full-domain accounting: every raw invocation's charge appears in the
 aggregated dynamic sum. -/
 theorem raw_charge_le_dynamicSum
-    (h : ExactAggregateCost bytes decodes decodeSteps validationSteps
-      staticDataBytes repetitions dynamicFor cost) (a : Raw) :
+    (h : ExactAggregateCost P bytes module repetitions dynamicFor cost) (a : Raw) :
     DynamicVector.ComponentwiseLE (dynamicFor a) cost.dynamicSum := by
   rw [dynamic_sum_exact h]
   exact DynamicVector.componentwiseLE_trans (le_fullDomainSum dynamicFor a)
@@ -336,8 +366,7 @@ theorem raw_charge_le_dynamicSum
 /-- Full-domain accounting: every raw invocation's charge appears in the
 aggregated dynamic maximum. -/
 theorem raw_charge_le_dynamicMax
-    (h : ExactAggregateCost bytes decodes decodeSteps validationSteps
-      staticDataBytes repetitions dynamicFor cost) (a : Raw) :
+    (h : ExactAggregateCost P bytes module repetitions dynamicFor cost) (a : Raw) :
     DynamicVector.ComponentwiseLE (dynamicFor a) cost.dynamicMax := by
   rw [dynamic_max_exact h]
   exact le_fullDomainMax dynamicFor a
@@ -346,10 +375,8 @@ theorem raw_charge_le_dynamicMax
 the same data are equal. -/
 theorem exact_unique
     {cost' : CompleteSystemCost}
-    (h : ExactAggregateCost bytes decodes decodeSteps validationSteps
-      staticDataBytes repetitions dynamicFor cost)
-    (h' : ExactAggregateCost bytes decodes decodeSteps validationSteps
-      staticDataBytes repetitions dynamicFor cost') :
+    (h : ExactAggregateCost P bytes module repetitions dynamicFor cost)
+    (h' : ExactAggregateCost P bytes module repetitions dynamicFor cost') :
     cost = cost' := by
   obtain ⟨s, ds, dm⟩ := cost
   obtain ⟨s', ds', dm'⟩ := cost'

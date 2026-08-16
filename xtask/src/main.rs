@@ -59,13 +59,14 @@ SOURCE CHECKS (read the tree)
                                `Wasm/Adequacy.lean`. --list adds the coverage
                                arithmetic and the SpecTec scope limit.
     amendment                  The canonical Core 3.0 authority-amendment set
-                               (SPEC 7.3; AMD-005 and AMD-007--AMD-013), checked
+                               (SPEC 7.3; AMD-005 and AMD-007--AMD-014), checked
                                against the pinned tree: exact source digests and
                                textual operations, tree/pin identity, deviation and
                                amendment register edges, all named amended Lean
                                declarations, and zero coverage markers in their
                                source modules.
-    core [--list]              How much of the PINNED Core 3.0 front end the Lean
+    core [--list] [--bindings] [--source-only] [--generate]
+                               How much of the PINNED Core 3.0 front end the Lean
                                tree covers (SPEC 7.1). The checklist is EXTRACTED
                                from the vendored SpecTec sources -- every opcode
                                production, typing rule and syntax production --
@@ -73,6 +74,12 @@ SOURCE CHECKS (read the tree)
                                `-- core-rule:` / `-- core-syntax:` marker. A
                                marker naming something the sources do not define
                                is a hard failure. --list names what is missing.
+                               --bindings prints the exact extracted-item to
+                               attached-declaration correspondence for review.
+                               --source-only skips the compiled-name audit and is
+                               diagnostic evidence only; the gate never uses it.
+                               --generate rewrites the mechanically derived Lean
+                               authority map; the release check only compares it.
 
 ENVIRONMENT CHECKS (question the compiled Lean environment)
     claims required [--list] [--check]
@@ -142,8 +149,11 @@ fn dispatch(args: &[String]) -> Result<Outcome> {
             let opts = &rest[1..];
             match sub {
                 "scan" => {
-                    let targets: Vec<String> =
-                        opts.iter().filter(|a| !a.starts_with("--")).cloned().collect();
+                    let targets: Vec<String> = opts
+                        .iter()
+                        .filter(|a| !a.starts_with("--"))
+                        .cloned()
+                        .collect();
                     scan::run(&targets)
                 }
                 "firewall" => firewall::run(),
@@ -154,7 +164,10 @@ fn dispatch(args: &[String]) -> Result<Outcome> {
         }
         "claims" => {
             let Some(sub) = rest.first().map(String::as_str) else {
-                return Err(SpecError::new("15", "`xtask claims` needs a check: required"));
+                return Err(SpecError::new(
+                    "15",
+                    "`xtask claims` needs a check: required",
+                ));
             };
             let opts = &rest[1..];
             match sub {
@@ -168,7 +181,14 @@ fn dispatch(args: &[String]) -> Result<Outcome> {
         "signature" => signature::run(&root),
         "vendor" => vendor::run(has(rest, "--list")),
         "amendment" => amendment::run(),
-        "core" => core::run(&root, has(rest, "--list"), has(rest, "--check")),
+        "core" => core::run(
+            &root,
+            has(rest, "--list"),
+            has(rest, "--check"),
+            has(rest, "--source-only"),
+            has(rest, "--bindings"),
+            has(rest, "--generate"),
+        ),
         "independence" => independence::run(&root),
         "manifest" => manifest::run(has(rest, "--check")),
         "docs" => docs::run(has(rest, "--check")),

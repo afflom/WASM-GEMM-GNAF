@@ -57,8 +57,8 @@ pub fn lean_files(clause: &'static str, dir: &Path) -> Result<Vec<PathBuf>> {
 }
 
 fn walk(clause: &'static str, dir: &Path, found: &mut Vec<PathBuf>) -> Result<()> {
-    let entries = fs::read_dir(dir)
-        .map_err(|e| SpecError::io(clause, "cannot read directory", dir, e))?;
+    let entries =
+        fs::read_dir(dir).map_err(|e| SpecError::io(clause, "cannot read directory", dir, e))?;
 
     let mut files = Vec::new();
     let mut dirs = Vec::new();
@@ -87,8 +87,7 @@ fn walk(clause: &'static str, dir: &Path, found: &mut Vec<PathBuf>) -> Result<()
 /// Read a source file, replacing invalid UTF-8 rather than failing, mirroring
 /// Python's `open(p, errors="replace")`.
 pub fn read_lossy(clause: &'static str, path: &Path) -> Result<String> {
-    let bytes =
-        fs::read(path).map_err(|e| SpecError::io(clause, "cannot read", path, e))?;
+    let bytes = fs::read(path).map_err(|e| SpecError::io(clause, "cannot read", path, e))?;
     Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 

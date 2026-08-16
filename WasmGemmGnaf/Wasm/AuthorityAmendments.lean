@@ -191,8 +191,31 @@ def identitySchema : CanonicalSchema AuthorityAmendmentSetBody :=
     (TypeTag.leaf_size_pos _)
     bytes bytes_prefixFree
 
+/-
+  Keep the identity's *data* independent of the proof stored in
+  `identitySchema`.  The two definitions reduce to the same four fields, but
+  constructing the value through `CanonicalSchema.ofPrefixFree` retains that
+  schema's injectivity proof in the environment dependency of the result.  In
+  particular, the proof of `AuthorityPatchBody.bytes_prefixFree` uses
+  classical reasoning, so routing this Type-valued identity through the schema
+  would make every `Wasm.Profile` -- and therefore every executable raw-input
+  enumerator indexed by a profile -- depend on `Classical.choice`.
+
+  Identity comparison remains structural: `identity_eq_iff` below is proved
+  from the same frozen schema.  This constructor changes no encoded byte and
+  carries no proof field.
+-/
 def identity (s : AuthorityAmendmentSetBody) : CanonicalObjectId :=
-  CanonicalObjectId.ofTyped (Identity identitySchema s)
+  { schemaVersion := 1
+    domain := .authority
+    typeTag := TypeTag.leaf (Enc.nameBytes "wasm.authority.amendment.set.body/1")
+    canonicalBodyBytes := Bytes.pack (bytes s) }
+
+/-- The proof-free constructor is byte-for-byte the identity produced by the
+frozen injective schema. -/
+theorem identity_eq_schema (s : AuthorityAmendmentSetBody) :
+    identity s = CanonicalObjectId.ofTyped (Identity identitySchema s) :=
+  rfl
 
 theorem identity_eq_iff {a b : AuthorityAmendmentSetBody} :
     identity a = identity b ↔ a = b :=
@@ -460,6 +483,221 @@ def core3SupertypeValidityAuthorityAmendment : AuthorityAmendmentBody :=
       ["https://github.com/WebAssembly/spec/issues/2141",
        "https://github.com/WebAssembly/spec/commit/44b03c21317f07500f66bc739553c83dcde445eb"] }
 
+/-- DEV-014: the pinned instantiation clauses force constant-expression
+evaluation back to its source state even though the validated constant grammar
+contains managed-heap allocation.  The public release initializer threads each
+post-expression state and carries its structure/array heaps into final module
+allocation; the pinned relations remain available as authority references. -/
+def core3InstantiationStateAuthorityAmendment : AuthorityAmendmentBody :=
+  { deviationId := "DEV-014"
+    amendmentId := "AMD-014"
+    specSection := "4 and 7.3"
+    pinnedCommit := core3RevisionCommit
+    patches :=
+      [{ sourcePath := authoritySource "4.4-execution.modules.spectec"
+         sourceSha256 :=
+           "9942402b36940c45f9aab76996bc11ffbe6d478e88b1a742bec08e62dce96d17"
+         beforeAnchor := "def $evalglobals(z, gt gt'*, expr expr'*) = (z', val val'*)"
+         afterAnchor := "-- if (s', a) = $allocglobal(s, gt, val)"
+         removedText :=
+           "-- Eval_expr: z; expr ~>* z; val\n-- if z = s; f"
+         insertedText :=
+           "-- Eval_expr: z; expr ~>* z_1; val\n-- if z_1 = s; f"
+         effect := .widen
+         affectedAuthoritySymbols := ["$evalglobals"]
+         amendedLeanDeclarations :=
+           ["WasmGemmGnaf.Wasm.Core.Exec.EvalGlobalsA"] },
+       { sourcePath := authoritySource "4.4-execution.modules.spectec"
+         sourceSha256 :=
+           "9942402b36940c45f9aab76996bc11ffbe6d478e88b1a742bec08e62dce96d17"
+         beforeAnchor := "-- if z = s; {MODULE moduleinst_0}"
+         afterAnchor := "-- if instr_D* = $concat_"
+         removedText :=
+           "-- if (z', val_G*) = $evalglobals(z, globaltype*, expr_G*)\n-- (Eval_expr : z'; expr_T ~>* z'; ref_T)*\n-- (Eval_expr : z'; expr_E ~>* z'; ref_E)**\n-- if (s', moduleinst) = $allocmodule(s, module, externaddr*, val_G*, ref_T*, (ref_E*)*)"
+         insertedText :=
+           "-- if (z_G, val_G*) = $evalglobalsA(z, globaltype*, expr_G*)\n-- if (z_T, ref_T*) = $evalrefexprsA(z_G, expr_T*)\n-- if (z_E, (ref_E*)*) = $evalrefexprlistsA(z_T, (expr_E*)*)\n-- if s_H = $carryconstheap(s, z_E.STORE)\n-- if (s', moduleinst) = $allocmodule(s_H, module, externaddr*, val_G*, ref_T*, (ref_E*)*)"
+         effect := .widen
+         affectedAuthoritySymbols := ["$instantiate"]
+         amendedLeanDeclarations :=
+           ["WasmGemmGnaf.Wasm.Core.Exec.EvalRefExprsA",
+            "WasmGemmGnaf.Wasm.Core.Exec.EvalRefExprListsA",
+            "WasmGemmGnaf.Wasm.Core.Exec.Store.carryConstHeap",
+            "WasmGemmGnaf.Wasm.Core.Exec.InstantiateA"] }]
+    upstreamReferences :=
+      ["https://github.com/WebAssembly/spec/blob/9d36019973201a19f9c9ebb0f10828b2fe2374aa/specification/wasm-3.0/4.4-execution.modules.spectec"] }
+
+/-- DEV-015: composing the ordinary recursive-type rule with `_rec2` resets
+relative recursive indices for the suffix, while semantic closure later uses
+the full original group.  The release rule forbids exactly those rebased
+relative declared supertypes; grammar type uses are indices and are unchanged. -/
+def core3MixedRecScopeAuthorityAmendment : AuthorityAmendmentBody :=
+  { deviationId := "DEV-015"
+    amendmentId := "AMD-015"
+    specSection := "4 and 7.3"
+    pinnedCommit := core3RevisionCommit
+    patches :=
+      [{ sourcePath := authoritySource "2.1-validation.types.spectec"
+         sourceSha256 :=
+           "4b5836e27d39b78a9b29dcdf5be9493abebdaabbcb7f76ef3dfd84b2870c789b"
+         beforeAnchor := "rule Rectype_ok/cons:"
+         afterAnchor := "rule Rectype_ok/_rec2:"
+         removedText :=
+           "C |- REC (subtype_1 subtype*) : OK(x)\n-- Subtype_ok: C |- subtype_1 : OK(x)\n-- Rectype_ok: C |- REC subtype* : OK($(x+1))"
+         insertedText :=
+           "C |- REC (subtype_1 subtype*) : OK(x)\n-- Subtype_ok: C |- subtype_1 : OK(x)\n-- if $no_rebased_rec_supers(REC subtype*) = true\n-- Rectype_ok: C |- REC subtype* : OK($(x+1))"
+         effect := .narrow
+         affectedAuthoritySymbols := ["Rectype_ok/cons"]
+         amendedLeanDeclarations :=
+           ["WasmGemmGnaf.Wasm.Core.RecType.noRebasedRecSupers",
+            "WasmGemmGnaf.Wasm.Core.Rectype_okA",
+            "WasmGemmGnaf.Wasm.Core.Validate.checkRectypeOkA"] }]
+    upstreamReferences :=
+      ["https://github.com/WebAssembly/spec/blob/9d36019973201a19f9c9ebb0f10828b2fe2374aa/specification/wasm-3.0/2.1-validation.types.spectec"] }
+
+/-- DEV-016: the pinned rules' `num_` and `lit_` metavariables already range
+over side-conditioned syntax sorts, but Lean's raw `FN` representation also
+contains out-of-range constructor terms.  The release selector makes that
+implicit sort premise explicit exactly where a result literal is recovered
+only through a byte equation. -/
+def core3ByteSolvedLiteralAuthorityAmendment : AuthorityAmendmentBody :=
+  { deviationId := "DEV-016"
+    amendmentId := "AMD-016"
+    specSection := "4 and 7.1"
+    pinnedCommit := core3RevisionCommit
+    patches :=
+      [{ sourcePath := authoritySource "4.3-execution.instructions.spectec"
+         sourceSha256 :=
+           "faf09ffd37208f3137d37a8b7347ee6b658e9efb166a71ade0375c687fd14fb6"
+         beforeAnchor := "rule Step_read/load-num-val:"
+         afterAnchor := "rule Step_read/load-pack-oob:"
+         removedText :=
+           "-- if $nbytes_(nt, c) = $mem(z, x).BYTES[i + ao.OFFSET : $size(nt)/8]"
+         insertedText :=
+           "-- if $nbytes_(nt, c) = $mem(z, x).BYTES[i + ao.OFFSET : $size(nt)/8]\n-- if c belongs to the side-conditioned syntax sort num_(nt)"
+         effect := .narrow
+         affectedAuthoritySymbols := ["Step_read/load-num-val"]
+         amendedLeanDeclarations :=
+           ["WasmGemmGnaf.Wasm.Core.Exec.ByteSolvedNumWfA"] },
+       { sourcePath := authoritySource "4.3-execution.instructions.spectec"
+         sourceSha256 :=
+           "faf09ffd37208f3137d37a8b7347ee6b658e9efb166a71ade0375c687fd14fb6"
+         beforeAnchor := "rule Step_read/array.new_data-num:"
+         afterAnchor := "rule Step_read/array.get-null:"
+         removedText :=
+           "-- if $concatn_(byte, $zbytes_(zt, c)^n, $($zsize(zt)/8)) = $data(z, y).BYTES[i : n * $zsize(zt)/8]"
+         insertedText :=
+           "-- if $concatn_(byte, $zbytes_(zt, c)^n, $($zsize(zt)/8)) = $data(z, y).BYTES[i : n * $zsize(zt)/8]\n-- if every c belongs to the side-conditioned syntax sort lit_(zt)"
+         effect := .narrow
+         affectedAuthoritySymbols := ["Step_read/array.new_data-num"]
+         amendedLeanDeclarations :=
+           ["WasmGemmGnaf.Wasm.Core.Exec.ByteSolvedLiteralWfA"] },
+       { sourcePath := authoritySource "4.3-execution.instructions.spectec"
+         sourceSha256 :=
+           "faf09ffd37208f3137d37a8b7347ee6b658e9efb166a71ade0375c687fd14fb6"
+         beforeAnchor := "rule Step_read/array.init_data-num:"
+         afterAnchor := ";; External reference instructions"
+         removedText :=
+           "-- if $zbytes_(zt, c) = $data(z, y).BYTES[j : $zsize(zt)/8]"
+         insertedText :=
+           "-- if $zbytes_(zt, c) = $data(z, y).BYTES[j : $zsize(zt)/8]\n-- if c belongs to the side-conditioned syntax sort lit_(zt)"
+         effect := .narrow
+         affectedAuthoritySymbols := ["Step_read/array.init_data-num"]
+         amendedLeanDeclarations :=
+           ["WasmGemmGnaf.Wasm.Core.Exec.ByteSolvedLiteralWfA"] }]
+    upstreamReferences :=
+      ["vendor/wasm-spec/specification/wasm-3.0/1.3-syntax.instructions.spectec",
+       "vendor/wasm-spec/specification/wasm-3.0/1.1-syntax.values.spectec"] }
+
+/-- DEV-021: the pinned local rules classify initialization state but omit
+ordinary value-type validity.  The release relation restores that premise for
+both defaultable and nondefaultable locals. -/
+def core3LocalValueTypeAuthorityAmendment : AuthorityAmendmentBody :=
+  { deviationId := "DEV-021"
+    amendmentId := "AMD-021"
+    specSection := "4 and 7.3"
+    pinnedCommit := core3RevisionCommit
+    patches :=
+      [{ sourcePath := authoritySource "2.4-validation.modules.spectec"
+         sourceSha256 :=
+           "c458e3b91eb6d1a0c2645e5ef1ea54ee7d279562a4c4499ea3e8476b3acbfcfd"
+         beforeAnchor := "rule Table_ok:"
+         afterAnchor := "rule Func_ok:"
+         removedText :=
+           "rule Local_ok/set:\n  C |- LOCAL t : SET t\n  -- Defaultable: |- t DEFAULTABLE\n\nrule Local_ok/unset:\n  C |- LOCAL t : UNSET t\n  -- Nondefaultable: |- t NONDEFAULTABLE"
+         insertedText :=
+           "rule Local_ok/set:\n  C |- LOCAL t : SET t\n  -- Valtype_ok: C |- t : OK\n  -- Defaultable: |- t DEFAULTABLE\n\nrule Local_ok/unset:\n  C |- LOCAL t : UNSET t\n  -- Valtype_ok: C |- t : OK\n  -- Nondefaultable: |- t NONDEFAULTABLE"
+         effect := .narrow
+         affectedAuthoritySymbols := ["Local_ok/set", "Local_ok/unset"]
+         amendedLeanDeclarations :=
+           ["WasmGemmGnaf.Wasm.Core.Local_okA"] }]
+    upstreamReferences :=
+      ["vendor/wasm-spec/specification/wasm-3.0/2.4-validation.modules.spectec"] }
+
+/-- DEV-022: rolling an in-group `_IDX` reference to `REC i` preserves the
+exact outer composite shape already stored at `C.RECS[i]`.  The release
+relation adds only those three lookup-indexed shape edges. -/
+def core3RecursiveHeapShapeAuthorityAmendment : AuthorityAmendmentBody :=
+  { deviationId := "DEV-022"
+    amendmentId := "AMD-022"
+    specSection := "4 and 7.3"
+    pinnedCommit := core3RevisionCommit
+    patches :=
+      [{ sourcePath := authoritySource "2.2-validation.subtyping.spectec"
+         sourceSha256 :=
+           "71ebcb2a53e55b8246c139e70ffbe7f4885c45eb757f8e7138e1563014cd432f"
+         beforeAnchor := "rule Heaptype_sub/typeidx-r:"
+         afterAnchor := "rule Heaptype_sub/none:"
+         removedText :=
+           "rule Heaptype_sub/rec:\n  C |- REC i <: typeuse*[j]\n  -- if C.RECS[i] = SUB final? typeuse* ct"
+         insertedText :=
+           "rule Heaptype_sub/rec:\n  C |- REC i <: typeuse*[j]\n  -- if C.RECS[i] = SUB final? typeuse* ct\n\nrule Heaptype_sub/rec-struct:\n  C |- REC i <: STRUCT\n  -- if C.RECS[i] = SUB final? typeuse* STRUCT fieldtype*\n\nrule Heaptype_sub/rec-array:\n  C |- REC i <: ARRAY\n  -- if C.RECS[i] = SUB final? typeuse* ARRAY fieldtype\n\nrule Heaptype_sub/rec-func:\n  C |- REC i <: FUNC\n  -- if C.RECS[i] = SUB final? typeuse* FUNC t_1* -> t_2*"
+         effect := .widen
+         affectedAuthoritySymbols :=
+           ["Heaptype_sub/rec-struct", "Heaptype_sub/rec-array",
+            "Heaptype_sub/rec-func"]
+         amendedLeanDeclarations :=
+           ["WasmGemmGnaf.Wasm.Core.Heaptype_subA",
+            "WasmGemmGnaf.Wasm.Core.Context.typeuseShapeA",
+            "WasmGemmGnaf.Wasm.Core.decHeapSubR"] }]
+    upstreamReferences :=
+      ["vendor/wasm-spec/specification/wasm-3.0/2.2-validation.subtyping.spectec"] }
+
+/-- DEV-023: `try_table` constructs an administrative handler, but the pinned
+rule set neither evaluates that handler's body nor releases a completed trap.
+The release relation adds precisely those two administrative edges. -/
+def core3HandlerExecutionAuthorityAmendment : AuthorityAmendmentBody :=
+  { deviationId := "DEV-023"
+    amendmentId := "AMD-023"
+    specSection := "4, 7.1, 7.3, and 15"
+    pinnedCommit := core3RevisionCommit
+    patches :=
+      [{ sourcePath := authoritySource "4.3-execution.instructions.spectec"
+         sourceSha256 :=
+           "faf09ffd37208f3137d37a8b7347ee6b658e9efb166a71ade0375c687fd14fb6"
+         beforeAnchor := "rule Step/ctxt-frame:"
+         afterAnchor := ";; Polymorphic instructions"
+         removedText := ""
+         insertedText :=
+           "rule Step/ctxt-handler:\n  z; (HANDLER_ n `{catch*} instr*) ~> z'; (HANDLER_ n `{catch*} instr'*)\n  -- Step: z; instr* ~> z'; instr'*"
+         effect := .add
+         affectedAuthoritySymbols := ["Step/ctxt-handler"]
+         amendedLeanDeclarations :=
+           ["WasmGemmGnaf.Wasm.Core.Exec.HandlerAdministrativeRulesFor"] },
+       { sourcePath := authoritySource "4.3-execution.instructions.spectec"
+         sourceSha256 :=
+           "faf09ffd37208f3137d37a8b7347ee6b658e9efb166a71ade0375c687fd14fb6"
+         beforeAnchor := "rule Step_pure/trap-frame:"
+         afterAnchor := ";; Local instructions"
+         removedText := ""
+         insertedText :=
+           "rule Step_pure/trap-handler:\n  (HANDLER_ n `{catch*} TRAP) ~> TRAP"
+         effect := .add
+         affectedAuthoritySymbols := ["Step_pure/trap-handler"]
+         amendedLeanDeclarations :=
+           ["WasmGemmGnaf.Wasm.Core.Exec.HandlerAdministrativeRulesFor"] }]
+    upstreamReferences :=
+      ["vendor/wasm-spec/specification/wasm-3.0/4.3-execution.instructions.spectec"] }
+
 def core3AuthorityAmendments : List AuthorityAmendmentBody :=
   [ core3InstrSeqAuthorityAmendment
   , core3SignedLebAuthorityAmendment
@@ -468,7 +706,13 @@ def core3AuthorityAmendments : List AuthorityAmendmentBody :=
   , core3CallRefAuthorityAmendment
   , core3BottomSubtypingAuthorityAmendment
   , core3RelaxedDotAddAuthorityAmendment
-  , core3SupertypeValidityAuthorityAmendment ]
+  , core3SupertypeValidityAuthorityAmendment
+  , core3InstantiationStateAuthorityAmendment
+  , core3MixedRecScopeAuthorityAmendment
+  , core3ByteSolvedLiteralAuthorityAmendment
+  , core3LocalValueTypeAuthorityAmendment
+  , core3RecursiveHeapShapeAuthorityAmendment
+  , core3HandlerExecutionAuthorityAmendment ]
 
 def core3AuthorityAmendmentSet : AuthorityAmendmentSetBody :=
   { vendoredTreeId := VendoredTreeBody.identity core3VendoredTree
@@ -477,12 +721,14 @@ def core3AuthorityAmendmentSet : AuthorityAmendmentSetBody :=
 theorem core3AuthorityAmendmentIds :
     core3AuthorityAmendments.map AuthorityAmendmentBody.amendmentId =
       ["AMD-005", "AMD-007", "AMD-008", "AMD-009", "AMD-010", "AMD-011",
-       "AMD-012", "AMD-013"] := rfl
+       "AMD-012", "AMD-013", "AMD-014", "AMD-015", "AMD-016",
+       "AMD-021", "AMD-022", "AMD-023"] := rfl
 
 theorem core3AuthorityDeviationIds :
     core3AuthorityAmendments.map AuthorityAmendmentBody.deviationId =
       ["DEV-006", "DEV-007", "DEV-008", "DEV-009", "DEV-010", "DEV-011",
-       "DEV-012", "DEV-013"] := rfl
+       "DEV-012", "DEV-013", "DEV-014", "DEV-015", "DEV-016",
+       "DEV-021", "DEV-022", "DEV-023"] := rfl
 
 theorem core3AuthorityAmendmentIds_nodup :
     (core3AuthorityAmendments.map AuthorityAmendmentBody.amendmentId).Nodup := by

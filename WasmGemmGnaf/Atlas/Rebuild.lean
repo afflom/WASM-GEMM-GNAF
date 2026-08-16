@@ -22,9 +22,9 @@ no ambient input."
 
    Both forms of the rebuild theorem are therefore proved:
 
-   * `Atlas.incremental_eq_full_rebuild_scoped` — the general statement, for a
-     rebuild carried out in the state's own scope.  This is the one to use.
-   * `Atlas.incremental_eq_full_rebuild` — SPEC §12.5's literal statement,
+   * `Atlas.incremental_eq_full_rebuild` — the general statement, for a rebuild
+     carried out in the state's own scope.  This is SPEC §12.5's amended form.
+   * `Atlas.incremental_eq_full_rebuild_unscoped` — the superseded literal form,
      which additionally requires the state to be in the unscoped scope, because
      otherwise the two sides genuinely disagree on the three scope identities
      and the equation is false.  Stating it without that hypothesis would be a
@@ -117,8 +117,8 @@ theorem semanticApplyBody_eq_rebuild {b : StateBody} (hb : Coherent b) (d : Delt
       semanticRebuildBodyWith b.scope (b.declarationBase ∪ d.declarations) :=
   semanticApplyBody_eq_derived hb d
 
-/-- **SPEC §12.5**, `incremental_eq_full_rebuild`, general (scoped) form. -/
-theorem incremental_eq_full_rebuild_scoped {budget : BuildBudget}
+/-- **SPEC §12.5**, `incremental_eq_full_rebuild`, general scoped form. -/
+theorem incremental_eq_full_rebuild {budget : BuildBudget}
     {state : UnsealedState} {delta : Delta} {successor : UnsealedState}
     (hcoherent : Coherent state.body)
     (hupdate : (accumulate budget state delta).result = .complete successor) :
@@ -128,12 +128,12 @@ theorem incremental_eq_full_rebuild_scoped {budget : BuildBudget}
   rw [accumulate_complete_refines_semantic hupdate,
     semanticApplyBody_eq_rebuild hcoherent]
 
-/-- **SPEC §12.5**, `incremental_eq_full_rebuild`, literal form.
+/-- The superseded literal rebuild form, retained as a consequence.
 
 The extra `hscope` hypothesis is not decoration: `semanticRebuildBody` has only
 the declaration base as input and therefore cannot reproduce a scope the
 declarations do not name.  Without it the statement is false. -/
-theorem incremental_eq_full_rebuild {budget : BuildBudget}
+theorem incremental_eq_full_rebuild_unscoped {budget : BuildBudget}
     {state : UnsealedState} {delta : Delta} {successor : UnsealedState}
     (hcoherent : Coherent state.body)
     (hscope : state.body.scope = Scope.unscoped)
@@ -141,7 +141,7 @@ theorem incremental_eq_full_rebuild {budget : BuildBudget}
     canonicalize successor.body =
       canonicalize (semanticRebuildBody
         (state.body.declarationBase ∪ delta.declarations)) := by
-  rw [incremental_eq_full_rebuild_scoped hcoherent hupdate, hscope]
+  rw [incremental_eq_full_rebuild hcoherent hupdate, hscope]
   rfl
 
 /-- The same equation before canonicalisation, which is strictly stronger. -/
@@ -157,9 +157,9 @@ theorem incremental_eq_full_rebuild_exact {budget : BuildBudget}
 
 /-! ## SPEC §12.5's literal statement is false
 
-The two hypotheses `incremental_eq_full_rebuild` carries beyond SPEC's text are
-refuted-if-dropped here.  Nothing below weakens or replaces the theorem: it
-establishes that no proof of the literal statement exists. -/
+The coherence and unscoped hypotheses needed by the superseded literal form are
+refuted-if-dropped here. Nothing below weakens the amended scoped theorem: it
+establishes that no proof of the superseded statement exists. -/
 
 /-- **The scope hypothesis is necessary, and dropping it fails systematically.**
 

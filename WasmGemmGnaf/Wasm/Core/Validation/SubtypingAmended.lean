@@ -20,6 +20,40 @@ set_option autoImplicit false
 
 namespace WasmGemmGnaf.Wasm.Core
 
+/-! ## AMD-015: relative-recursive-supertype scope
+
+The pinned ordinary `Rectype_ok/cons` rule may hand its remaining suffix to
+`Rectype_ok/_rec2`.  `_rec2` installs that suffix as a fresh `RECS` vector, but
+semantic `deftype` unrolling later closes relative variables against the full
+original group.  Only a relative `REC` in declared-supertype position can
+change its target under that rebasing.  Grammar type uses are `_IDX`, so this
+structural test removes no Core syntax. -/
+
+namespace TypeUses
+
+def noRebasedRecSupers : TypeUses → Bool
+  | .nil => true
+  | .cons (.recu _) _ => false
+  | .cons _ rest => noRebasedRecSupers rest
+
+end TypeUses
+
+namespace SubTypes
+
+def noRebasedRecSupers : SubTypes → Bool
+  | .nil => true
+  | .cons (.sub _ sups _) rest =>
+      sups.noRebasedRecSupers && noRebasedRecSupers rest
+
+end SubTypes
+
+namespace RecType
+
+def noRebasedRecSupers : RecType → Bool
+  | .recr sts => sts.noRebasedRecSupers
+
+end RecType
+
 mutual
 
 inductive Heaptype_okA : Context → HeapType → Prop where
@@ -94,7 +128,9 @@ inductive Subtype_ok2A : Context → SubType → TypeIdx → Nat → Prop where
 inductive Rectype_okA : Context → RecType → TypeIdx → Prop where
   | empty {C : Context} {x : TypeIdx} : Rectype_okA C (.recr .nil) x
   | cons {C : Context} {st : SubType} {sts : SubTypes} {x : TypeIdx} :
-      Subtype_okA C st x → Rectype_okA C (.recr sts) (TypeIdx.ofNat (x.val + 1)) →
+      Subtype_okA C st x →
+      (RecType.recr sts).noRebasedRecSupers = true →
+      Rectype_okA C (.recr sts) (TypeIdx.ofNat (x.val + 1)) →
       Rectype_okA C (.recr (.cons st sts)) x
   | rec2 {C : Context} {sts : SubTypes} {x : TypeIdx} :
       Rectype_ok2A (C.withRecs (SubTypes.toList sts)) (.recr sts) x 0 →
@@ -139,6 +175,24 @@ inductive Heaptype_subA : Context → HeapType → HeapType → Prop where
       C.recs[i]? = some (.sub fin sups ct) →
       (TypeUses.toList sups)[j]? = some tu →
       Heaptype_subA C (.use (.recu i)) (.use tu)
+  /-- AMD-022: a recursive variable retains the exact STRUCT shape stored at
+      its `C.RECS` entry. -/
+  | rec_struct {C : Context} {i : Nat} {fin : Option Final} {sups : TypeUses}
+      {fts : FieldTypes} :
+      C.recs[i]? = some (.sub fin sups (.struct fts)) →
+      Heaptype_subA C (.use (.recu i)) (.abs .struct)
+  /-- AMD-022: a recursive variable retains the exact ARRAY shape stored at
+      its `C.RECS` entry. -/
+  | rec_array {C : Context} {i : Nat} {fin : Option Final} {sups : TypeUses}
+      {ft : FieldType} :
+      C.recs[i]? = some (.sub fin sups (.array ft)) →
+      Heaptype_subA C (.use (.recu i)) (.abs .array)
+  /-- AMD-022: a recursive variable retains the exact FUNC shape stored at
+      its `C.RECS` entry. -/
+  | rec_func {C : Context} {i : Nat} {fin : Option Final} {sups : TypeUses}
+      {dom cod : ValTypes} :
+      C.recs[i]? = some (.sub fin sups (.func dom cod)) →
+      Heaptype_subA C (.use (.recu i)) (.abs .func)
   | none_ {C : Context} {ht : HeapType} :
       ht ≠ .abs .bot → Heaptype_subA C ht (.abs .any) →
       Heaptype_subA C (.abs .none) ht
@@ -210,8 +264,25 @@ inductive Deftype_subA : Context → DefType → DefType → Prop where
 
 end
 
-/-! ## Coverage-neutrality for the mutual type family -/
+/-- AMD-022's operative STRUCT bridge: an exact stored recursive STRUCT shape
+composes through the existing STRUCT-to-EQ-to-ANY hierarchy. -/
+theorem Heaptype_subA.rec_struct_any
+    {C : Context} {i : Nat} {fin : Option Final} {sups : TypeUses}
+    {fts : FieldTypes}
+    (hlookup : C.recs[i]? = some (.sub fin sups (.struct fts))) :
+    Heaptype_subA C (.use (.recu i)) (.abs .any) := by
+  apply Heaptype_subA.trans (ht' := .abs .struct) .abs (.rec_struct hlookup)
+  exact Heaptype_subA.trans (ht' := .abs .eq) .abs .struct_eq .eq_any
 
+/-! ## Retired pre-AMD-022 inclusion layer
+
+AMD-022 is an explicit widening of the semantic presentation: the pinned
+relation has no REC-shape constructors.  The former generic `to_pinned`
+functions are therefore intentionally absent; retaining them would assert the
+counterexample that DEV-022 records cannot exist.  The prior terms remain
+commented here only to keep the authority delta reviewable. -/
+
+/-
 mutual
 
 def Heaptype_okA.to_pinned {C : Context} {ht : HeapType} :
@@ -268,7 +339,7 @@ def Subtype_ok2A.to_pinned {C : Context} {st : SubType} {x : TypeIdx} {i : Nat} 
 def Rectype_okA.to_pinned {C : Context} {rt : RecType} {x : TypeIdx} :
     Rectype_okA C rt x → Rectype_ok C rt x
   | .empty => .empty
-  | .cons h₁ h₂ => .cons h₁.to_pinned h₂.to_pinned
+  | .cons h₁ _ h₂ => .cons h₁.to_pinned h₂.to_pinned
   | .rec2 h => .rec2 h.to_pinned
 
 def Rectype_ok2A.to_pinned {C : Context} {rt : RecType} {x : TypeIdx} {i : Nat} :
@@ -340,6 +411,7 @@ def Deftype_subA.to_pinned {C : Context} {dt₁ dt₂ : DefType} :
   | .super hu hi hs => .super hu hi hs.to_pinned
 
 end
+-/
 
 inductive Instrtype_okA : Context → InstrType → Prop where
   | mk {C : Context} {it : InstrType} :
@@ -402,8 +474,9 @@ inductive Externtype_subA : Context → ExternType → ExternType → Prop where
       Deftype_subA C dt₁ dt₂ →
       Externtype_subA C (.func (.defd dt₁)) (.func (.defd dt₂))
 
-/-! ## Coverage-neutrality for the non-mutual outer layer -/
+/-! The corresponding outer `to_pinned` chain is retired for the same reason. -/
 
+/-
 def Instrtype_okA.to_pinned {C : Context} {it : InstrType} :
     Instrtype_okA C it → Instrtype_ok C it
   | .mk hdom hcod hloc => .mk hdom.to_pinned hcod.to_pinned hloc
@@ -452,5 +525,6 @@ def Externtype_subA.to_pinned {C : Context} {xt₁ xt₂ : ExternType} :
   | .mem h => .mem h
   | .table h => .table h.to_pinned
   | .func h => .func h.to_pinned
+-/
 
 end WasmGemmGnaf.Wasm.Core

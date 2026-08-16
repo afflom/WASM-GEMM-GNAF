@@ -32,6 +32,8 @@ inductive Event where
   | ctxtInstrs (prefixValues suffixInstrs : Nat) (inner : Event)
   | ctxtLabel (arity : Nat) (inner : Event)
   | ctxtFrame (arity : Nat) (inner : Event)
+  | ctxtHandler (arity : Nat) (inner : Event)
+  | trapHandler (arity : Nat)
   | throw (tag : TagIdx) (arity : Nat)
   | localSet (index : LocalIdx)
   | globalSet (index : GlobalIdx)
@@ -87,6 +89,13 @@ inductive StepA : Config → Event → Config → Prop where
       StepA ⟨⟨s, f'⟩, is⟩ ev ⟨⟨s', f''⟩, is'⟩ →
       StepA ⟨⟨s, f⟩, [.frame n f' is]⟩ (.ctxtFrame n ev)
         ⟨⟨s', f⟩, [.frame n f'' is']⟩
+  | ctxtHandler {z z' : State} {n : Nat} {cs : List Catch}
+      {is is' : List AdminInstr} {ev : Event} :
+      StepA ⟨z, is⟩ ev ⟨z', is'⟩ →
+      StepA ⟨z, [.handler n cs is]⟩ (.ctxtHandler n ev)
+        ⟨z', [.handler n cs is']⟩
+  | trapHandler {z : State} {n : Nat} {cs : List Catch} :
+      StepA ⟨z, [.handler n cs [.trap]]⟩ (.trapHandler n) ⟨z, [.trap]⟩
   | throw {z : State} {vs : List Val} {x : TagIdx} {ti : TagInst}
       {dt : DefType} {t : ValTypes} {n : Nat} {a : ExnAddr} {ta : TagAddr}
       {ex : ExnInst} :
@@ -271,6 +280,8 @@ theorem StepA.erase {c c' : Config} {ev : Event} (h : StepA c ev c') :
   case ctxtInstrs _ hnon ih => exact .ctxtInstrs ih hnon
   case ctxtLabel _ ih => exact .ctxtLabel ih
   case ctxtFrame _ ih => exact .ctxtFrame ih
+  case ctxtHandler _ ih => exact .ctxtHandler handlerAdministrativeRules_amended ih
+  case trapHandler => exact .trapHandler handlerAdministrativeRules_amended
   case throw => apply Step.throw <;> assumption
   case localSet => apply Step.localSet <;> assumption
   case globalSet => apply Step.globalSet <;> assumption
@@ -316,6 +327,11 @@ theorem stepA_complete {z z' : State} {is is' : List AdminInstr}
   | @ctxtFrame s s' f f' f'' n is is' hstep ih =>
       obtain ⟨ev, hev⟩ := ih
       exact ⟨.ctxtFrame n ev, .ctxtFrame hev⟩
+  | @ctxtHandler z z' n cs is is' enabled hstep ih =>
+      obtain ⟨ev, hev⟩ := ih
+      exact ⟨.ctxtHandler n ev, .ctxtHandler hev⟩
+  | @trapHandler z n cs enabled =>
+      exact ⟨.trapHandler n, .trapHandler⟩
   | @throw z vs x ti dt t n a ta ex htag hdt hexpand ht hvs ha hta hex =>
       exact ⟨.throw x n, .throw htag hdt hexpand ht hvs ha hta hex⟩
   | @localSet z z' v x hset => exact ⟨.localSet x, .localSet hset⟩

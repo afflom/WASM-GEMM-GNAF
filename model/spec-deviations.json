@@ -66,15 +66,15 @@
         "WasmGemmGnaf.Atlas.Counterexample.incoherent_ne_full_rebuild -- the witness for the line above: an UNSCOPED state that records one stray semantic object its empty declaration base does not derive",
         "WasmGemmGnaf.Atlas.Counterexample.scopedState_accumulate -- the update instance used is `Delta.empty`, whose completion is itself required by SPEC 12.5's `update_empty_fixed_point`"
       ],
-      "resolution": "RESOLVED BY AMENDING SPEC TO THE STRONGER FORM, not to the weaker theorem this repository already had. The obvious repair -- adding both hypotheses the refutations show to be load-bearing, `Atlas.Coherent state.body` AND `state.body.scope = Atlas.Scope.unscoped` -- is exactly the shape of `Atlas.incremental_eq_full_rebuild` as declared in Atlas/Rebuild.lean, and adopting it would have amended SPEC to match a weaker theorem for a ledger point. It was REJECTED for that reason. SPEC 12.5 instead states the general form, which fixes the scope objection by rebuilding in the state's OWN scope rather than assuming it away: it implies the repaired literal form (instantiate the scope at `unscoped`) and additionally constrains every scoped state, about which the superseded text said nothing true. SPEC 12.5 now also requires `incremental_eq_full_rebuild_exact` (the same equation before canonicalisation, stronger again), `semanticApplyBody_coherent` and `rebuild_coherent`, so `Atlas.Coherent` is DISCHARGED at every state the pipeline produces rather than assumed, and it defines `Atlas.Coherent` and `Atlas.semanticRebuildBodyWith` in the clause's own fenced block. CONSEQUENCE, STATED PLAINLY: the gap has reversed direction. SPEC now asks for MORE than the declaration named `Atlas.incremental_eq_full_rebuild` proves. The proposition SPEC now asks for IS proved here, by `Atlas.incremental_eq_full_rebuild_scoped`, but `xtask signature` credits a binding only when it is closed by `:= @<the SPEC name>`, so until the required name carries the amended proposition the binding stays AMENDED and the SPEC 15 name stays OUTSTANDING. The remaining action is a restatement of `Atlas.incremental_eq_full_rebuild` in Atlas/Rebuild.lean as the scoped form; it was not made in the amending change, which owned SPEC.md, this file and the signature bindings only.",
+      "resolution": "RESOLVED BY AMD-003 AND THE EXACT REQUIRED DECLARATION. SPEC 12.5 states the stronger scoped form, which fixes the scope objection by rebuilding in the state's own scope rather than assuming that scope is unscoped. `Atlas.incremental_eq_full_rebuild` now carries exactly that proposition. `incremental_eq_full_rebuild_exact`, `semanticApplyBody_coherent`, and `rebuild_coherent` provide the stronger pre-canonicalisation equation and discharge coherence for pipeline-produced states.",
       "intendedContentProvedBy": [
-        "WasmGemmGnaf.Atlas.incremental_eq_full_rebuild_scoped -- canonicalize successor.body = canonicalize (semanticRebuildBodyWith state.body.scope (state.body.declarationBase U delta.declarations)); NO scope hypothesis",
+        "WasmGemmGnaf.Atlas.incremental_eq_full_rebuild -- canonicalize successor.body = canonicalize (semanticRebuildBodyWith state.body.scope (state.body.declarationBase U delta.declarations)); NO scope hypothesis",
         "WasmGemmGnaf.Atlas.incremental_eq_full_rebuild_exact -- the same equation BEFORE canonicalisation, which is strictly stronger",
-        "WasmGemmGnaf.Atlas.incremental_eq_full_rebuild -- SPEC's literal equation under the two necessary hypotheses",
+        "WasmGemmGnaf.Atlas.incremental_eq_full_rebuild_unscoped -- superseded literal equation under the two necessary hypotheses",
         "WasmGemmGnaf.Atlas.semanticApplyBody_coherent -- coherence is preserved by every update, so the hypothesis is discharged rather than assumed at every state the pipeline produces",
         "WasmGemmGnaf.Atlas.rebuild_coherent -- and by the rebuild that starts a lifecycle"
       ],
-      "strengthEffect": "STRENGTHENING RELATIVE TO THE SUPERSEDED TEXT, AND STILL NOT COUNTED. Nothing was given up: the coherence hypothesis cannot be dropped (`not_incremental_eq_full_rebuild_unscoped`) and the literal rebuild target cannot be kept (`incremental_ne_full_rebuild_of_objectiveId`), so `not_incremental_eq_full_rebuild` proves no theorem of the superseded shape exists and there was no strength there to preserve. The amended statement carries the clause's intent -- incremental update equals full rebuild from the same declaration base -- with the scope hypothesis REMOVED rather than assumed, and `incremental_eq_full_rebuild_exact` strengthens it past canonicalisation. A state produced by `Atlas.rebuild` is coherent (`rebuild_coherent`) and `Atlas.accumulate` preserves coherence (`semanticApplyBody_coherent`), so the coherence hypothesis excludes only hand-built states such as the counterexample's. The binding in Conformance/RequiredSignatures.lean remains AMENDED and the SPEC 15 name remains OUTSTANDING -- now because the repository is SHORT of SPEC rather than ahead of it. Nothing here is counted as discharged.",
+      "strengthEffect": "STRENGTHENING RELATIVE TO THE SUPERSEDED TEXT, NOW EXACTLY DISCHARGED. Nothing was given up: the coherence hypothesis cannot be dropped (`not_incremental_eq_full_rebuild_unscoped`) and the literal rebuild target cannot be kept (`incremental_ne_full_rebuild_of_objectiveId`). The amended statement carries the clause's intent with the scope hypothesis removed rather than assumed, and `incremental_eq_full_rebuild_exact` strengthens it past canonicalisation. A state produced by `Atlas.rebuild` is coherent (`rebuild_coherent`) and `Atlas.accumulate` preserves coherence (`semanticApplyBody_coherent`).",
       "specAmendmentRecommended": true,
       "amendmentAdopted": "AMD-003",
       "amendmentText": "ADOPTED. SPEC 12.5 now states rebuild equivalence in the state's own scope -- `Atlas.canonicalize successor.body = Atlas.canonicalize (Atlas.semanticRebuildBodyWith state.body.scope (state.body.declarationBase U delta.declarations))` -- over a state whose body is `Atlas.Coherent`, since `semanticRebuildBody` provably cannot reproduce a scope its only input does not name; and it requires `incremental_eq_full_rebuild_exact`, `semanticApplyBody_coherent` and `rebuild_coherent` beside it."
@@ -251,6 +251,185 @@
       ],
       "strengthEffect": "NARROWING. It removes invalid proof-internal subtype derivations without removing any Core syntax or changing the other subtyping rules.",
       "ledgerEffect": "NONE. `Wasm.validate_iff_declarative` and the validation metatheory remain outstanding until the strengthened premise is propagated through the sole checker and module hierarchy."
+    },
+    {
+      "id": "DEV-014",
+      "specSection": "4 and 7.3",
+      "status": "RECORDED IN SPEC -- PINNED SOURCE DEFECT",
+      "adoptedIntoSpec": "AMD-014",
+      "issue": "The pinned instantiation definition requires every table and element initializer to satisfy `Eval_expr z' expr z' value`, and the recursive global helper likewise requires `Eval_expr z expr z value`. The same pinned validation grammar admits `struct.new`, `struct.new_default`, `array.new`, `array.new_default`, and `array.new_fixed` in constant expressions. Each successful allocation rule appends a managed-heap instance, so its final state cannot equal its source state. A validated import-free module containing such an initializer therefore has no pinned `Instantiate` derivation.",
+      "resolution": "The release initializer uses a single amended state-threaded relation. It evaluates global, table, and element expressions in source order; each expression's final state is the next expression's initial state. Temporary global instances used by later `global.get` instructions are replaced during canonical module allocation, while the structure and array heaps produced by constant expressions are carried from the final evaluation state into that allocation. The byte-identical pinned `EvalGlobals` and `Instantiate` remain authority references and are not public release endpoints.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.Core.Exec.gc_const_changes_state"
+      ],
+      "intendedContentProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.Exec.EvalGlobalsA",
+        "WasmGemmGnaf.Wasm.Core.Exec.EvalRefExprsA",
+        "WasmGemmGnaf.Wasm.Core.Exec.EvalRefExprListsA",
+        "WasmGemmGnaf.Wasm.Core.Exec.InstantiateA"
+      ],
+      "strengthEffect": "WIDENING TO THE ALREADY VALIDATED CORE LANGUAGE. It restores instantiation for GC-allocating constant expressions without adding any instruction or validation rule and without narrowing the enabled profile.",
+      "ledgerEffect": "NONE. The amendment record alone closes no required declaration. Public executable initializer soundness/completeness, whole-successor enumeration, costed exploration, and `Universal.SystemEvaluationRel` remain independently required."
+    },
+    {
+      "id": "DEV-015",
+      "specSection": "4 and 7.3",
+      "status": "RECORDED IN SPEC -- PINNED SOURCE DEFECT",
+      "adoptedIntoSpec": "AMD-015",
+      "issue": "The pinned `Rectype_ok/cons` rule may be followed by `Rectype_ok/_rec2`. The latter reinstalls the remaining suffix as `RECS` and resets its relative index to zero, but semantic `deftype` unrolling later closes `REC j` against the full original recursive group. A mixed derivation can therefore validate a suffix edge at one relative target and close it at a different target, producing false cross-family heap subtyping through transitivity.",
+      "resolution": "The release `Rectype_okA/cons` rule requires that `REC j` not occur among the declared supertype uses of its remaining suffix before that suffix may be validated recursively. Grammar type definitions already contain only `_IDX` type uses, so no Core syntax is removed. Root `_rec2` validation remains available, while the scope-rebasing mixed derivation is excluded. The sole executable checker tests the same structural condition on its ordinary-cons arm.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.Core.heapDecision_not_complete_of_mixed_rec_scope"
+      ],
+      "intendedContentProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.RecType.noRebasedRecSupers",
+        "WasmGemmGnaf.Wasm.Core.Rectype_okA",
+        "WasmGemmGnaf.Wasm.Core.Validate.checkRectypeOkA_sound"
+      ],
+      "strengthEffect": "NARROWING. It removes only derivations whose ordinary-cons tail would reinterpret a relative recursive declared-supertype index under a reset suffix scope; binary grammar types use `_IDX` and are unaffected.",
+      "ledgerEffect": "NONE. Amendment text alone discharges zero claims; public validator equivalence earns credit only when separately proved."
+    },
+    {
+      "id": "DEV-016",
+      "specSection": "4 and 7.1",
+      "status": "RECORDED IN SPEC -- EXPLICIT REPRESENTATION OF AN IMPLICIT PINNED SYNTAX-SORT CONDITION",
+      "adoptedIntoSpec": "AMD-016",
+      "issue": "The pinned execution rules bind byte-solved results as metavariables of the side-conditioned syntax sorts `num_(nt)` and `lit_(zt)`. The initial Lean transcription represented floating literals by the raw constructors of `FN`, whose out-of-range magnitudes are excluded only by `Num_.wf`, but omitted that sort premise from `Step_read/load-num-val`, `Step_read/array.new_data-num`, and `Step_read/array.init_data-num`. Consequently a zero-byte f32 load has infinitely many raw Lean targets: `+SUBNORM 0` and `+SUBNORM (k * 2^32)` serialize identically although every nonzero-k target is not a source-language literal. A finite exact successor list and fixed-event target functionality are therefore false for the unguarded raw transcription.",
+      "resolution": "The pinned execution selector remains extensionally the byte-identical source reading. The public amended selector makes the already-implicit syntax-sort condition explicit only at the three rules that solve numeric/storage literals from byte equations: a full-width load result satisfies `Num_.wf`, and every array data literal satisfies the corresponding storage-literal well-formedness predicate. Integer, packed, and vector carriers discharge this condition definitionally; only malformed raw float constructors are removed. Set-valued pure numeric results remain unchanged and retain their `PureEvent.choice` labels.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.Core.Exec.step_read_loadNumVal_raw_not_target_functional"
+      ],
+      "intendedContentProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.Exec.Step_readA.loadNumVal_result_wf",
+        "WasmGemmGnaf.Wasm.mem_successors_iff_step"
+      ],
+      "strengthEffect": "NEUTRAL IN AUTHORITY REACH; NARROWING ONLY OF LEAN TERMS THAT DO NOT INHABIT THE PINNED SYNTAX SORT. No source-language literal, numeric outcome, instruction, or execution branch is removed.",
+      "ledgerEffect": "NONE FOR THE AMENDMENT ITSELF. The strict numerator moves only when the separately required public `Wasm.mem_successors_iff_step` declaration is kernel checked and exact-signature bound."
+    },
+    {
+      "id": "DEV-017",
+      "specSection": "7.1, 7.5, 10.1, and 14.1",
+      "status": "AMENDED INTO SPEC -- HARNESS RAW-WINDOW AVAILABILITY",
+      "adoptedIntoSpec": "AMD-017",
+      "issue": "The literal harness protocol required every lawful raw invocation to be copied into exported memory zero after a normal start return, but provided only the module's declared minimum pages before that copy. Core `with_mem` is partial and rejects a splice beyond the allocated byte list. Thus a module with a small memory minimum and the release-required wasm32 maximum could validate and instantiate, yet have no raw-install transition for a lawful invocation whose `(ptr,len)` window lies above the minimum. Requiring the released compiler to allocate all 65,536 pages initially would make every invocation allocate and charge 4 GiB and is not the stated cost objective.",
+      "resolution": "Immediately before the raw splice, the harness deterministically extends exported memory zero by exactly `requiredPages(ptr+len) - currentPages` pages. The existing Core `growMem` operation enforces the memory's declared maximum, while `Request.rawPageBound` enforces the profile's 65,536-page ceiling. The single install event retains `previousPages` and the exact `grownPages` delta; charging records that delta and the resulting peak together with the existing preparation and installed-byte coordinates. `growMemoryForRaw_splice_available` proves that every successful exact growth makes the complete raw window writable.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.Core.Harness.raw_install_without_growth_unavailable"
+      ],
+      "intendedContentProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.Harness.growMemoryForRaw_splice_available",
+        "WasmGemmGnaf.Wasm.Core.Harness.StepA.installRaw",
+        "WasmGemmGnaf.Wasm.eventCostBody"
+      ],
+      "strengthEffect": "STRENGTHENING OF THE HARNESS TOTALITY INTENT. No module form, invocation, or Core execution branch is removed; the protocol now constructs the memory capacity its unconditional raw-copy clause already required, and it does so with the least possible whole-page delta.",
+      "ledgerEffect": "NONE. This harness repair is compiler/refinement infrastructure and earns zero strict-ledger credit by itself; compiler correctness and exact cost remain separately required."
+    },
+    {
+      "id": "DEV-018",
+      "specSection": "4 and 7.3",
+      "status": "AMENDED INTO SPEC -- IMPLICIT SELECT STACK-BOTTOM COMPLETENESS",
+      "adoptedIntoSpec": "AMD-018",
+      "issue": "The full amended stack checker tested the two operand types inferred by implicit `select` with `ValType.isNumOrVec`. An unreachable polymorphic stack supplies `BOT` for either inferred operand, and `BOT` is declaratively below the rule's numeric/vector witness. Consequently `[unreachable, select none]` has an amended `Instrs_okA` derivation but the executable `checkSeqA` returned `none`.",
+      "resolution": "The sole amended checker tests inferred implicit-select operands with `ValType.nvb`, the existing predicate that is true exactly for numeric, vector, or stack-bottom operands. It retains the same comparability check and result principalization. Grammar operands and reachable numeric/vector behavior are unchanged; only the declaratively admitted polymorphic-bottom case is restored.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.Core.Validate.unreachable_select_rejected_before_amd018"
+      ],
+      "intendedContentProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.Validate.unreachable_select_checkSeqA",
+        "WasmGemmGnaf.Wasm.Core.Validate.checkSeqA_complete"
+      ],
+      "strengthEffect": "WIDENING OF THE EXECUTABLE CHECKER TO EXACTLY THE EXISTING AMENDED DECLARATIVE REACH. No validation rule or Core syntax is added.",
+      "ledgerEffect": "NONE FOR THE AMENDMENT ITSELF. Validator completeness and the public validate_bool_iff count only when their separate kernel declarations and exact signature bindings are green."
+    },
+    {
+      "id": "DEV-019",
+      "specSection": "4 and 7.1",
+      "status": "RECORDED IN SPEC -- EXPLICIT CONSTANT-INITIALIZER TERMINALITY",
+      "adoptedIntoSpec": "AMD-019",
+      "issue": "The raw transcription treats every `ref.null heaptype` administrative instruction as a value, including `ref.null (_IDX x)`, while `Step_read/ref.null-idx` simultaneously reduces that same term to `ref.null (DEF dt)` when the runtime type lookup succeeds. Consequently a constant expression containing the indexed null has two unequal `Eval_exprEraseA` terminal results: the reflexive raw indexed value and the closed value after the read step. Fresh relational instantiation is therefore not target-functional even for an `Expr_const`, while the executable initializer always closes the indexed null.",
+      "resolution": "The public Harness initialization relation retains the full amended `InstantiateA` derivation and export-resolution evidence, and additionally requires its target to be the result of the ordinary executable initialization candidate computed from the same empty store, closed module, and deterministic export lookups. This makes reducible indexed `ref.null` nonterminal on the public initialization edge without changing `Config`, `InstantiateA`, module validation, or any post-initialization Core step. `Val` has no other index-bearing value form; numeric, vector, and address references contain no `TypeUse`, while `_REC` nulls have no analogous runtime rewrite.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.Core.Exec.eval_expr_indexed_ref_null_not_target_functional"
+      ],
+      "intendedContentProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.Harness.InitializesA.target_functional",
+        "WasmGemmGnaf.Wasm.mem_successors_iff_step"
+      ],
+      "strengthEffect": "NEUTRAL IN SOURCE-LANGUAGE AUTHORITY REACH; NARROWING ONLY OF A RAW LEAN TERMINAL DERIVATION WHOSE VALUE STILL HAS THE INDEX THAT THE PINNED runtime rule requires closing. The relational `InstantiateA` witness remains mandatory and unchanged.",
+      "ledgerEffect": "NONE FOR THE AMENDMENT ITSELF. The strict numerator moves only when the separately required public successor equivalence is kernel checked and exact-signature bound."
+    },
+    {
+      "id": "DEV-020",
+      "specSection": "7.1, 7.3, and 7.5",
+      "status": "AMENDED INTO SPEC -- COMPUTED HARNESS ABI READINESS",
+      "adoptedIntoSpec": "AMD-020",
+      "issue": "The proof-carrying public request originally recorded successful closed instantiation and the existence of memory/function exports with the requested names, but did not record that the exact exports selected by the executable initializer were usable by the remaining Harness phases. A same-name function of the wrong Core type makes `InvokeA` unavailable at `readyToEnter`; an exported memory other than memory zero, or a memory whose declared maximum cannot accommodate the lawful raw window, makes `installRaw?` return `none`. Such a request could therefore enter the public carrier and later have neither a terminal classification nor a Harness transition for reasons unrelated to Core execution.",
+      "resolution": "`Request.Valid` records the exact deterministic memory and function selector equalities from the same executable closed instantiation, the computed `(i32,i32)->i32` function lookup, and a successful exact raw-growth/splice computation at the instantiated state. `initialGemmInvocationCosted` performs the same checks and returns explicit failure codes when either computation fails. These fields are ordinary checked equalities and decidable data facts; no progress, termination, coverage, or successor conclusion is stored. Function readiness is transported by the actual store-preservation theorem, and raw-install readiness is consumed only by the phase where the computed splice is performed.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.Core.Harness.not_gemmFunctionReady_of_missing",
+        "WasmGemmGnaf.Wasm.Core.Harness.not_rawInstallReady_of_memory_zero_missing"
+      ],
+      "intendedContentProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.Harness.RawInstallReady.exists_result",
+        "WasmGemmGnaf.Wasm.Core.Harness.TypedConfig.readyToEnter_successors_nonempty"
+      ],
+      "strengthEffect": "NARROWING ONLY OF MALFORMED OR ABI-UNRUNNABLE HARNESS REQUESTS. Public `Config`, amended Core execution, module validation, the competitor universe, and every release proposition retain their existing quantifiers; a valid released request must now exhibit the computations the already specified protocol performs.",
+      "ledgerEffect": "NONE FOR THE AMENDMENT ITSELF. The checks and their preservation lemmas are infrastructure; `Wasm.validation_progress` remains a separate exact kernel obligation."
+    },
+    {
+      "id": "DEV-021",
+      "specSection": "4 and 7.3",
+      "status": "AMENDED INTO SPEC -- LOCAL VALUE-TYPE VALIDITY",
+      "adoptedIntoSpec": "AMD-021",
+      "issue": "The pinned `Local_ok` rules test only whether a local value type has a default value. They do not require `Valtype_ok`, so a function may declare a non-null reference local whose type index is out of range and remain declaratively valid when its body does not expose the malformed type. Such a function's body context cannot satisfy the validity invariant required by the executable amended Core validator.",
+      "resolution": "The sole amended `Local_okA` relation requires `Valtype_okA C l.valtype` in both the defaultable and nondefaultable constructors. The full local checker performs the same amended value-type check before selecting SET or UNSET initialization state.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.Core.Local_ok.pinned_out_of_range_ref_local"
+      ],
+      "intendedContentProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.Local_okA.valtype_ok",
+        "WasmGemmGnaf.Wasm.Core.Local_okA.rejects_out_of_range_ref_local",
+        "WasmGemmGnaf.Wasm.Core.Validate.checkLocalA_complete"
+      ],
+      "strengthEffect": "NARROWING OF MALFORMED LOCAL DECLARATIONS ONLY. Every local value type accepted by the executable Core validator is preserved; no instruction, valid module, public profile, or competitor is removed.",
+      "ledgerEffect": "NONE FOR THE AMENDMENT ITSELF. Only the separately kernel-checked full module validator equivalence and exact public binding may move the strict ledger."
+    },
+    {
+      "id": "DEV-022",
+      "specSection": "4 and 7.3",
+      "status": "AMENDED INTO SPEC -- RECURSIVE HEAP-SHAPE COHERENCE",
+      "adoptedIntoSpec": "AMD-022",
+      "issue": "Recursive type validation accepts grammar `_IDX` references against the stored composite shape, then rolls in-group references to `REC i`. The pinned heap-subtyping relation classifies literal defined types as STRUCT, ARRAY, or FUNC but has no corresponding rule for a `REC i` whose exact entry in `C.RECS` has that outer composite shape. Consequently a source-checked recursive group can lose semantic defined-type validity solely during the prescribed rolling step.",
+      "resolution": "The sole amended `Heaptype_subA` relation adds three shape-coherence constructors. Each permits `REC i` to subtype exactly STRUCT, ARRAY, or FUNC only when `C.RECS[i]` is present and its stored composite type has that exact outer constructor. No arbitrary recursive expansion, declared-super reachability, or direct abstract-supertype edge is added.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.Core.rolledCounter_types_ok",
+        "WasmGemmGnaf.Wasm.Core.rolledCounter_not_storedDeftypesOkA"
+      ],
+      "intendedContentProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.Heaptype_subA.rec_struct_any",
+        "WasmGemmGnaf.Wasm.Core.Types_okA.finalStoredDeftypesOkA",
+        "WasmGemmGnaf.Wasm.validate_bool_iff"
+      ],
+      "strengthEffect": "WIDENING ONLY OF THE AMENDED SEMANTIC SUBTYPING PRESENTATION TO MATCH THE EXISTING EXECUTABLE SOURCE CHECKER'S EXACT STORED REC SHAPES. No syntax, module, public profile, competitor, arbitrary REC expansion, or declared-super edge is added.",
+      "ledgerEffect": "NONE FOR THE AMENDMENT ITSELF. The repair earns no proof credit; the full module validator equivalence remains a separate exact kernel declaration."
+    },
+    {
+      "id": "DEV-023",
+      "specSection": "4, 7.1, 7.3, and 15",
+      "status": "AMENDED INTO SPEC -- HANDLER-BODY EVALUATION AND TRAP PROPAGATION",
+      "adoptedIntoSpec": "AMD-023",
+      "issue": "The pinned execution rules construct `HANDLER_ n catch* (LABEL_ n eps instr*)` for `try_table`, but expose neither a context rule that steps the handler body nor a pure rule that releases `HANDLER_ n catch* TRAP`. Consequently a fully amended-valid module reaches a nonterminal public configuration whose handler encloses a reducible label body while the exact successor list is empty; even a handler whose body has reduced to `TRAP` cannot propagate that trap.",
+      "resolution": "The sole amended Core relation adds the ordinary evaluation-context closure `Step/ctxt-handler`, preserving the handler arity and catches while stepping its body, and the administrative propagation rule `Step_pure/trap-handler`, reducing a handler whose complete body is `TRAP` to `TRAP`. The event-labelled public relation and exact successor tree retain the corresponding recursive handler event, cost recursion, soundness, completeness, and functionality proofs.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.handler_validation_progress_counterexample"
+      ],
+      "intendedContentProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.Exec.StepA.ctxtHandler",
+        "WasmGemmGnaf.Wasm.Core.Exec.StepA.trapHandler",
+        "WasmGemmGnaf.Wasm.validation_progress"
+      ],
+      "strengthEffect": "WIDENING ONLY BY CLOSING THE ALREADY-CONSTRUCTED ADMINISTRATIVE HANDLER UNDER ITS BODY REDUCTION AND TRAP PROPAGATION. No source syntax, validation judgment, module, public profile, competitor, primitive instruction result, or unrelated execution edge is changed.",
+      "ledgerEffect": "NONE FOR THE AMENDMENT ITSELF. The repair earns no proof credit; only the separately kernel-checked exact public `Wasm.validation_progress` theorem may discharge WS-011."
     }
   ],
   "amendments": [
@@ -299,7 +478,7 @@
       "now": "theorem incremental_eq_full_rebuild (hcoherent : Atlas.Coherent state.body) (hupdate : (Atlas.accumulate budget state delta).result = .complete successor) : Atlas.canonicalize successor.body = Atlas.canonicalize (Atlas.semanticRebuildBodyWith state.body.scope (state.body.declarationBase U delta.declarations)); with `incremental_eq_full_rebuild_exact`, `semanticApplyBody_coherent` and `rebuild_coherent` required beside it, and `Atlas.Coherent` and `Atlas.semanticRebuildBodyWith` defined in the clause's own fenced block.",
       "rationale": "The superseded text is KERNEL-REFUTED six ways by Atlas/Rebuild.lean, including that restricting it to unscoped states does not rescue it. The obvious repair -- adding BOTH load-bearing hypotheses, which is precisely the shape of the declaration already named `Atlas.incremental_eq_full_rebuild` -- was REJECTED: amending SPEC to match a weaker theorem the repository happens to have is the failure mode this log exists to prevent. SPEC was amended to the STRONGER scope-free form instead, which fixes the scope objection by rebuilding in the state's own scope rather than assuming it away.",
       "strengthEffect": "STRENGTHENING. The amended statement implies the repaired literal one (instantiate the scope at `unscoped`) and additionally constrains every scoped state, about which the superseded text said nothing true. `Atlas.Coherent` is discharged rather than assumed, by the two coherence laws now required beside it.",
-      "ledgerEffect": "NONE, AND THE GAP REVERSED DIRECTION. `Atlas.incremental_eq_full_rebuild` stays OUTSTANDING -- now because the declaration wearing the required name is WEAKER than SPEC asks, not stronger. The amended proposition is proved here as `Atlas.incremental_eq_full_rebuild_scoped`; the remaining action is a restatement under the required name in Atlas/Rebuild.lean, outside the files the amending change owned.",
+      "ledgerEffect": "DISCHARGED. `Atlas.incremental_eq_full_rebuild` now carries the exact AMD-003 proposition and is bound exactly in the strict signature ledger.",
       "refutedBy": [
         "WasmGemmGnaf.Atlas.not_incremental_eq_full_rebuild",
         "WasmGemmGnaf.Atlas.incremental_ne_full_rebuild_of_objectiveId",
@@ -308,7 +487,7 @@
         "WasmGemmGnaf.Atlas.Counterexample.incoherent_ne_full_rebuild"
       ],
       "replacementProvedBy": [
-        "WasmGemmGnaf.Atlas.incremental_eq_full_rebuild_scoped",
+        "WasmGemmGnaf.Atlas.incremental_eq_full_rebuild",
         "WasmGemmGnaf.Atlas.incremental_eq_full_rebuild_exact",
         "WasmGemmGnaf.Atlas.semanticApplyBody_coherent",
         "WasmGemmGnaf.Atlas.rebuild_coherent"
@@ -499,6 +678,195 @@
       "replacementProvedBy": [
         "WasmGemmGnaf.Wasm.Core.Subtype_ok2A",
         "WasmGemmGnaf.Wasm.Core.Subtype_ok2A.to_pinned"
+      ]
+    },
+    {
+      "id": "AMD-014",
+      "specSection": "4 and 7.3",
+      "date": "2026-08-14",
+      "deviation": "DEV-014",
+      "was": "Pinned instantiation required each constant expression to reduce back to its source state, despite admitting GC allocation instructions that necessarily extend the managed heap.",
+      "now": "The public amended initializer threads post-expression states through global, table, and element initialization and carries the resulting structure and array heaps into canonical module allocation; the pinned relation remains an authority reference only.",
+      "rationale": "A state-writing Core reduction cannot have the same source and final store. Requiring equality made valid GC-allocating initializers uninstantiable and broke the validator-to-execution spine.",
+      "strengthEffect": "WIDENING TO THE ALREADY VALIDATED CORE CONSTANT-EXPRESSION LANGUAGE. No syntax or validation rule is added.",
+      "ledgerEffect": "NONE. Amendment text alone discharges zero claims; executable initialization and evaluator reflection must be proved separately.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.Core.Exec.gc_const_changes_state"
+      ],
+      "replacementProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.Exec.EvalGlobalsA",
+        "WasmGemmGnaf.Wasm.Core.Exec.EvalRefExprsA",
+        "WasmGemmGnaf.Wasm.Core.Exec.EvalRefExprListsA",
+        "WasmGemmGnaf.Wasm.Core.Exec.InstantiateA"
+      ]
+    },
+    {
+      "id": "AMD-015",
+      "specSection": "4 and 7.3",
+      "date": "2026-08-14",
+      "deviation": "DEV-015",
+      "was": "Pinned `Rectype_ok/cons` could recurse into a suffix proved by `_rec2`, resetting relative `REC` scope even though later semantic closure uses the full original group.",
+      "now": "The release ordinary-cons rule requires its remaining suffix to contain no relative `REC` use in declared-supertype position; root `_rec2` remains available and the sole checker enforces the same condition.",
+      "rationale": "Without the condition, a three-entry mixed proof validates `FUNC <: REC 0` against the suffix's first function but closes `REC 0` to the full group's first structure, deriving `NOFUNC <: STRUCT` while every executable heap decision returns false.",
+      "strengthEffect": "NARROWING OF PROOF-INTERNAL SCOPE REBASING ONLY. Grammar type uses are `_IDX`, so no Core syntax is removed.",
+      "ledgerEffect": "NONE. Amendment text alone discharges zero claims; checker equivalence must be proved separately.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.Core.heapDecision_not_complete_of_mixed_rec_scope"
+      ],
+      "replacementProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.RecType.noRebasedRecSupers",
+        "WasmGemmGnaf.Wasm.Core.Rectype_okA",
+        "WasmGemmGnaf.Wasm.Core.Validate.checkRectypeOkA_sound"
+      ]
+    },
+    {
+      "id": "AMD-016",
+      "specSection": "4 and 7.1",
+      "date": "2026-08-15",
+      "deviation": "DEV-016",
+      "was": "The Lean execution transcription exposed raw out-of-range `FN` constructors at the three read rules whose result literals are solved only by byte equations, although the pinned metavariables range over side-conditioned syntax sorts.",
+      "now": "The release execution selector explicitly requires `Num_.wf` for `load-num-val`'s result and storage-literal well-formedness for every result of `array.new_data-num` and `array.init_data-num`; the pinned selector and all source-language executions are unchanged.",
+      "rationale": "Without the implicit syntax-sort bound, `nbytes_` wraps an unbounded malformed float magnitude and admits infinitely many distinct targets for one fixed source and event. Explicitly restoring the bound is the smallest faithful repair and leaves the source's set-valued numeric nondeterminism intact.",
+      "strengthEffect": "NEUTRAL IN AUTHORITY REACH; NARROWING ONLY OF RAW LEAN TERMS OUTSIDE THE PINNED SYNTAX SORT.",
+      "ledgerEffect": "NONE. Amendment text alone discharges zero claims; the exact public successor theorem earns credit only when separately proved.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.Core.Exec.step_read_loadNumVal_raw_not_target_functional"
+      ],
+      "replacementProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.Exec.Step_readA.loadNumVal_result_wf",
+        "WasmGemmGnaf.Wasm.mem_successors_iff_step"
+      ]
+    },
+    {
+      "id": "AMD-017",
+      "specSection": "7.1, 7.5, 10.1, and 14.1",
+      "date": "2026-08-15",
+      "deviation": "DEV-017",
+      "was": "After a normal start return, the harness copied every lawful raw invocation into exported memory zero without first ensuring that the invocation window was allocated; `with_mem` therefore had no transition above a module's initial memory minimum.",
+      "now": "Immediately before copying raw bytes, the harness grows exported memory zero by exactly `requiredPages(ptr+len) - currentPages` pages, subject to the declared memory maximum and the profile ceiling, and its install event charges and retains that exact growth delta and resulting peak.",
+      "rationale": "A lawful wasm32 raw window is bounded by the profile maximum, not by a candidate module's initial memory minimum. Exact pre-splice growth preserves the promised invocation domain without forcing every compiled module to allocate 65,536 pages on every run.",
+      "strengthEffect": "STRENGTHENING. The amended protocol fulfills the existing all-lawful-invocations copy requirement with the unique least whole-page extension; no candidate, input, or execution is excluded.",
+      "ledgerEffect": "NONE. This amendment earns zero strict-ledger credit; only the separately proved compiler refinement and exact-cost declarations can move the numerator.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.Core.Harness.raw_install_without_growth_unavailable"
+      ],
+      "replacementProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.Harness.growMemoryForRaw_splice_available",
+        "WasmGemmGnaf.Wasm.Core.Harness.StepA.installRaw",
+        "WasmGemmGnaf.Wasm.eventCostBody"
+      ]
+    },
+    {
+      "id": "AMD-018",
+      "specSection": "4 and 7.3",
+      "date": "2026-08-15",
+      "deviation": "DEV-018",
+      "was": "The amended implicit-select checker required each inferred operand itself to be a numeric or vector type, rejecting `BOT` supplied by an unreachable polymorphic stack.",
+      "now": "The amended checker accepts inferred numeric, vector, or `BOT` operands through `ValType.nvb`, while retaining the exact subtype-comparability and principal-result checks.",
+      "rationale": "The declarative implicit-select rule permits `BOT` as its operand type because `BOT` is below the required numeric/vector witness. Executable validation must therefore accept `[unreachable, select none]` rather than lose a declaratively valid sequence.",
+      "strengthEffect": "WIDENING TO EXISTING DECLARATIVE REACH ONLY. Reachable numeric/vector validation is unchanged and no instruction form is added.",
+      "ledgerEffect": "NONE. The repair earns no proof credit; only separately checked full validator completeness and public equivalence declarations can move the strict ledger.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.Core.Validate.unreachable_select_rejected_before_amd018"
+      ],
+      "replacementProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.Validate.unreachable_select_checkSeqA",
+        "WasmGemmGnaf.Wasm.Core.Validate.checkSeqA_complete"
+      ]
+    },
+    {
+      "id": "AMD-019",
+      "specSection": "4 and 7.1",
+      "date": "2026-08-15",
+      "deviation": "DEV-019",
+      "was": "Fresh Harness initialization accepted any amended relational `InstantiateA` target. Because indexed `ref.null` is both a raw administrative value and the source of `Step_read/ref.null-idx`, one valid constant expression admitted unequal raw-indexed and closed terminal targets.",
+      "now": "The public Harness initialization edge still requires the amended `InstantiateA` and resolved-export propositions, and also requires that its complete target equal the ordinary executable initialization candidate computed from the same empty store and request. The candidate closes indexed `ref.null` before it can be terminal and resolves both exports deterministically.",
+      "rationale": "A public finite successor list cannot be exact for a fresh-initialization relation with a second reflexive target that the executable initializer intentionally normalizes. Connecting the relation to its already required executable witness is the smallest boundary-local repair: it preserves every source execution and all Core propositions while excluding only the raw reducible terminal representation.",
+      "strengthEffect": "NEUTRAL IN SOURCE-LANGUAGE AUTHORITY REACH; NARROWING ONLY OF THE NONCANONICAL RAW LEAN TERMINAL DERIVATION.",
+      "ledgerEffect": "NONE. The amendment record earns zero proof credit; only the exact public successor theorem can move the strict ledger.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.Core.Exec.eval_expr_indexed_ref_null_not_target_functional"
+      ],
+      "replacementProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.Harness.InitializesA.target_functional",
+        "WasmGemmGnaf.Wasm.mem_successors_iff_step"
+      ]
+    },
+    {
+      "id": "AMD-020",
+      "specSection": "7.1, 7.3, and 7.5",
+      "date": "2026-08-15",
+      "deviation": "DEV-020",
+      "was": "A proof-carrying Harness request required closed instantiation and name-matching exports but did not require the executable initializer's selected function to have the released ABI or its selected memory to admit the exact raw growth and splice.",
+      "now": "The request records exact deterministic selector equalities plus successful computed `GemmFunctionReady` and `RawInstallReady` checks from the same instantiated state; the initializer repeats those computations and preserves explicit failure.",
+      "rationale": "The remaining Harness phases are deliberately partial computations. Public reachability may begin only from independent checked input data showing that the selected ABI endpoints exist and compute; otherwise a wrong-typed function or unusable memory creates a false stuck phase unrelated to Core progress.",
+      "strengthEffect": "NARROWING ONLY OF MALFORMED OR ABI-UNRUNNABLE HARNESS REQUESTS. Core configurations, execution propositions, profile quantifiers, and competitor programs are unchanged.",
+      "ledgerEffect": "NONE. The amendment record and computed certificates earn no strict proof credit; exact public progress must still be proved separately.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.Core.Harness.not_gemmFunctionReady_of_missing",
+        "WasmGemmGnaf.Wasm.Core.Harness.not_rawInstallReady_of_memory_zero_missing"
+      ],
+      "replacementProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.Harness.RawInstallReady.exists_result",
+        "WasmGemmGnaf.Wasm.Core.Harness.TypedConfig.readyToEnter_successors_nonempty"
+      ]
+    },
+    {
+      "id": "AMD-021",
+      "specSection": "4 and 7.3",
+      "date": "2026-08-15",
+      "deviation": "DEV-021",
+      "was": "Pinned local validation required only defaultability or nondefaultability and admitted syntactic reference locals whose type indices were out of range.",
+      "now": "The release `Local_okA` constructors additionally require amended value-type validity in the enclosing module context, and the executable full local checker tests the same proposition.",
+      "rationale": "A malformed local type otherwise enters a declaratively valid function while making the function-body type environment invalid. Requiring the ordinary value-type judgment is the smallest repair and matches executable Core validation.",
+      "strengthEffect": "NARROWING OF MALFORMED LOCAL DECLARATIONS ONLY. Valid Core modules and the public competitor universe are unchanged.",
+      "ledgerEffect": "NONE. The repair earns no proof credit; full module validation equivalence remains a separate exact declaration.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.Core.Local_ok.pinned_out_of_range_ref_local"
+      ],
+      "replacementProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.Local_okA.valtype_ok",
+        "WasmGemmGnaf.Wasm.Core.Local_okA.rejects_out_of_range_ref_local",
+        "WasmGemmGnaf.Wasm.Core.Validate.checkLocalA_complete"
+      ]
+    },
+    {
+      "id": "AMD-022",
+      "specSection": "4 and 7.3",
+      "date": "2026-08-15",
+      "deviation": "DEV-022",
+      "was": "Pinned recursive heap subtyping followed declared supertypes from `REC i` but did not classify the recursive variable by the exact STRUCT, ARRAY, or FUNC outer shape stored at `C.RECS[i]`.",
+      "now": "The release `Heaptype_subA` relation additionally derives `REC i <: STRUCT`, `REC i <: ARRAY`, or `REC i <: FUNC` only from an exact lookup of the corresponding composite outer shape at `C.RECS[i]`.",
+      "rationale": "Grammar `_IDX` validation already observes the source member's composite shape before rolling. Preserving that same exact shape for the resulting `REC` variable is the smallest repair that keeps source-checked recursive groups semantically valid.",
+      "strengthEffect": "WIDENING ONLY OF SEMANTIC REC-SHAPE COHERENCE TO MATCH THE EXISTING EXECUTABLE SOURCE CHECKER. No source program, public profile, competitor, arbitrary recursive expansion, or declared-super reachability is added.",
+      "ledgerEffect": "NONE. The repair earns no proof credit; full module validation equivalence remains a separate exact declaration.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.Core.rolledCounter_types_ok",
+        "WasmGemmGnaf.Wasm.Core.rolledCounter_not_storedDeftypesOkA"
+      ],
+      "replacementProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.Heaptype_subA.rec_struct_any",
+        "WasmGemmGnaf.Wasm.Core.Types_okA.finalStoredDeftypesOkA",
+        "WasmGemmGnaf.Wasm.validate_bool_iff"
+      ]
+    },
+    {
+      "id": "AMD-023",
+      "specSection": "4, 7.1, 7.3, and 15",
+      "date": "2026-08-15",
+      "deviation": "DEV-023",
+      "was": "Pinned execution constructed administrative handlers for `try_table` but provided neither an evaluation context for their bodies nor a rule propagating a completed handler trap.",
+      "now": "The release execution relation additionally closes handler bodies under one-step reduction and reduces `HANDLER_ n catch* TRAP` to `TRAP`, with exact event-labelled and executable-successor counterparts.",
+      "rationale": "Without these two administrative rules, a validated `try_table` immediately reaches an opaque nonterminal handler and public progress is false. Context closure and final trap release are the smallest coherent repair because the existing branch, return, throw, and value handler rules already presuppose an evaluated handler body.",
+      "strengthEffect": "WIDENING ONLY OF ADMINISTRATIVE HANDLER EXECUTION ALREADY CREATED BY VALID SOURCE `try_table`. No syntax, validation reach, primitive result, module, profile, or competitor is added.",
+      "ledgerEffect": "NONE. The repair earns no proof credit; exact public progress remains a separate required theorem.",
+      "refutedBy": [
+        "WasmGemmGnaf.Wasm.handler_validation_progress_counterexample"
+      ],
+      "replacementProvedBy": [
+        "WasmGemmGnaf.Wasm.Core.Exec.StepA.ctxtHandler",
+        "WasmGemmGnaf.Wasm.Core.Exec.StepA.trapHandler",
+        "WasmGemmGnaf.Wasm.validation_progress"
       ]
     }
   ]

@@ -35,7 +35,11 @@ pub fn run(targets: &[String]) -> Result<Outcome> {
 /// report. The gate quotes the report, so it is produced rather than printed.
 pub fn report(targets: &[String]) -> Result<std::result::Result<String, String>> {
     let default = vec!["WasmGemmGnaf".to_string()];
-    let targets = if targets.is_empty() { &default } else { targets };
+    let targets = if targets.is_empty() {
+        &default
+    } else {
+        targets
+    };
 
     let mut hits = Vec::new();
     let mut scanned = 0usize;

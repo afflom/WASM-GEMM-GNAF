@@ -176,6 +176,142 @@
       "expectedRejector": "Lean elaboration of the actual Wasm.encode_decode_roundtrip and Artifact.decode_emit proof chains",
       "status": "rejects",
       "note": "Each unmodified full source file is elaborated first as its own control. M22 then changes only the corresponding public encoder implementation and requires the real downstream round-trip proof chain to fail. This guards both the public amended-Core encoder and the chosen-output emitter without claiming byte uniqueness, release selection, GEMM correctness, or a SystemEvaluation."
+    },
+    {
+      "id": "M23",
+      "family": "CO",
+      "plants": "replacement of the exact public aggregate's moduleBytes = bytes.size conjunct by moduleBytes = 0 on a COPY of Cost/Aggregate.lean while retaining the real module_bytes_exact proof",
+      "expectedRejector": "Lean elaboration of the actual Cost.module_bytes_exact projection theorem",
+      "status": "rejects",
+      "note": "The unmodified aggregate source is elaborated first as the control. The mutant changes only the byte-accounting conjunct, so rejection demonstrates that the exact theorem is connected to the emitted byte array rather than an unrelated free/static parameter."
+    },
+    {
+      "id": "M24",
+      "family": "WS",
+      "plants": "replacement of the post-expression state in the public amended global-initializer constructor by its source state on a COPY of Core/InstantiationAmended.lean",
+      "expectedRejector": "Lean elaboration of the actual GC-state-threading witness and public amended initializer relation",
+      "status": "rejects",
+      "note": "The unmodified amended initializer is elaborated first as the control. M24 then restores only the pinned same-state `Eval_expr` premise in `EvalGlobalsA.cons`; the real heap-persistence proof must fail because `struct.new` and `array.new*` append managed-heap instances. This guards AMD-014's kernel-facing state-threading edge rather than merely checking the amendment record."
+    },
+    {
+      "id": "M25",
+      "family": "WS",
+      "plants": "removal of the exact no-rebased-`REC` suffix conjunct from a COPY of the amended recursive-type checker, restoring the pinned mixed `Rectype_ok/cons` then `_rec2` scope reset",
+      "expectedRejector": "Lean elaboration of the real `ValidateTypes.lean` soundness proof against AMD-015's `Rectype_okA/cons` premise",
+      "status": "rejects",
+      "note": "The unmodified validator is elaborated first as the control. M25 then removes only the executable suffix-scope check from the ordinary-cons arm. The real soundness proof must fail because it can no longer construct the amended declarative premise. A separate kernel counterexample preserves the pinned mixed derivation and shows it derives `NOFUNC <: STRUCT` although every heap-decision fuel returns false."
+    },
+    {
+      "id": "M26",
+      "family": "WS",
+      "plants": "replacement of the public costed-reduction constructor's exact erased event by a different Harness initialization event on a COPY of Wasm/Evaluate.lean, where the public CostedReduces and its structural erasure proof are defined",
+      "expectedRejector": "Lean elaboration of the real public CostedReduces erasure proof and costed_erase_iff_plain_run theorem",
+      "status": "rejects",
+      "note": "The unmodified public erasure module is elaborated first as the control. M26 then changes only the event consumed by CostedReduces.cons while leaving CostedEvent.erase unchanged; the structural erasure proof must fail because a charged transition no longer projects to the authority trace it claims."
+    },
+    {
+      "id": "M27",
+      "family": "BI",
+      "plants": "deletion of the public compiler's mandatory private-status-local epilogue from a COPY of GNAF/Compile.lean while retaining the real lowering equation",
+      "expectedRejector": "Lean elaboration of GNAF.bodyCode_has_status_epilogue in the full copied compiler source",
+      "status": "rejects",
+      "note": "The unmodified direct amended-Core compiler is elaborated first as the control. M27 then changes the actual bodyCode lowering, not a fixture or expected output, by deleting its final private-status-local read. The kernel-checked source equation must cease to elaborate, guarding BI-001/BI-010's real public compile target against an ABI-changing lowering edit."
+    },
+    {
+      "id": "M28",
+      "family": "UV",
+      "plants": "replacement of the canonical public evaluator equation in SystemEvaluationRel by a reflexive completed-result equation on a COPY of Universal/Evaluate.lean",
+      "expectedRejector": "Lean elaboration of the real Universal.system_evaluation_rel_sound reflection proof",
+      "status": "rejects",
+      "note": "The unmodified executable evaluator is elaborated first as the control. The mutant makes every supplied SystemEvaluation satisfy the relation without running decoding, validation, input enumeration, or execution. The real soundness proof must then fail because it can no longer derive ProfileValid from the relation equation."
+    },
+    {
+      "id": "M29",
+      "family": "WS",
+      "plants": "removal of the amended float-literal syntax-well-formedness premise from the full-width load rule on a COPY of the public amended-Core execution/successor proof chain",
+      "expectedRejector": "Lean elaboration of the real byte-decoder completeness and mem_successors_iff_step proof against the amended read relation",
+      "status": "rejects",
+      "note": "The unmodified execution and successor sources are elaborated first as the control. M29 then makes the amended load-num-val premise vacuous while retaining the real proof that every relational target is the single canonical decoded literal. The mutant must fail on the kernel-checked malformed-F32 collision witnessed by DEV-016; changing a fixture or expected runtime output is insufficient."
+    },
+    {
+      "id": "M30",
+      "family": "UV",
+      "plants": "replacement of the canonical public costed-explorer call in a COPY of Universal/Evaluate.lean by an unconditional initialization-failure result",
+      "expectedRejector": "Lean elaboration of the real execution_checker_complete_within_sublevel and system_evaluation_rel_complete proofs",
+      "status": "rejects",
+      "note": "The unmodified executable evaluator is elaborated first as the control. M30 then disconnects its per-input checker from Wasm.exploreAllCosted while retaining the real completeness proofs. The mutant must fail because semantic correctness and the no-overrun resource premise can no longer produce a completed input or system evaluation; changing a fixture or an expected output is insufficient."
+    },
+    {
+      "id": "M31",
+      "family": "BI",
+      "plants": "replacement of the Harness raw-install target page count by one page fewer on a COPY of Core/HarnessExecution.lean",
+      "expectedRejector": "Lean elaboration of the real growMemoryForRaw_splice_available theorem against the mutated growth computation",
+      "status": "rejects",
+      "note": "The unmodified Harness source is elaborated first as the control. M31 then changes the actual target used by the raw-install transition from `requiredPages(ptr+len)` to one page short while retaining the kernel proof that a successful growth makes the complete splice window available. The mutant must fail on a page-boundary invocation; changing a fixture or an expected cost is insufficient. M30 is reserved for the independent Universal proof family."
+    },
+    {
+      "id": "M32",
+      "family": "WS",
+      "plants": "replacement of AMD-018's `ValType.nvb` implicit-select operand tests by `ValType.isNumOrVec` on a COPY of the sole full amended checker",
+      "expectedRejector": "Lean elaboration of the real `Validate.unreachable_select_checkSeqA` theorem, stated beside the production `checkInstrA` in Wasm/Core/ValidateInstr.lean",
+      "status": "rejects",
+      "note": "The unmodified full checker/completeness source is elaborated first as the control. M32 then restores only the pre-amendment implicit-select test. The real two-instruction `[unreachable, select none]` theorem must fail because polymorphic pops infer `BOT`, which the amended declarative rule admits below its numeric/vector witness. The mutation changes the production checker, not a fixture or expected output."
+    },
+    {
+      "id": "M33",
+      "family": "WS",
+      "plants": "removal of AMD-019's executable-candidate equality premise from the public Harness `InitializesA` constructor on a COPY of the initialization/successor proof chain",
+      "expectedRejector": "Lean elaboration of the real `Harness.InitializesA.target_functional` and `Wasm.mem_successors_iff_step` proofs",
+      "status": "rejects",
+      "note": "The unmodified Harness initialization boundary is elaborated first as the control. M33 then removes only the equality that excludes a reflexively terminal indexed `ref.null`, while retaining the kernel counterexample and real target-functionality/successor proofs. The mutant must fail because the relation again admits both the raw indexed-null target and the closed target selected by `Step_read/ref.null-idx`; changing an evaluator fixture is insufficient."
+    },
+    {
+      "id": "M34",
+      "family": "WS",
+      "plants": "two independent mutations on copies of the production Harness execution module: `GemmFunctionReady` replaced by `True`, and `RawInstallReady` replaced by `True`",
+      "expectedRejector": "Lean elaboration of the real missing-function and missing-memory-zero refutations and the positive readiness extraction theorems",
+      "status": "rejects",
+      "note": "The unmodified Harness execution source is elaborated first as the control. Each mutant removes one computed ABI-readiness check while leaving the real theorems that extract its executable content in place. The callable mutant must fail because `True` cannot yield a selected function instance; the raw-install mutant must fail because `True` cannot yield an `installRaw? = some ...` result. This attacks the production predicates, not a fixture, stored progress conclusion, or expected runtime output."
+    },
+    {
+      "id": "M35",
+      "family": "WS",
+      "plants": "removal of AMD-021's `Valtype_okA` premise from both constructors of the production `Local_okA` relation on a COPY of the amended module-validation source",
+      "expectedRejector": "Lean elaboration of the real `Local_okA.valtype_ok` extraction and out-of-range reference-local rejection theorem",
+      "status": "rejects",
+      "note": "The unmodified amended module relation is elaborated first as the control. M35 removes only the two local value-type validity premises while retaining the pinned counterexample and the production theorems that extract validity and reject it. The mutant must fail because defaultability alone admits a non-null reference local whose type index is absent from the context. This attacks the sole amended relation, not a fixture or an expected Boolean."
+    },
+    {
+      "id": "M36",
+      "family": "WS",
+      "plants": "removal of AMD-022's operative `REC i <: STRUCT` constructor from a COPY of the production amended heap-subtyping relation",
+      "expectedRejector": "Lean elaboration of the production `Heaptype_subA.rec_struct_any` REC-shape coherence theorem and downstream rolled-type/full-validator proof chain",
+      "status": "rejects",
+      "note": "The unmodified amended subtyping source is elaborated first as the control. M36 removes only the exact stored-STRUCT REC-shape constructor while retaining the production theorem that composes it through STRUCT and EQ to ANY. The mutant must fail at that real semantic bridge; ARRAY and FUNC rules, declared-super edges, and fixtures are unchanged."
+    },
+    {
+      "id": "M37",
+      "family": "BI",
+      "plants": "removal of the production scalar compiler's `setStatus` assignment from a COPY of the complete source-to-Core status simulation module",
+      "expectedRejector": "Lean elaboration of the real `DirectScalar.apply_statusAssignments` source/lowering correspondence theorem",
+      "status": "rejects",
+      "note": "The unmodified scalar runtime bridge is elaborated first as the control. M37 changes the operative status-assignment extraction, not an expected result or proof fixture, while retaining the theorem that equates it with the independent Plan.supportedStatus semantics. The mutant must fail because a checked setStatus plan would otherwise return a different status from its source evaluation."
+    },
+    {
+      "id": "M38",
+      "family": "BI",
+      "plants": "increment of the production compiler execution-cost dispatch coordinate from five to six on a COPY of the exact cost module",
+      "expectedRejector": "Lean elaboration of `DirectScalarCost.compose_formula_eq_certifiedCost` against the independent CheckedPlan.certifiedCost definition",
+      "status": "rejects",
+      "note": "The unmodified cost-reflection module is elaborated first as the control. M38 changes one real execution-cost coordinate while leaving the independently defined source formula and the coordinatewise composition proof untouched. The mutant must fail at the exact formula bridge; no expected output, evaluator result, or theorem statement is edited."
+    },
+    {
+      "id": "M39",
+      "family": "WS",
+      "plants": "removal of AMD-023's operative event-labelled handler-body context constructor from a COPY of the repaired Core execution/progress proof chain",
+      "expectedRejector": "Lean elaboration of the real handler structural-progress bridge and exact public `Wasm.validation_progress` theorem",
+      "status": "rejects",
+      "note": "The unmodified repaired execution and public progress sources are elaborated first as the control. M39 then removes only the operative `StepA.ctxtHandler` constructor (and its exact event arm) while retaining the production theorem that lifts an inner handler-body step and the full public progress proof. The mutant must fail on the claim-specific validated/reachable handler witness pinned by `handler_validation_progress_counterexample`; deleting a stored witness, changing an expected result, or weakening the public carrier is insufficient."
     }
   ],
   "note": "A mutation suite that merely expects runtime output differences does not test universal-coverage integrity (SPEC 18). M4 and M6 target claim integrity directly."

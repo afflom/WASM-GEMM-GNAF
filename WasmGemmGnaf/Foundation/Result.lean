@@ -180,6 +180,47 @@ end GlobalCertificate
 
 /-! ## Frontiers and negative certificates -/
 
+/-- A nonempty list in its semantic order.  Unlike a Pareto frontier, this
+carrier does not sort its elements: execution configurations are retained in
+the exact temporal order in which the machine visited them.  The canonical
+encoding of a list fixes that order, so no separate ordering certificate is
+appropriate here. -/
+structure NonemptyCanonicalList (α : Type) where
+  head : α
+  rest : List α
+
+namespace NonemptyCanonicalList
+
+variable {α : Type}
+
+/-- The underlying nonempty list, preserving semantic order. -/
+def elements (values : NonemptyCanonicalList α) : List α :=
+  values.head :: values.rest
+
+theorem elements_ne_nil (values : NonemptyCanonicalList α) :
+    values.elements ≠ [] := by
+  simp [elements]
+
+/-- The ordered underlying list determines the nonempty canonical carrier. -/
+theorem ext {left right : NonemptyCanonicalList α}
+    (h : left.elements = right.elements) : left = right := by
+  cases left with
+  | mk leftHead leftRest =>
+      cases right with
+      | mk rightHead rightRest =>
+          simp only [elements, List.cons.injEq] at h
+          rcases h with ⟨rfl, rfl⟩
+          rfl
+
+/-- The canonical singleton list. -/
+def singleton (value : α) : NonemptyCanonicalList α :=
+  { head := value, rest := [] }
+
+@[simp] theorem elements_singleton (value : α) :
+    (singleton value).elements = [value] := rfl
+
+end NonemptyCanonicalList
+
 /-- A nonempty frontier presented in the canonical byte order. -/
 structure NonemptyCanonicalFrontier (α : Type) where
   schema : CanonicalSchema α

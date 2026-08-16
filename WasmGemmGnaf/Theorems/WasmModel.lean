@@ -27,9 +27,13 @@
   map over every amended rule remain outstanding.  `just required` is the live
   compiled ledger.
 
-  The §15 list also retains `validate_bool_iff` as an explicitly weak legacy
-  subset name.  Its theorem below has exactly that scope; it is not the public
-  amended-Core validator biconditional.
+  The §15 required `validate_bool_iff` is now stated over the public
+  amended-Core carrier and remains deliberately unbound in
+  `Conformance/RequiredSignatures.lean`.  The theorem below is the legacy
+  subset equivalence under its historical name; it is not the public
+  amended-Core validator biconditional.  Every legacy machine name now lives
+  under `Wasm.Subset.*`; the bare `Wasm.*` names refer to the public
+  amended-Core surface.
 
   ## Additional proved results indexed here
 
@@ -114,29 +118,32 @@ theorem decode_complete {b : ByteArray} {m : Wasm.Module}
 /-! ## Validation -/
 
 /-- The executable validator decides the declarative validity judgment of this
-repository's Wasm subset. -/
-theorem validate_bool_iff (m : Wasm.Subset.Module) :
-    Wasm.validate m = true ↔ Wasm.DeclarativelyValid m :=
-  Wasm.validate_bool_iff m
+repository's Wasm subset.  Named `subset_*` so the required name
+`validate_bool_iff` --- now stated over the public carrier --- reports missing
+rather than being credited to this legacy result. -/
+theorem subset_validate_bool_iff (m : Wasm.Subset.Module) :
+    Wasm.Subset.validate m = true ↔ Wasm.Subset.DeclarativelyValid m :=
+  Wasm.Subset.validate_bool_iff m
 
 /-- The legacy subset validation equivalence.  Its proposition is not the
 public amended-Core `Wasm.validate_iff_declarative` obligation. -/
 theorem validate_iff_declarative (m : Wasm.Subset.Module) :
-    Wasm.validate m = true ↔ Wasm.DeclarativelyValid m :=
-  Wasm.validate_iff_declarative m
+    Wasm.Subset.validate m = true ↔ Wasm.Subset.DeclarativelyValid m :=
+  Wasm.Subset.validate_iff_declarative m
 
 /-! ## Reduction: the executable successor enumeration is the relation -/
 
 /-- On the legacy subset machine, executable successor enumeration is exactly
 the reduction relation.  The public amended-Core obligation remains open. -/
-theorem mem_successors_iff_step (c : Wasm.Config) (e : Wasm.Event) (c' : Wasm.Config) :
-    (e, c') ∈ Wasm.successors c ↔ Wasm.Step c e c' :=
-  Wasm.mem_successors_iff_step c e c'
+theorem mem_successors_iff_step (c : Wasm.Subset.Config) (e : Wasm.Subset.Event)
+    (c' : Wasm.Subset.Config) :
+    (e, c') ∈ Wasm.Subset.successors c ↔ Wasm.Subset.Step c e c' :=
+  Wasm.Subset.mem_successors_iff_step c e c'
 
 /-- The successor enumeration is duplicate free, so counting successors counts
 distinct reducts. -/
-theorem successors_nodup (c : Wasm.Config) : (Wasm.successors c).Nodup :=
-  Wasm.successors_nodup c
+theorem successors_nodup (c : Wasm.Subset.Config) : (Wasm.Subset.successors c).Nodup :=
+  Wasm.Subset.successors_nodup c
 
 /-! ## The bounded explorer covers every maximal branch -/
 
@@ -149,13 +156,13 @@ the trace length.  This is strictly stronger than
 when no branch of `initial` is still running after `bound + 1` steps, which
 makes the bound a proved property of `initial` rather than a restriction on the
 runs being covered. -/
-theorem bounded_tree_covers_every_branch {bound : Nat} {initial : Wasm.Config}
-    {obs : List Wasm.ExecutionObservation}
-    {cov : Wasm.CoversEveryMaximalFiniteBranch bound initial obs}
-    (hcomplete : Wasm.exploreAll bound initial = .complete obs cov)
-    {o : Wasm.ExecutionObservation} (hrun : Wasm.FiniteExecution initial o) :
+theorem bounded_tree_covers_every_branch {bound : Nat} {initial : Wasm.Subset.Config}
+    {obs : List Wasm.Subset.ExecutionObservation}
+    {cov : Wasm.Subset.CoversEveryMaximalFiniteBranch bound initial obs}
+    (hcomplete : Wasm.Subset.exploreAll bound initial = .complete obs cov)
+    {o : Wasm.Subset.ExecutionObservation} (hrun : Wasm.Subset.FiniteExecution initial o) :
     o ∈ obs :=
-  Wasm.bounded_tree_covers_every_branch hcomplete hrun
+  Wasm.Subset.bounded_tree_covers_every_branch hcomplete hrun
 
 /-! ## Progress and preservation for the modelled machine -/
 
@@ -171,68 +178,68 @@ reduction (`validation_preservation`) and established by `Wasm.initialConfig`
 one restriction the modelled `Wasm.Step` forces — a branch to a function's
 implicit outermost label has no reduction rule, so the invariant admits only
 frame-local branches — is stated in that file's header. -/
-theorem validation_progress {module : Wasm.Subset.Module} {config : Wasm.Config}
-    (hvalid : Wasm.DeclarativelyValid module)
-    (hconfig : Wasm.ConfigInstantiates module config)
-    (hwelltyped : Wasm.ConfigWellTyped config) :
-    (∃ outcome, Wasm.Halt config outcome) ∨
-    (∃ trap, Wasm.Trapped config trap) ∨
-    (∃ exceptionValue, Wasm.Thrown config exceptionValue) ∨
-    (Wasm.successors config).Nonempty :=
-  Wasm.validation_progress hvalid hconfig hwelltyped
+theorem subset_validation_progress {module : Wasm.Subset.Module} {config : Wasm.Subset.Config}
+    (hvalid : Wasm.Subset.DeclarativelyValid module)
+    (hconfig : Wasm.Subset.ConfigInstantiates module config)
+    (hwelltyped : Wasm.Subset.ConfigWellTyped config) :
+    (∃ outcome, Wasm.Subset.Halt config outcome) ∨
+    (∃ trap, Wasm.Subset.Trapped config trap) ∨
+    (∃ exceptionValue, Wasm.Subset.Thrown config exceptionValue) ∨
+    (Wasm.Subset.successors config).Nonempty :=
+  Wasm.Subset.validation_progress hvalid hconfig hwelltyped
 
 /-- On the legacy subset machine, a configuration is terminal exactly when it
 has halted, trapped, or thrown. -/
-theorem terminal_iff_halt_trap_or_throw (config : Wasm.Config) :
+theorem terminal_iff_halt_trap_or_throw (config : Wasm.Subset.Config) :
     config.IsTerminal ↔
-      ((∃ outcome, Wasm.Halt config outcome) ∨
-        (∃ trap, Wasm.Trapped config trap) ∨
-        (∃ exceptionValue, Wasm.Thrown config exceptionValue)) :=
-  Wasm.isTerminal_iff_halt_trapped_thrown config
+      ((∃ outcome, Wasm.Subset.Halt config outcome) ∨
+        (∃ trap, Wasm.Subset.Trapped config trap) ∨
+        (∃ exceptionValue, Wasm.Subset.Thrown config exceptionValue)) :=
+  Wasm.Subset.isTerminal_iff_halt_trapped_thrown config
 
 /-- The legacy subset preservation result, with the invariant hypothesis
 `hwelltyped`.  It does not establish preservation for the public Core machine. -/
-theorem validation_preservation {module : Wasm.Subset.Module} {config : Wasm.Config}
-    {event : Wasm.Event} {next : Wasm.Config}
-    (hvalid : Wasm.DeclarativelyValid module)
-    (hstep : Wasm.Step config event next)
-    (hconfig : Wasm.ConfigInstantiates module config)
-    (hwelltyped : Wasm.ConfigWellTyped config) :
-    Wasm.ConfigWellTyped next :=
-  Wasm.validation_preservation hvalid hstep hconfig hwelltyped
+theorem validation_preservation {module : Wasm.Subset.Module} {config : Wasm.Subset.Config}
+    {event : Wasm.Subset.Event} {next : Wasm.Subset.Config}
+    (hvalid : Wasm.Subset.DeclarativelyValid module)
+    (hstep : Wasm.Subset.Step config event next)
+    (hconfig : Wasm.Subset.ConfigInstantiates module config)
+    (hwelltyped : Wasm.Subset.ConfigWellTyped config) :
+    Wasm.Subset.ConfigWellTyped next :=
+  Wasm.Subset.validation_preservation hvalid hstep hconfig hwelltyped
 
 /-- **The invariant is reachable, not empty.**  The configuration the machine
 starts in is well typed. -/
-theorem initialConfig_configWellTyped {m : Wasm.Subset.Module} {raw : Wasm.RawInvocation}
-    {c : Wasm.Config} (h : Wasm.initialConfig m raw = .ok c)
-    (hstart : Wasm.StartFrameLocal m) : Wasm.ConfigWellTyped c :=
-  Wasm.initialConfig_configWellTyped h hstart
+theorem initialConfig_configWellTyped {m : Wasm.Subset.Module} {raw : Wasm.Subset.RawInvocation}
+    {c : Wasm.Subset.Config} (h : Wasm.Subset.initialConfig m raw = .ok c)
+    (hstart : Wasm.Subset.StartFrameLocal m) : Wasm.Subset.ConfigWellTyped c :=
+  Wasm.Subset.initialConfig_configWellTyped h hstart
 
 /-- The configuration the machine starts in instantiates the module it was built
 from. -/
-theorem initialConfig_instantiates {m : Wasm.Subset.Module} {raw : Wasm.RawInvocation}
-    {c : Wasm.Config} (h : Wasm.initialConfig m raw = .ok c)
-    (hlocal : Wasm.GemmFrameLocal m) : Wasm.ConfigInstantiates m c :=
-  Wasm.initialConfig_instantiates h hlocal
+theorem initialConfig_instantiates {m : Wasm.Subset.Module} {raw : Wasm.Subset.RawInvocation}
+    {c : Wasm.Subset.Config} (h : Wasm.Subset.initialConfig m raw = .ok c)
+    (hlocal : Wasm.Subset.GemmFrameLocal m) : Wasm.Subset.ConfigInstantiates m c :=
+  Wasm.Subset.initialConfig_instantiates h hlocal
 
 /-! ## Fault disjointness -/
 
 /-- The two failure domains of `Wasm.Fault` are disjoint: a decoding failure can
 never be silently reported as an instantiation failure. -/
 theorem fault_decoding_ne_instantiation
-    (a : Wasm.DecodeFault) (b : Wasm.InstantiationFault) :
-    Wasm.Fault.decoding a ≠ Wasm.Fault.instantiation b :=
-  Wasm.Fault.decoding_ne_instantiation a b
+    (a : Wasm.DecodeFault) (b : Wasm.Subset.InstantiationFault) :
+    Wasm.Subset.Fault.decoding a ≠ Wasm.Subset.Fault.instantiation b :=
+  Wasm.Subset.Fault.decoding_ne_instantiation a b
 
 /-- The decoding injection loses no information. -/
 theorem fault_decoding_injective {a b : Wasm.DecodeFault}
-    (h : Wasm.Fault.decoding a = Wasm.Fault.decoding b) : a = b :=
-  Wasm.Fault.decoding_injective h
+    (h : Wasm.Subset.Fault.decoding a = Wasm.Subset.Fault.decoding b) : a = b :=
+  Wasm.Subset.Fault.decoding_injective h
 
 /-- The instantiation injection loses no information. -/
-theorem fault_instantiation_injective {a b : Wasm.InstantiationFault}
-    (h : Wasm.Fault.instantiation a = Wasm.Fault.instantiation b) : a = b :=
-  Wasm.Fault.instantiation_injective h
+theorem fault_instantiation_injective {a b : Wasm.Subset.InstantiationFault}
+    (h : Wasm.Subset.Fault.instantiation a = Wasm.Subset.Fault.instantiation b) : a = b :=
+  Wasm.Subset.Fault.instantiation_injective h
 
 /-! ## Cost erasure -/
 
@@ -242,33 +249,33 @@ run of `costedTrace` holds exactly when the ordinary run of
 produces.  The side condition is necessary: without it the backward direction is
 false, because `costedTrace` is universally quantified. -/
 theorem costed_erase_iff_plain_run {P : Wasm.Profile} {module : Wasm.Subset.Module}
-    {invocation : Wasm.RawInvocation} {costedTrace : List Wasm.CostedEvent}
-    {observation : Wasm.ExecutionObservation} :
-    Wasm.CostedRun P module invocation costedTrace observation ↔
-      (Wasm.Run module invocation (Wasm.eraseCosts costedTrace) observation ∧
-        Wasm.CostedLabelling module invocation costedTrace) :=
-  Wasm.costed_erase_iff_plain_run
+    {invocation : Wasm.Subset.RawInvocation} {costedTrace : List Wasm.Subset.CostedEvent}
+    {observation : Wasm.Subset.ExecutionObservation} :
+    Wasm.Subset.CostedRun P module invocation costedTrace observation ↔
+      (Wasm.Subset.Run module invocation (Wasm.Subset.eraseCosts costedTrace) observation ∧
+        Wasm.Subset.CostedLabelling module invocation costedTrace) :=
+  Wasm.Subset.costed_erase_iff_plain_run
 
 /-- Cost instrumentation is transparent on the legacy subset machine, with no
 side condition: an observation is reachable by a costed run exactly when it is
 reachable by the ordinary run of its own trace. -/
 theorem costed_run_iff_plain_run {P : Wasm.Profile} {module : Wasm.Subset.Module}
-    {invocation : Wasm.RawInvocation} {observation : Wasm.ExecutionObservation} :
-    (∃ costedTrace : List Wasm.CostedEvent,
-        Wasm.CostedRun P module invocation costedTrace observation) ↔
-      Wasm.Run module invocation observation.trace observation :=
-  Wasm.costed_run_iff_plain_run
+    {invocation : Wasm.Subset.RawInvocation} {observation : Wasm.Subset.ExecutionObservation} :
+    (∃ costedTrace : List Wasm.Subset.CostedEvent,
+        Wasm.Subset.CostedRun P module invocation costedTrace observation) ↔
+      Wasm.Subset.Run module invocation observation.trace observation :=
+  Wasm.Subset.costed_run_iff_plain_run
 
 /-! ## Cost-table totality -/
 
 /-- Every legacy subset costed event has exactly one contribution.  This does
 not establish exact coverage of the amended Core event universe. -/
-theorem wasm_cost_table_total (t : Wasm.CostTableBody) (event : Wasm.CostedEvent) :
+theorem wasm_cost_table_total (t : Wasm.CostTableBody) (event : Wasm.Subset.CostedEvent) :
     ∃ contribution : Cost.DynamicVector,
-      Wasm.EventContribution t event contribution ∧
+      Wasm.Subset.EventContribution t event contribution ∧
         ∀ other : Cost.DynamicVector,
-          Wasm.EventContribution t event other → other = contribution :=
-  Wasm.wasm_cost_table_total t event
+          Wasm.Subset.EventContribution t event other → other = contribution :=
+  Wasm.Subset.wasm_cost_table_total t event
 
 /-! ## The legacy adequacy map's pinned revision identity -/
 

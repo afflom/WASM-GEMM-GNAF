@@ -1,4 +1,5 @@
 import WasmGemmGnaf.GNAF.Resource
+import WasmGemmGnaf.Gemm.Problem
 set_option autoImplicit false
 
 /-!
@@ -459,28 +460,33 @@ theorem opaqueProcess_certificate_exact {s t : Sig} {spec : OpaqueSpec} {body : 
   cases h with
   | opaqueProcess h1 h2 _ => exact ⟨h1, h2⟩
 
-/-! ## Checked plans -/
+/-! ## Legacy signature-indexed typed plans -/
 
-/-- A plan together with its typing derivation (SPEC §11.3's `CheckedPlan`). -/
-structure CheckedPlan (s t : Sig) where
+/-- A plan together with its internal signature-indexed typing derivation.
+
+This is the compiler-independent typing object used by the plan metatheory.  It
+is deliberately not the public `CheckedPlan P G`: a pair of internal signatures
+does not bind a plan to the released Wasm profile, GEMM problem, ABI, or Core
+representability bounds. -/
+structure TypedPlan (s t : Sig) where
   plan : Plan
   typed : HasType s plan t
 
-namespace CheckedPlan
+namespace TypedPlan
 
 variable {s t : Sig}
 
 /-- The certified cost of a checked plan (SPEC §11.3). -/
-def certifiedCost (c : CheckedPlan s t) : Nat := c.plan.certifiedCost
+def certifiedCost (c : TypedPlan s t) : Nat := c.plan.certifiedCost
 
 /-- The resource bound of a checked plan (SPEC §11.3). -/
-def resourceBound (c : CheckedPlan s t) : Nat := c.plan.stepBound
+def resourceBound (c : TypedPlan s t) : Nat := c.plan.stepBound
 
 /-- The behaviour of a checked plan. -/
-def eval (c : CheckedPlan s t) : Machine → Machine := Eval c.plan
+def eval (c : TypedPlan s t) : Machine → Machine := Eval c.plan
 
 /-- Building a checked plan by running the decision procedure. -/
-def check? (s : Sig) (p : Plan) (t : Sig) : Option (CheckedPlan s t) :=
+def check? (s : Sig) (p : Plan) (t : Sig) : Option (TypedPlan s t) :=
   if h : HasType s p t then some ⟨p, h⟩ else none
 
 theorem check?_isSome_iff (s : Sig) (p : Plan) (t : Sig) :
@@ -488,16 +494,341 @@ theorem check?_isSome_iff (s : Sig) (p : Plan) (t : Sig) :
   unfold check?
   by_cases h : HasType s p t <;> simp [h]
 
+end TypedPlan
+
+/-! ## Public profile/problem-indexed checked plans
+
+The public carrier is constructed only after an independent, executable source
+check has established the finite-width obligations needed by a wasm32 Core
+compiler.  The check is stated entirely over GNAF source data, profile limits,
+and problem resource constants.  In particular it does not mention an emitted
+module, the binary encoder, a run, an observation, or compiler correctness.
+-/
+
+namespace IndexMap
+
+/-- Largest byte coefficient generated from an affine source map by the
+scalar Core lowering.  `Machine.mem` already is the ABI byte image. -/
+def coreImmediateCeiling (map : IndexMap) : Nat :=
+  max map.c0 (max map.cb (max map.ci map.cj))
+
+end IndexMap
+
+namespace RegionRef
+
+/-- Largest fixed byte immediate generated from a source region. -/
+def coreImmediateCeiling (region : RegionRef) : Nat :=
+  max region.base (max region.count region.limit)
+
+end RegionRef
+
+namespace Cond
+
+/-- Largest source numeral occurring in a decidable branch condition. -/
+def coreImmediateCeiling : Cond → Nat
+  | .statusIs status => status.code
+  | .regEq reg value | .regLt reg value => max reg value
+  | .scratchAtLeast bytes => bytes
+
+end Cond
+
+namespace Plan
+
+/-- Maximum of a list of natural numerals, with zero for the empty list. -/
+def listCeiling (values : List Nat) : Nat := values.foldl Nat.max 0
+
+/-- Maximum number of cells required by any one source-level code/data table. -/
+def tableWords : Plan → Nat
+  | .nop => 0
+  | .seq first second => max first.tableWords second.tableWords
+  | .classifyRaw valid invalid unsupported exhausted =>
+      max (max valid.tableWords invalid.tableWords)
+        (max unsupported.tableWords exhausted.tableWords)
+  | .dispatchLayout rowMajor colMajor general =>
+      max rowMajor.tableWords (max colMajor.tableWords general.tableWords)
+  | .branch _ onTrue onFalse => max onTrue.tableWords onFalse.tableWords
+  | .pack _ _ _ _ | .unpack _ _ _ _ | .storeReg _ _ _ _ |
+      .loadReg _ _ _ _ | .reduce _ _ _ _ | .setReg _ _ |
+      .scalarOp _ _ _ _ | .vectorOp _ _ _ _ _ | .setStatus _ |
+      .buildOutput _ => 0
+  | .loopNest _ body | .loopReg _ _ _ body | .tiled _ _ _ body |
+      .allocScratch _ body | .opaqueProcess _ body => body.tableWords
+  | .emitTable _ data => data.length
+  | .tableLoad _ index _ => index + 1
+
+/-- A source-only upper bound on every fixed numeral the direct Core lowering
+may emit for one plan node.  Recursive branches take maxima; table payloads
+include their contents and their exact fixed-address product. -/
+def coreImmediateCeiling : Plan → Nat
+  | .nop => 0
+  | .seq first second => max first.coreImmediateCeiling second.coreImmediateCeiling
+  | .classifyRaw valid invalid unsupported exhausted =>
+      max valid.coreImmediateCeiling
+        (max invalid.coreImmediateCeiling
+          (max unsupported.coreImmediateCeiling exhausted.coreImmediateCeiling))
+  | .dispatchLayout rowMajor colMajor general =>
+      max rowMajor.coreImmediateCeiling
+        (max colMajor.coreImmediateCeiling general.coreImmediateCeiling)
+  | .branch condition onTrue onFalse =>
+      max condition.coreImmediateCeiling
+        (max onTrue.coreImmediateCeiling onFalse.coreImmediateCeiling)
+  | .pack src dst map width | .unpack src dst map width =>
+      max width (max src.coreImmediateCeiling
+        (max dst.coreImmediateCeiling map.coreImmediateCeiling))
+  | .storeReg dst map width src =>
+      max src (max width (max dst.coreImmediateCeiling map.coreImmediateCeiling))
+  | .loadReg dst src map width =>
+      max dst (max width (max src.coreImmediateCeiling map.coreImmediateCeiling))
+  | .loopNest axis body =>
+      max axis.indexReg
+        (max axis.extent (max axis.map.coreImmediateCeiling body.coreImmediateCeiling))
+  | .loopReg indexReg extentReg map body =>
+      max indexReg (max extentReg
+        (max map.coreImmediateCeiling body.coreImmediateCeiling))
+  | .tiled _ tiling extents body =>
+      max (tiling.totalTiles extents.m extents.n extents.k)
+        (max tiling.mBlock (max tiling.nBlock (max tiling.kBlock
+          (max extents.m (max extents.n (max extents.k body.coreImmediateCeiling))))))
+  | .reduce _ acc lhs rhs =>
+      max acc (max lhs.coreImmediateCeiling rhs.coreImmediateCeiling)
+  | .allocScratch bytes body => max bytes body.coreImmediateCeiling
+  | .setReg dst value => max dst value
+  | .scalarOp _ dst lhs rhs => max dst (max lhs rhs)
+  | .vectorOp _ lanes dst lhs rhs => max lanes (max dst (max lhs rhs))
+  | .emitTable index data =>
+      max index (max data.length (listCeiling data))
+  | .tableLoad table index dst => max table (max index dst)
+  | .setStatus status => status.code
+  | .buildOutput src => src.coreImmediateCeiling
+  | .opaqueProcess spec body =>
+      max spec.processId
+        (max spec.declaredSteps (max spec.declaredBytes body.coreImmediateCeiling))
+
+/-- Byte extent of the compiler's closed linear-memory layout, computed from
+source resources only.  There is no clamp or modular reduction. -/
+def coreLayoutBytes (s : Sig) (plan : Plan) : Nat :=
+  s.mem + 8 * ((s.scratch + plan.charges.scratchPeak) +
+    s.tables * plan.tableWords) + 12
+
+/-- Exact page count for the source layout. -/
+def coreLayoutPages (s : Sig) (plan : Plan) : Nat :=
+  Wasm.pagesFor (coreLayoutBytes s plan)
+
+/-- Source-only instruction-tree budget for the direct Core lowering.  Its
+recursion mirrors only the *shape* of the plan: fixed constants cover the
+closed classification/layout/loop templates, while the table case accounts
+for every literal cell.  `GNAF/CompileEncoding.lean` proves the emitted Core
+instruction tree fits this independently computed budget. -/
+def codeBudget : Plan → Nat
+  | .nop => 0
+  | .seq first second => first.codeBudget + second.codeBudget
+  | .classifyRaw valid invalid unsupported exhausted =>
+      4096 + valid.codeBudget + invalid.codeBudget +
+        unsupported.codeBudget + exhausted.codeBudget
+  | .dispatchLayout rowMajor colMajor general =>
+      2048 + rowMajor.codeBudget + colMajor.codeBudget + general.codeBudget
+  | .branch _ onTrue onFalse => 128 + onTrue.codeBudget + onFalse.codeBudget
+  | .pack _ _ _ _ | .unpack _ _ _ _ => 256
+  | .storeReg _ _ _ _ | .loadReg _ _ _ _ => 128
+  | .loopNest _ body | .loopReg _ _ _ body | .tiled _ _ _ body =>
+      256 + body.codeBudget
+  | .reduce _ _ _ _ => 256
+  | .allocScratch _ body | .opaqueProcess _ body => body.codeBudget
+  | .setReg _ _ => 16
+  | .scalarOp _ _ _ _ => 128
+  | .vectorOp _ _ _ _ _ => 16
+  | .emitTable _ data => 16 * (data.length + 1)
+  | .tableLoad _ _ _ => 32
+  | .setStatus _ => 16
+  | .buildOutput _ => 32
+
+/-- Conservative source-only byte budget for the direct Core lowering.  The
+factor covers the longest fixed-width encoding emitted per charged source node;
+the constant covers the closed type/export/section envelope. -/
+def coreModuleByteBudget (plan : Plan) : Nat :=
+  32 * (plan.codeBudget + 4) + 4096
+
+/-- Independent decidable certificate consumed by the public Core compiler.
+It checks all fixed immediates, the exact unwrapped layout, local/index spaces,
+the profile's module and memory limits, and the problem's resource contract. -/
+def coreRepresentable (P : Wasm.Profile) (G : Gemm.Problem P)
+    (s : Sig) (plan : Plan) : Bool :=
+  decide
+    (max (plan.coreImmediateCeiling)
+        (max (3 + s.regs + plan.depth) (plan.coreLayoutBytes s)) < 2 ^ 32 ∧
+      plan.coreLayoutPages s ≤ P.body.maxPages ∧
+      plan.coreLayoutPages s ≤ G.body.resources.maxPages ∧
+      s.regs + plan.depth + 2 ≤ P.body.limits.maxLocals ∧
+      plan.coreModuleByteBudget < 2 ^ 32 ∧
+      plan.coreModuleByteBudget ≤ P.body.limits.maxModuleBytes ∧
+      plan.charges.dataBytes ≤ G.body.resources.maxInvocationBytes ∧
+      s.tables * plan.tableWords ≤ G.body.resources.maxTableElements)
+
+/-- The arithmetic fragment whose direct amended-Core lowering is implemented
+with exact `i32` modular behavior.  Other released arithmetic contracts stay
+in the source language but cannot cross the checked compiler boundary yet. -/
+def coreScalarI32Supported (contract : ArithmeticContract) : Bool :=
+  contract.mode == .modular && contract.accumulator == .u32
+
+/-- Scalar operations whose unbounded-`Nat` source equation agrees with the
+Core `i32` lowering on values represented by locals.  Addition and
+multiplication are intentionally absent: the source operations are unbounded,
+whereas Core wraps them modulo `2^32`. -/
+def coreScalarOpSupported : ScalarOp → Bool
+  | .sub | .max | .min => true
+  | .add | .mul => false
+
+/-- Independently checked support predicate for the direct amended-Core
+lowering.  It is deliberately a predicate on the complete profile/problem/
+interface/plan input to the checker.  The currently admitted fragment is the
+straight-line scalar/status path: immediate register writes, non-wrapping
+scalar operations, scratch allocation wrappers, status construction, and
+source-private output-view construction.  `buildOutput` changes only
+`Machine.out`; `GNAF.Accepts` observes the returned status and complete source
+memory image, so its lowering is the proved empty observational projection.
+Control, raw-byte, table, memory-transfer, reduction, and vector nodes are
+rejected until their independent execution simulations are proved.  The plan
+language itself remains unchanged, and widening this decision procedure does
+not change the artifact type. -/
+def coreSupported (_P : Wasm.Profile) (_G : Gemm.Problem _P)
+    (_s : Sig) : Plan → Bool
+  | .nop => true
+  | .seq first second =>
+      coreSupported _P _G _s first && coreSupported _P _G _s second
+  | .classifyRaw _ _ _ _ | .dispatchLayout _ _ _ => false
+  | .branch _ _ _ | .loopNest _ _ | .loopReg _ _ _ _ | .tiled _ _ _ _ => false
+  | .allocScratch _ body | .opaqueProcess _ body => coreSupported _P _G _s body
+  | .setReg _ _ | .setStatus _ | .buildOutput _ => true
+  | .scalarOp operation _ _ _ => coreScalarOpSupported operation
+  | .pack _ _ _ _ | .unpack _ _ _ _ | .storeReg _ _ _ _ |
+      .loadReg _ _ _ _ | .reduce _ _ _ _ | .vectorOp _ _ _ _ _ |
+      .emitTable _ _ | .tableLoad _ _ _ => false
+
+end Plan
+
+/-- **SPEC §11.3.**  A compile-ready plan is indexed by the exact public
+profile and GEMM problem and carries only independently checked source facts.
+No compiler result, run, observation, cost equality, or semantic conclusion is
+stored in this structure. -/
+structure CheckedPlan (P : Wasm.Profile) (G : Gemm.Problem P) where
+  inputSig : Sig
+  outputSig : Sig
+  plan : Plan
+  typed : HasType inputSig plan outputSig
+  coreRepresentable : plan.coreRepresentable P G inputSig = true
+  coreSupported : plan.coreSupported P G inputSig = true
+
+namespace CheckedPlan
+
+variable {P : Wasm.Profile} {G : Gemm.Problem P}
+
+/-- The exact static instruction-tree budget consumed by `compile_resources`.
+Dynamic public-Core execution bounds are stated separately over relational
+prefixes; this value does not conflate source interpreter steps with Core
+reduction steps. -/
+def resourceBound (checked : CheckedPlan P G) : Nat := checked.plan.codeBudget + 4
+
+/-- Number of status-local replacement steps emitted by the currently admitted
+straight-line lowering.  Register/scalar nodes are observationally dead in
+this fragment; status assignments are retained in source order. -/
+def compiledStatusSteps : Plan → Nat
+  | .seq first second => compiledStatusSteps first + compiledStatusSteps second
+  | .allocScratch _ body | .opaqueProcess _ body => compiledStatusSteps body
+  | .setStatus _ => 1
+  | _ => 0
+
+/-- Exact byte extent of the compiler's initial private/public memory layout,
+stated purely from checked source data. -/
+def compiledInitialMemoryBytes (checked : CheckedPlan P G) : Nat :=
+  checked.inputSig.mem +
+    8 * (checked.inputSig.scratch + checked.plan.charges.scratchPeak) +
+    8 * (checked.inputSig.tables * checked.plan.tableWords) + 12
+
+/-- Exact initial page count of the emitted module, before the Harness grows
+the public raw-input window. -/
+def compiledInitialPages (checked : CheckedPlan P G) : Nat :=
+  Wasm.pagesFor checked.compiledInitialMemoryBytes
+
+/-- Exact number of compiler-declared locals beyond the two ABI parameters. -/
+def compiledDeclaredLocals (checked : CheckedPlan P G) : Nat :=
+  checked.inputSig.regs + checked.plan.depth + 2
+
+/-- Exact source-computable charge of the admitted compiler image on one raw
+invocation.  This is deliberately independent of an evaluator result: it is a
+closed structural formula over the checked source, the released profile cost
+table, and the lawful raw window.  Cumulative coordinates count the six
+deterministic initialization subevents and the emitted Harness/Core path;
+peak coordinates are the maxima of the corresponding concrete configuration
+sequence. -/
+def certifiedCost (checked : CheckedPlan P G) (raw : G.RawInvocation) :
+    Cost.DynamicVector :=
+  let statusSteps := compiledStatusSteps checked.plan
+  let initialPages := checked.compiledInitialPages
+  let targetPages := Wasm.pagesFor (raw.body.ptr.toNat + raw.body.len.toNat)
+  let grownPages := targetPages - initialPages
+  { instantiationSteps := 6
+    dispatchSteps := 5
+    preparationSteps := P.costTableBody.installationPreparationUnit
+    wasmRuleSteps := P.costTableBody.ruleStepUnit * (statusSteps + 14)
+    scalarOps := 1
+    vectorLaneOps := 0
+    bytesRead := 0
+    bytesWritten :=
+      P.costTableBody.installedByteWriteUnit * raw.body.len.toNat
+    memoryGrowPages := grownPages
+    tableElementsAllocated := 0
+    gcObjectsAllocated := 0
+    gcBytesInitialized := 0
+    peakStackValues :=
+      checked.compiledDeclaredLocals + 4 + max statusSteps 1
+    peakPages := initialPages + grownPages
+    peakGcLiveBytes := 0
+    outputBytes := 4 }
+
+/-- The independently defined plan-machine behavior retained by a checked
+source value. -/
+def eval (checked : CheckedPlan P G) : Machine → Machine := Eval checked.plan
+
+/-- Execute both independent decision procedures.  A failed source typing or
+Core-representability check produces no public checked plan. -/
+def check? (P : Wasm.Profile) (G : Gemm.Problem P)
+    (input : Sig) (plan : Plan) (output : Sig) : Option (CheckedPlan P G) :=
+  if typed : HasType input plan output then
+    if represented : plan.coreRepresentable P G input = true then
+      if supported : plan.coreSupported P G input = true then
+        some ⟨input, output, plan, typed, represented, supported⟩
+      else none
+    else none
+  else none
+
+theorem check?_isSome_iff (P : Wasm.Profile) (G : Gemm.Problem P)
+    (input : Sig) (plan : Plan) (output : Sig) :
+    (check? P G input plan output).isSome = true ↔
+      HasType input plan output ∧ plan.coreRepresentable P G input = true ∧
+        plan.coreSupported P G input = true := by
+  unfold check?
+  by_cases typed : HasType input plan output
+  · simp only [typed, dite_true, true_and]
+    by_cases represented : plan.coreRepresentable P G input = true
+    · simp only [represented, dite_true, true_and]
+      by_cases supported : plan.coreSupported P G input = true <;>
+        simp [supported]
+    · simp [represented]
+  · simp [typed]
+
 end CheckedPlan
 
 /-! ## Type safety -/
 
 namespace Machine
 
-/-- A configuration conforms to an interface when its stores have the declared
-sizes and its scratch is at least the declared extent. -/
+/-- A configuration conforms to an interface when its private stores have the
+declared sizes, its public memory contains at least the declared source
+extent, and scratch contains at least its declared extent.  Public memory is
+a lower bound because the ABI Harness may grow it to retain a lawful raw
+window above the module's small initial minimum. -/
 def Conforms (m : Machine) (s : Sig) : Prop :=
-  m.regs.length = s.regs ∧ m.vregs.length = s.vregs ∧ m.mem.length = s.mem ∧
+  m.regs.length = s.regs ∧ m.vregs.length = s.vregs ∧ s.mem ≤ m.mem.length ∧
     m.tables.length = s.tables ∧ s.scratch ≤ m.scratch.length
 
 theorem conforms_withReg {m : Machine} {s : Sig} (h : m.Conforms s) (r v : Nat) :
@@ -558,14 +889,14 @@ theorem hasType_preservation {s : Sig} {p : Plan} {t : Sig} (h : HasType s p t) 
     intro m hm
     obtain ⟨h1, h2, h3, h4, h5⟩ := hm
     refine ⟨h1, h2, ?_, h4, h5⟩
-    show (unpackedMem m src dst map).length = s.mem
+    show s.mem ≤ (unpackedMem m src dst map).length
     rw [unpackedMem_length]
     exact h3
   | @storeReg s dst map w src _ _ _ _ =>
     intro m hm
     obtain ⟨h1, h2, h3, h4, h5⟩ := hm
     refine ⟨h1, h2, ?_, h4, h5⟩
-    show (storedRegMem m dst map w src).length = s.mem
+    show s.mem ≤ (storedRegMem m dst map w src).length
     rw [storedRegMem_length]
     exact h3
   | @loadReg s dst src map w _ _ _ _ =>
@@ -615,7 +946,7 @@ theorem hasType_preservation {s : Sig} {p : Plan} {t : Sig} (h : HasType s p t) 
   | opaqueProcess _ _ _ ih => intro m hm; exact ih m hm
 
 /-- Type safety for checked plans. -/
-theorem CheckedPlan.preservation {s t : Sig} (c : CheckedPlan s t) (m : Machine)
+theorem TypedPlan.preservation {s t : Sig} (c : TypedPlan s t) (m : Machine)
     (hm : m.Conforms s) : (c.eval m).Conforms t :=
   hasType_preservation c.typed m hm
 

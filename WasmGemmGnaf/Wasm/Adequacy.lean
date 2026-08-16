@@ -6,7 +6,7 @@
   between these declarations and the vendored rule identifiers in the
   conformance map", and
 
-    "`profile_matches_pinned_revision` means that the concrete model and map are
+    "`legacy_profile_matches_pinned_revision` means that the concrete model and map are
      identity-bound to the vendored revision and that every enabled vendored
      rule has exactly one mapped Lean declaration.  It does not claim that Lean
      can derive English prose from bytes.  The reviewed transcription from
@@ -16,7 +16,7 @@
 
   ## What this file establishes
 
-  * `PinnedCoreRuleId` is a finite inductive with a complete enumeration
+  * `LegacyPinnedCoreRuleId` is a finite inductive with a complete enumeration
     (`mem_all`) that is proved duplicate free (`all_nodup`), so it carries a
     `Fintype` instance.
   * every identifier carries a feature family and a status, and the status is
@@ -31,16 +31,16 @@
   * every enabled identifier records the **vendored anchor** it was transcribed
     from (`vendorAnchor?`), total on the enabled set and `none` exactly on the
     rejected one (`vendorAnchor?_isSome_iff_enabled`).
-  * the map object `core3AdequacyMap` carries the pinned commit *and* the
+  * the map object `legacyCore3AdequacyMap` carries the pinned commit *and* the
     vendored tree record of `Wasm/Revision.lean`, whose `manifestSha256` is the
     digest of `vendor/wasm-spec/SHA256SUMS` --- a digest of digests over the
     whole vendored tree.  The commit is proved equal to the commit every lawful
     `Wasm.Profile` carries (`adequacy_profile_revision_agree`) and to the commit
-    the vendored tree carries (`core3AdequacyMap_vendorTree_commit`).
-  * `mapped_declarations_referenced` mentions every mapped Lean declaration, so
+    the vendored tree carries (`legacyCore3AdequacyMap_vendorTree_commit`).
+  * `legacy_mapped_declarations_referenced` mentions every mapped Lean declaration, so
     renaming or deleting one breaks this file rather than silently invalidating
     the map.
-  * `profile_matches_pinned_revision` is the conjunction SPEC section 7.1 names:
+  * `legacy_profile_matches_pinned_revision` is the conjunction SPEC section 7.1 names:
     the identity binding above, together with the one-to-one property of the
     map on the enabled rules.
 
@@ -64,7 +64,7 @@
      drifted.  Lean stands on the literal; the tool is what stops the literal
      from being a wish.  Falsifier `M13` plants a mutated `SHA256SUMS` on a
      copy and requires the check to reject it.
-  2. **OPEN --- strings are not reflected.**  `mapped_declarations_referenced`
+  2. **OPEN --- strings are not reflected.**  `legacy_mapped_declarations_referenced`
      proves that a declaration with each mapped *role* exists in the
      environment, but Lean cannot check --- without metaprogramming, which this
      development does not use --- that the *string* `"Step.nop"` names the
@@ -75,7 +75,7 @@
      OTHER row still
      names a declaration of the i32 subset model (`InstrTyping.*`, `Step.*`,
      `Store.*`, `TableInst.*`, `V128.*`), which is a strictly narrower language
-     than the pinned one.  So `profile_matches_pinned_revision` is, today, a
+     than the pinned one.  So `legacy_profile_matches_pinned_revision` is, today, a
      one-to-one property of a map from pinned rule identifiers to declarations
      that are mostly NOT the mechanized Core 3.0 rules of `Wasm/Core/`.  It says
      what it says --- the map is total, injective and identity-bound to the
@@ -87,7 +87,7 @@
 
   4. **NARROWED, NOT CLOSED --- coverage is relative to this enumeration.**
      Every "total" and "complete" theorem below quantifies over
-     `PinnedCoreRuleId`, which is the list written in this file.  Each enabled
+     `LegacyPinnedCoreRuleId`, which is the list written in this file.  Each enabled
      identifier now also records the reStructuredText anchor of the vendored
      rule it was transcribed from (`vendorAnchor?`), and `xtask vendor` checks
      that every one of those anchors is a label actually *defined* in the
@@ -108,12 +108,14 @@
   Every declaration in this file is proved.  Nothing is assumed.
 -/
 import WasmGemmGnaf.Wasm.Binary
+import WasmGemmGnaf.Wasm.CoreAuthorityBindings
 import WasmGemmGnaf.Wasm.CoreFrontEnd
 import WasmGemmGnaf.Wasm.Run
 import WasmGemmGnaf.Wasm.Table
 import WasmGemmGnaf.Wasm.Vector
 
 set_option autoImplicit false
+set_option maxRecDepth 10000
 
 namespace WasmGemmGnaf.Wasm
 
@@ -182,7 +184,7 @@ end RuleStatus
 
 /-- The identifiers of the pinned Core 3.0 rules covered by this development.
 See the header for the exact scope of this enumeration. -/
-inductive PinnedCoreRuleId
+inductive LegacyPinnedCoreRuleId
   | decodeModule
   | decodeUleb128
   | validUnreachable
@@ -278,10 +280,10 @@ inductive PinnedCoreRuleId
   | rejectComponentModel
   deriving DecidableEq, Repr, Inhabited
 
-namespace PinnedCoreRuleId
+namespace LegacyPinnedCoreRuleId
 
 /-- The complete enumeration of pinned rule identifiers. -/
-def all : List PinnedCoreRuleId :=
+def all : List LegacyPinnedCoreRuleId :=
   [ .decodeModule
   , .decodeUleb128
   , .validUnreachable
@@ -376,21 +378,21 @@ def all : List PinnedCoreRuleId :=
   , .rejectRelaxedFma
   , .rejectComponentModel ]
 
-theorem mem_all (id : PinnedCoreRuleId) : id ∈ all := by cases id <;> decide
+theorem mem_all (id : LegacyPinnedCoreRuleId) : id ∈ all := by cases id <;> decide
 
 /-- **Duplicate-free coverage.** -/
 theorem all_nodup : all.Nodup := by decide
 
 theorem all_length : all.length = 93 := rfl
 
-instance instFintype : Fintype PinnedCoreRuleId where
+instance instFintype : Fintype LegacyPinnedCoreRuleId where
   elemsList := all
   complete := mem_all
   nodupList := all_nodup
 
 /-- The vendored spelling of a rule identifier (see the header: this is a
 hand transcription, not a list read from a vendored tree). -/
-def ruleId : PinnedCoreRuleId → String
+def ruleId : LegacyPinnedCoreRuleId → String
   | .decodeModule => "decode.module"
   | .decodeUleb128 => "decode.uleb128"
   | .validUnreachable => "valid.unreachable"
@@ -486,7 +488,7 @@ def ruleId : PinnedCoreRuleId → String
   | .rejectComponentModel => "reject.component-model"
 
 /-- The Core 3.0 feature family a rule belongs to. -/
-def family : PinnedCoreRuleId → FeatureFamily
+def family : LegacyPinnedCoreRuleId → FeatureFamily
   | .decodeModule => .scalarCore
   | .decodeUleb128 => .scalarCore
   | .validUnreachable => .scalarCore
@@ -582,7 +584,7 @@ def family : PinnedCoreRuleId → FeatureFamily
   | .rejectComponentModel => .componentModelAndPostCore3
 
 /-- What the released development does with the rule. -/
-def status : PinnedCoreRuleId → RuleStatus
+def status : LegacyPinnedCoreRuleId → RuleStatus
   | .decodeModule => .modelled
   | .decodeUleb128 => .modelled
   | .validUnreachable => .modelled
@@ -679,7 +681,7 @@ def status : PinnedCoreRuleId → RuleStatus
 
 /-- The Lean declaration implementing the rule, relative to the
 `WasmGemmGnaf.Wasm` namespace.  `none` is exactly a rejected family. -/
-def leanDeclaration? : PinnedCoreRuleId → Option String
+def leanDeclaration? : LegacyPinnedCoreRuleId → Option String
   | .decodeModule => some "decode"
   | .decodeUleb128 => some "decodeULEB"
   | .validUnreachable => some "InstrTyping.unreachable"
@@ -790,7 +792,7 @@ tree, so an invented identifier fails the gate.  Two things this map is not:
 * it is not a claim about the rule's *body*.  The rendered `.rst` anchor and
   the authoritative `.spectec` sources are vendored, but mapping an anchor
   to a Lean declaration does not prove that their bodies correspond. -/
-def vendorAnchor? : PinnedCoreRuleId → Option String
+def vendorAnchor? : LegacyPinnedCoreRuleId → Option String
   | .decodeModule => some "binary-module"
   | .decodeUleb128 => some "binary-uint"
   | .validUnreachable => some "valid-unreachable"
@@ -887,33 +889,33 @@ def vendorAnchor? : PinnedCoreRuleId → Option String
 
 /-- The vendored anchor of an identifier, with the rejected ones collapsed to
 the empty string.  Used to build the map rows as a decidable computation. -/
-def anchorOf (id : PinnedCoreRuleId) : String := (vendorAnchor? id).getD ""
+def anchorOf (id : LegacyPinnedCoreRuleId) : String := (vendorAnchor? id).getD ""
 
 /-- A rule is enabled when the profile does not reject its family. -/
-def RuleEnabled (id : PinnedCoreRuleId) : Prop := status id ≠ .rejectedByProfile
+def RuleEnabled (id : LegacyPinnedCoreRuleId) : Prop := status id ≠ .rejectedByProfile
 
-instance instDecidableRuleEnabled (id : PinnedCoreRuleId) :
+instance instDecidableRuleEnabled (id : LegacyPinnedCoreRuleId) :
     Decidable (RuleEnabled id) := by
   unfold RuleEnabled
   infer_instance
 
 /-- The status agrees with the release feature matrix: a rule has no Lean
 declaration exactly when its family is rejected by the profile. -/
-theorem status_eq_rejected_iff (id : PinnedCoreRuleId) :
+theorem status_eq_rejected_iff (id : LegacyPinnedCoreRuleId) :
     status id = .rejectedByProfile ↔ Rejected (family id) := by
   cases id <;> decide
 
-theorem ruleEnabled_iff_family_enabled (id : PinnedCoreRuleId) :
+theorem ruleEnabled_iff_family_enabled (id : LegacyPinnedCoreRuleId) :
     RuleEnabled id ↔ Enabled (family id) := by
   cases id <;> decide
 
 /-- **Totality over the enabled rule set.**  Every enabled identifier has a
 mapped Lean declaration, and every rejected one has none. -/
-theorem adequacy_map_total_on_enabled (id : PinnedCoreRuleId) :
+theorem adequacy_map_total_on_enabled (id : LegacyPinnedCoreRuleId) :
     (leanDeclaration? id).isSome = true ↔ RuleEnabled id := by
   cases id <;> decide
 
-theorem leanDeclaration?_eq_none_iff (id : PinnedCoreRuleId) :
+theorem leanDeclaration?_eq_none_iff (id : LegacyPinnedCoreRuleId) :
     leanDeclaration? id = none ↔ Rejected (family id) := by
   cases id <;> decide
 
@@ -921,22 +923,22 @@ theorem leanDeclaration?_eq_none_iff (id : PinnedCoreRuleId) :
 names none.  The anchors themselves are checked against the vendored tree by
 `xtask vendor`, which is outside the kernel; what is proved here is that the
 transcription record has no hole and no entry for a rejected family. -/
-theorem vendorAnchor?_isSome_iff_enabled (id : PinnedCoreRuleId) :
+theorem vendorAnchor?_isSome_iff_enabled (id : LegacyPinnedCoreRuleId) :
     (vendorAnchor? id).isSome = true ↔ RuleEnabled id := by
   cases id <;> decide
 
-theorem vendorAnchor?_eq_none_iff (id : PinnedCoreRuleId) :
+theorem vendorAnchor?_eq_none_iff (id : LegacyPinnedCoreRuleId) :
     vendorAnchor? id = none ↔ Rejected (family id) := by
   cases id <;> decide
 
-theorem exists_vendorAnchor_of_enabled {id : PinnedCoreRuleId}
+theorem exists_vendorAnchor_of_enabled {id : LegacyPinnedCoreRuleId}
     (h : RuleEnabled id) : ∃ anchor, vendorAnchor? id = some anchor := by
   have hs := (vendorAnchor?_isSome_iff_enabled id).mpr h
   cases ha : vendorAnchor? id with
   | none => rw [ha] at hs; exact absurd hs (by simp)
   | some anchor => exact ⟨anchor, rfl⟩
 
-theorem exists_leanDeclaration_of_enabled {id : PinnedCoreRuleId}
+theorem exists_leanDeclaration_of_enabled {id : LegacyPinnedCoreRuleId}
     (h : RuleEnabled id) : ∃ name, leanDeclaration? id = some name := by
   have hs := (adequacy_map_total_on_enabled id).mpr h
   cases hd : leanDeclaration? id with
@@ -944,7 +946,7 @@ theorem exists_leanDeclaration_of_enabled {id : PinnedCoreRuleId}
   | some name => exact ⟨name, rfl⟩
 
 /-- The enabled identifiers, in enumeration order. -/
-def enabledRuleIds : List PinnedCoreRuleId :=
+def enabledRuleIds : List LegacyPinnedCoreRuleId :=
   [ .decodeModule
   , .decodeUleb128
   , .validUnreachable
@@ -1035,7 +1037,7 @@ def enabledRuleIds : List PinnedCoreRuleId :=
   , .refNull
   , .refFunc ]
 
-theorem mem_enabledRuleIds_iff (id : PinnedCoreRuleId) :
+theorem mem_enabledRuleIds_iff (id : LegacyPinnedCoreRuleId) :
     id ∈ enabledRuleIds ↔ RuleEnabled id := by cases id <;> decide
 
 theorem enabledRuleIds_nodup : enabledRuleIds.Nodup := by decide
@@ -1048,7 +1050,7 @@ theorem rejectedRuleIds_length :
 /-- The mapped declaration name of an identifier, with the rejected ones
 collapsed to the empty string.  Used only to state duplicate freedom of the
 mapped names as a decidable computation. -/
-def declarationOf (id : PinnedCoreRuleId) : String := (leanDeclaration? id).getD ""
+def declarationOf (id : LegacyPinnedCoreRuleId) : String := (leanDeclaration? id).getD ""
 
 /-- **The mapped Lean declarations are pairwise distinct.** -/
 theorem enabledDeclarations_nodup :
@@ -1060,7 +1062,7 @@ theorem ruleIds_nodup : (all.map ruleId).Nodup := by decide
 /-- **Injectivity over the enabled rule set.**  Two enabled identifiers with the
 same mapped Lean declaration are the same identifier: no declaration is claimed
 by two rules. -/
-theorem adequacy_map_injective_on_enabled {a b : PinnedCoreRuleId}
+theorem adequacy_map_injective_on_enabled {a b : LegacyPinnedCoreRuleId}
     (ha : RuleEnabled a) (hb : RuleEnabled b)
     (h : leanDeclaration? a = leanDeclaration? b) : a = b := by
   refine nodup_map_injOn declarationOf enabledRuleIds enabledDeclarations_nodup a b
@@ -1069,7 +1071,7 @@ theorem adequacy_map_injective_on_enabled {a b : PinnedCoreRuleId}
   rw [h]
 
 /-- The identifier spelling is injective on the whole enumeration. -/
-theorem ruleId_injective {a b : PinnedCoreRuleId} (h : ruleId a = ruleId b) :
+theorem ruleId_injective {a b : LegacyPinnedCoreRuleId} (h : ruleId a = ruleId b) :
     a = b :=
   nodup_map_injOn ruleId all ruleIds_nodup a b (mem_all a) (mem_all b) h
 
@@ -1079,17 +1081,17 @@ theorem ruleId_injective {a b : PinnedCoreRuleId} (h : ruleId a = ruleId b) :
 def declarationNamespace : String := "WasmGemmGnaf.Wasm."
 
 /-- The fully qualified Lean declaration name of a rule. -/
-def fullDeclaration? (id : PinnedCoreRuleId) : Option String :=
+def fullDeclaration? (id : LegacyPinnedCoreRuleId) : Option String :=
   (leanDeclaration? id).map (fun name => declarationNamespace ++ name)
 
-theorem fullDeclaration?_isSome_iff (id : PinnedCoreRuleId) :
+theorem fullDeclaration?_isSome_iff (id : LegacyPinnedCoreRuleId) :
     (fullDeclaration? id).isSome = true ↔ RuleEnabled id := by
   unfold fullDeclaration?
   rw [← adequacy_map_total_on_enabled id]
   cases leanDeclaration? id <;> simp
 
 /-- Injectivity survives qualification. -/
-theorem fullDeclaration?_injective_on_enabled {a b : PinnedCoreRuleId}
+theorem fullDeclaration?_injective_on_enabled {a b : LegacyPinnedCoreRuleId}
     (ha : RuleEnabled a) (hb : RuleEnabled b)
     (h : fullDeclaration? a = fullDeclaration? b) : a = b := by
   obtain ⟨na, hna⟩ := exists_leanDeclaration_of_enabled ha
@@ -1100,7 +1102,7 @@ theorem fullDeclaration?_injective_on_enabled {a b : PinnedCoreRuleId}
   have : na = nb := string_append_left_cancel h
   exact adequacy_map_injective_on_enabled ha hb (by rw [hna, hnb, this])
 
-end PinnedCoreRuleId
+end LegacyPinnedCoreRuleId
 
 /-! ## The conformance map object -/
 
@@ -1133,7 +1135,7 @@ structure AdequacyMap where
   deriving DecidableEq, Repr, Inhabited
 
 /-- The row of an enabled rule identifier. -/
-def PinnedCoreRuleId.row (id : PinnedCoreRuleId) : AdequacyRow :=
+def LegacyPinnedCoreRuleId.row (id : LegacyPinnedCoreRuleId) : AdequacyRow :=
   { ruleId := id.ruleId
     vendorAnchor := id.anchorOf
     leanDeclaration := id.declarationOf
@@ -1142,37 +1144,37 @@ def PinnedCoreRuleId.row (id : PinnedCoreRuleId) : AdequacyRow :=
 
 /-- The current, partly legacy conformance map: the pinned commit and vendored tree,
 together with one row per enabled identifier. -/
-def core3AdequacyMap : AdequacyMap :=
+def legacyCore3AdequacyMap : AdequacyMap :=
   { revisionCommit := core3RevisionCommit
     vendorTree := core3VendoredTree
-    rows := PinnedCoreRuleId.enabledRuleIds.map PinnedCoreRuleId.row }
+    rows := LegacyPinnedCoreRuleId.enabledRuleIds.map LegacyPinnedCoreRuleId.row }
 
 /-- **Identity binding to the pinned revision.**  The map carries the pinned
 `wg-3.0` commit. -/
-theorem core3AdequacyMap_revisionCommit :
-    core3AdequacyMap.revisionCommit = core3Revision.commit := rfl
+theorem legacyCore3AdequacyMap_revisionCommit :
+    legacyCore3AdequacyMap.revisionCommit = core3Revision.commit := rfl
 
 /-- **Identity binding to the vendored content.**  The map carries the vendored
 tree record, whose `manifestSha256` is the digest of
 `vendor/wasm-spec/SHA256SUMS`, itself the list of digests of all 374 vendored
 files.  Changing any vendored byte changes that literal, and `xtask vendor`
 recomputes it from the bytes on disk. -/
-theorem core3AdequacyMap_vendorTree :
-    core3AdequacyMap.vendorTree = core3VendoredTree := rfl
+theorem legacyCore3AdequacyMap_vendorTree :
+    legacyCore3AdequacyMap.vendorTree = core3VendoredTree := rfl
 
-theorem core3AdequacyMap_vendorDigest :
-    core3AdequacyMap.vendorTree.manifestSha256 = core3VendorManifestSha256 := rfl
+theorem legacyCore3AdequacyMap_vendorDigest :
+    legacyCore3AdequacyMap.vendorTree.manifestSha256 = core3VendorManifestSha256 := rfl
 
 /-- **The commit and the vendored tree are the same revision.**  The map cannot
 name one revision and vendor another. -/
-theorem core3AdequacyMap_vendorTree_commit :
-    core3AdequacyMap.vendorTree.commit = core3AdequacyMap.revisionCommit := rfl
+theorem legacyCore3AdequacyMap_vendorTree_commit :
+    legacyCore3AdequacyMap.vendorTree.commit = legacyCore3AdequacyMap.revisionCommit := rfl
 
 /-- **The model and the map are bound to the same revision.**  Every lawful
 profile carries the commit the map carries; a profile pinned to a different
 revision cannot satisfy this. -/
 theorem adequacy_profile_revision_agree (profile : Profile) :
-    profile.body.revisionCommit = core3AdequacyMap.revisionCommit :=
+    profile.body.revisionCommit = legacyCore3AdequacyMap.revisionCommit :=
   profile.revisionCommit_eq
 
 /-- **Every lawful profile is bound to the vendored content.**  The commit a
@@ -1180,7 +1182,7 @@ lawful profile carries is the commit of the tree whose digest of digests the map
 records, so a profile cannot be pinned to a revision other than the vendored
 one. -/
 theorem adequacy_profile_vendorTree_agree (profile : Profile) :
-    profile.body.revisionCommit = core3AdequacyMap.vendorTree.commit :=
+    profile.body.revisionCommit = legacyCore3AdequacyMap.vendorTree.commit :=
   profile.revisionCommit_eq
 
 /-- Distinct revisions have distinct canonical identities, so the binding above
@@ -1195,48 +1197,48 @@ binding is a real one too, and is not satisfied by a tree that merely claims the
 same commit. -/
 theorem adequacy_vendorTree_identity_eq_iff (t : VendoredTreeBody) :
     VendoredTreeBody.identity t =
-        VendoredTreeBody.identity core3AdequacyMap.vendorTree ↔
-      t = core3AdequacyMap.vendorTree :=
+        VendoredTreeBody.identity legacyCore3AdequacyMap.vendorTree ↔
+      t = legacyCore3AdequacyMap.vendorTree :=
   VendoredTreeBody.identity_eq_iff
 
-theorem core3AdequacyMap_rows_length :
-    core3AdequacyMap.rows.length = PinnedCoreRuleId.enabledRuleIds.length := by
-  simp [core3AdequacyMap]
+theorem legacyCore3AdequacyMap_rows_length :
+    legacyCore3AdequacyMap.rows.length = LegacyPinnedCoreRuleId.enabledRuleIds.length := by
+  simp [legacyCore3AdequacyMap]
 
 /-- Every enabled identifier has a row. -/
-theorem core3AdequacyMap_covers {id : PinnedCoreRuleId}
-    (h : PinnedCoreRuleId.RuleEnabled id) : id.row ∈ core3AdequacyMap.rows :=
-  List.mem_map_of_mem ((PinnedCoreRuleId.mem_enabledRuleIds_iff id).mpr h)
+theorem legacyCore3AdequacyMap_covers {id : LegacyPinnedCoreRuleId}
+    (h : LegacyPinnedCoreRuleId.RuleEnabled id) : id.row ∈ legacyCore3AdequacyMap.rows :=
+  List.mem_map_of_mem ((LegacyPinnedCoreRuleId.mem_enabledRuleIds_iff id).mpr h)
 
 /-- No rejected identifier has a row: a rejected family contributes no Lean
 declaration to the map. -/
-theorem core3AdequacyMap_excludes_rejected {id : PinnedCoreRuleId}
-    (h : ¬ PinnedCoreRuleId.RuleEnabled id) :
-    id.ruleId ∉ core3AdequacyMap.rows.map AdequacyRow.ruleId := by
+theorem legacyCore3AdequacyMap_excludes_rejected {id : LegacyPinnedCoreRuleId}
+    (h : ¬ LegacyPinnedCoreRuleId.RuleEnabled id) :
+    id.ruleId ∉ legacyCore3AdequacyMap.rows.map AdequacyRow.ruleId := by
   intro hmem
-  simp only [core3AdequacyMap, List.map_map, List.mem_map] at hmem
+  simp only [legacyCore3AdequacyMap, List.map_map, List.mem_map] at hmem
   obtain ⟨other, hother, heq⟩ := hmem
-  have : other = id := PinnedCoreRuleId.ruleId_injective heq
+  have : other = id := LegacyPinnedCoreRuleId.ruleId_injective heq
   subst this
-  exact h ((PinnedCoreRuleId.mem_enabledRuleIds_iff other).mp hother)
+  exact h ((LegacyPinnedCoreRuleId.mem_enabledRuleIds_iff other).mp hother)
 
 /-- **The map is duplicate free in its identifiers.** -/
-theorem core3AdequacyMap_ruleIds_nodup :
-    (core3AdequacyMap.rows.map AdequacyRow.ruleId).Nodup := by decide
+theorem legacyCore3AdequacyMap_ruleIds_nodup :
+    (legacyCore3AdequacyMap.rows.map AdequacyRow.ruleId).Nodup := by decide
 
 /-- **The map is duplicate free in its Lean declarations**: no Lean declaration
 is claimed by two pinned rules. -/
-theorem core3AdequacyMap_declarations_nodup :
-    (core3AdequacyMap.rows.map AdequacyRow.leanDeclaration).Nodup := by decide
+theorem legacyCore3AdequacyMap_declarations_nodup :
+    (legacyCore3AdequacyMap.rows.map AdequacyRow.leanDeclaration).Nodup := by decide
 
 /-- Every row of the map records a status that the release feature matrix
 admits: no row of the map belongs to a rejected family. -/
-theorem core3AdequacyMap_rows_enabled {row : AdequacyRow}
-    (h : row ∈ core3AdequacyMap.rows) : Enabled row.family := by
-  simp only [core3AdequacyMap, List.mem_map] at h
+theorem legacyCore3AdequacyMap_rows_enabled {row : AdequacyRow}
+    (h : row ∈ legacyCore3AdequacyMap.rows) : Enabled row.family := by
+  simp only [legacyCore3AdequacyMap, List.mem_map] at h
   obtain ⟨id, hid, rfl⟩ := h
-  exact (PinnedCoreRuleId.ruleEnabled_iff_family_enabled id).mp
-    ((PinnedCoreRuleId.mem_enabledRuleIds_iff id).mp hid)
+  exact (LegacyPinnedCoreRuleId.ruleEnabled_iff_family_enabled id).mp
+    ((LegacyPinnedCoreRuleId.mem_enabledRuleIds_iff id).mp hid)
 
 /-- A witnessed `Option` has exactly one witness.  `∃!` is Mathlib notation and
 this development is Std-only, so uniqueness is written out. -/
@@ -1249,24 +1251,24 @@ theorem exists_unique_eq_some {α : Type} {o : Option α} {a : α} (h : o = some
 
 /-- **Exactly one row per enabled rule.**  The map has a row for every enabled
 identifier and no identifier has two, so a rule cannot be mapped twice. -/
-theorem core3AdequacyMap_row_unique {id : PinnedCoreRuleId}
-    (h : PinnedCoreRuleId.RuleEnabled id) :
+theorem legacyCore3AdequacyMap_row_unique {id : LegacyPinnedCoreRuleId}
+    (h : LegacyPinnedCoreRuleId.RuleEnabled id) :
     ∃ row : AdequacyRow,
-      (row ∈ core3AdequacyMap.rows ∧ row.ruleId = id.ruleId) ∧
+      (row ∈ legacyCore3AdequacyMap.rows ∧ row.ruleId = id.ruleId) ∧
       ∀ other : AdequacyRow,
-        other ∈ core3AdequacyMap.rows → other.ruleId = id.ruleId → other = row := by
-  refine ⟨id.row, ⟨core3AdequacyMap_covers h, rfl⟩, ?_⟩
+        other ∈ legacyCore3AdequacyMap.rows → other.ruleId = id.ruleId → other = row := by
+  refine ⟨id.row, ⟨legacyCore3AdequacyMap_covers h, rfl⟩, ?_⟩
   intro other hmem hrule
-  simp only [core3AdequacyMap, List.mem_map] at hmem
+  simp only [legacyCore3AdequacyMap, List.mem_map] at hmem
   obtain ⟨other', _, rfl⟩ := hmem
-  have : other' = id := PinnedCoreRuleId.ruleId_injective hrule
+  have : other' = id := LegacyPinnedCoreRuleId.ruleId_injective hrule
   rw [this]
 
-/-! ## SPEC section 15: `profile_matches_pinned_revision`
+/-! ## SPEC section 15: `legacy_profile_matches_pinned_revision`
 
 SPEC section 7.1 is the definition of this name, verbatim:
 
-> "`profile_matches_pinned_revision` means that the concrete model and map are
+> "`legacy_profile_matches_pinned_revision` means that the concrete model and map are
 >  identity-bound to the vendored revision and that every enabled vendored rule
 >  has exactly one mapped Lean declaration.  It does not claim that Lean can
 >  derive English prose from bytes.  The reviewed transcription from normative
@@ -1293,68 +1295,68 @@ It does **not** claim the transcription is faithful to the vendored rule bodies.
 That is the disclosed authority boundary of SPEC section 7.1, restated in the
 header of this file together with the two gaps that remain open. -/
 
-/-- **SPEC section 15, `Wasm.profile_matches_pinned_revision`.**
+/-- **SPEC section 15, `Wasm.legacy_profile_matches_pinned_revision`.**
 
 Both conjuncts of SPEC section 7.1: the concrete model and map are
 identity-bound to the vendored revision, and every enabled vendored rule has
 exactly one mapped Lean declaration. -/
-theorem profile_matches_pinned_revision (profile : Profile) :
-    (profile.body.revisionCommit = core3AdequacyMap.revisionCommit ∧
-      core3AdequacyMap.revisionCommit = core3Revision.commit ∧
-      core3AdequacyMap.vendorTree = core3VendoredTree ∧
-      core3AdequacyMap.vendorTree.commit = core3AdequacyMap.revisionCommit ∧
-      core3AdequacyMap.vendorTree.manifestSha256 = core3VendorManifestSha256 ∧
+theorem legacy_profile_matches_pinned_revision (profile : Profile) :
+    (profile.body.revisionCommit = legacyCore3AdequacyMap.revisionCommit ∧
+      legacyCore3AdequacyMap.revisionCommit = core3Revision.commit ∧
+      legacyCore3AdequacyMap.vendorTree = core3VendoredTree ∧
+      legacyCore3AdequacyMap.vendorTree.commit = legacyCore3AdequacyMap.revisionCommit ∧
+      legacyCore3AdequacyMap.vendorTree.manifestSha256 = core3VendorManifestSha256 ∧
       (∀ r : RevisionBody,
         RevisionBody.identity r = RevisionBody.identity core3Revision ↔
           r = core3Revision) ∧
       (∀ t : VendoredTreeBody,
         VendoredTreeBody.identity t =
-            VendoredTreeBody.identity core3AdequacyMap.vendorTree ↔
-          t = core3AdequacyMap.vendorTree)) ∧
-    (∀ id : PinnedCoreRuleId, PinnedCoreRuleId.RuleEnabled id →
+            VendoredTreeBody.identity legacyCore3AdequacyMap.vendorTree ↔
+          t = legacyCore3AdequacyMap.vendorTree)) ∧
+    (∀ id : LegacyPinnedCoreRuleId, LegacyPinnedCoreRuleId.RuleEnabled id →
       (∃ name : String,
-        PinnedCoreRuleId.fullDeclaration? id = some name ∧
+        LegacyPinnedCoreRuleId.fullDeclaration? id = some name ∧
         ∀ other : String,
-          PinnedCoreRuleId.fullDeclaration? id = some other → other = name) ∧
+          LegacyPinnedCoreRuleId.fullDeclaration? id = some other → other = name) ∧
       (∃ row : AdequacyRow,
-        (row ∈ core3AdequacyMap.rows ∧ row.ruleId = id.ruleId) ∧
+        (row ∈ legacyCore3AdequacyMap.rows ∧ row.ruleId = id.ruleId) ∧
         ∀ other : AdequacyRow,
-          other ∈ core3AdequacyMap.rows → other.ruleId = id.ruleId → other = row) ∧
+          other ∈ legacyCore3AdequacyMap.rows → other.ruleId = id.ruleId → other = row) ∧
       (∃ anchor : String,
-        PinnedCoreRuleId.vendorAnchor? id = some anchor ∧
+        LegacyPinnedCoreRuleId.vendorAnchor? id = some anchor ∧
         ∀ other : String,
-          PinnedCoreRuleId.vendorAnchor? id = some other → other = anchor)) ∧
-    (∀ a b : PinnedCoreRuleId,
-      PinnedCoreRuleId.RuleEnabled a → PinnedCoreRuleId.RuleEnabled b →
-        PinnedCoreRuleId.fullDeclaration? a = PinnedCoreRuleId.fullDeclaration? b →
+          LegacyPinnedCoreRuleId.vendorAnchor? id = some other → other = anchor)) ∧
+    (∀ a b : LegacyPinnedCoreRuleId,
+      LegacyPinnedCoreRuleId.RuleEnabled a → LegacyPinnedCoreRuleId.RuleEnabled b →
+        LegacyPinnedCoreRuleId.fullDeclaration? a = LegacyPinnedCoreRuleId.fullDeclaration? b →
           a = b) ∧
-    (∀ id : PinnedCoreRuleId, ¬ PinnedCoreRuleId.RuleEnabled id →
-      PinnedCoreRuleId.leanDeclaration? id = none ∧
-      PinnedCoreRuleId.vendorAnchor? id = none ∧
-      id.ruleId ∉ core3AdequacyMap.rows.map AdequacyRow.ruleId) := by
-  refine ⟨⟨adequacy_profile_revision_agree profile, core3AdequacyMap_revisionCommit,
-      core3AdequacyMap_vendorTree, core3AdequacyMap_vendorTree_commit,
-      core3AdequacyMap_vendorDigest, adequacy_revision_identity_eq_iff,
+    (∀ id : LegacyPinnedCoreRuleId, ¬ LegacyPinnedCoreRuleId.RuleEnabled id →
+      LegacyPinnedCoreRuleId.leanDeclaration? id = none ∧
+      LegacyPinnedCoreRuleId.vendorAnchor? id = none ∧
+      id.ruleId ∉ legacyCore3AdequacyMap.rows.map AdequacyRow.ruleId) := by
+  refine ⟨⟨adequacy_profile_revision_agree profile, legacyCore3AdequacyMap_revisionCommit,
+      legacyCore3AdequacyMap_vendorTree, legacyCore3AdequacyMap_vendorTree_commit,
+      legacyCore3AdequacyMap_vendorDigest, adequacy_revision_identity_eq_iff,
       adequacy_vendorTree_identity_eq_iff⟩, ?_, ?_, ?_⟩
   · intro id h
-    obtain ⟨name, hname⟩ := PinnedCoreRuleId.exists_leanDeclaration_of_enabled h
-    obtain ⟨anchor, hanchor⟩ := PinnedCoreRuleId.exists_vendorAnchor_of_enabled h
-    refine ⟨exists_unique_eq_some (a := PinnedCoreRuleId.declarationNamespace ++ name) ?_,
-      core3AdequacyMap_row_unique h, exists_unique_eq_some hanchor⟩
-    unfold PinnedCoreRuleId.fullDeclaration?
+    obtain ⟨name, hname⟩ := LegacyPinnedCoreRuleId.exists_leanDeclaration_of_enabled h
+    obtain ⟨anchor, hanchor⟩ := LegacyPinnedCoreRuleId.exists_vendorAnchor_of_enabled h
+    refine ⟨exists_unique_eq_some (a := LegacyPinnedCoreRuleId.declarationNamespace ++ name) ?_,
+      legacyCore3AdequacyMap_row_unique h, exists_unique_eq_some hanchor⟩
+    unfold LegacyPinnedCoreRuleId.fullDeclaration?
     rw [hname]
     rfl
   · intro a b ha hb h
-    exact PinnedCoreRuleId.fullDeclaration?_injective_on_enabled ha hb h
+    exact LegacyPinnedCoreRuleId.fullDeclaration?_injective_on_enabled ha hb h
   · intro id h
     -- `RuleEnabled` is decidable, so its double negation is eliminated without
     -- `Classical.choice`.
-    have hnn : ¬ ¬ (PinnedCoreRuleId.status id = RuleStatus.rejectedByProfile) := h
-    have hrej : Rejected (PinnedCoreRuleId.family id) :=
-      (PinnedCoreRuleId.status_eq_rejected_iff id).mp (Decidable.of_not_not hnn)
-    exact ⟨(PinnedCoreRuleId.leanDeclaration?_eq_none_iff id).mpr hrej,
-      (PinnedCoreRuleId.vendorAnchor?_eq_none_iff id).mpr hrej,
-      core3AdequacyMap_excludes_rejected h⟩
+    have hnn : ¬ ¬ (LegacyPinnedCoreRuleId.status id = RuleStatus.rejectedByProfile) := h
+    have hrej : Rejected (LegacyPinnedCoreRuleId.family id) :=
+      (LegacyPinnedCoreRuleId.status_eq_rejected_iff id).mp (Decidable.of_not_not hnn)
+    exact ⟨(LegacyPinnedCoreRuleId.leanDeclaration?_eq_none_iff id).mpr hrej,
+      (LegacyPinnedCoreRuleId.vendorAnchor?_eq_none_iff id).mpr hrej,
+      legacyCore3AdequacyMap_excludes_rejected h⟩
 
 /-! ## Non-vacuity: the mapped declarations exist
 
@@ -1364,8 +1366,8 @@ declaration with each mapped *role* exists; it does not establish that the
 recorded string is that declaration's name, which Lean cannot check without
 metaprogramming. -/
 
-theorem mapped_declarations_referenced : True := by
-  have _ := @decode
+theorem legacy_mapped_declarations_referenced : True := by
+  have _ := @Subset.decode
   have _ := @decodeULEB
   have _ := @InstrTyping.unreachable
   have _ := @InstrTyping.nop
@@ -1391,52 +1393,52 @@ theorem mapped_declarations_referenced : True := by
   have _ := @InstrTyping.throwTag
   have _ := @ExprTyping.nil
   have _ := @ExprTyping.cons
-  have _ := @validate
+  have _ := @Subset.validate
   have _ := @WasmGemmGnaf.Wasm.Subset.Module.checkFunc
   have _ := @WasmGemmGnaf.Wasm.Subset.Module.checkMems
   have _ := @WasmGemmGnaf.Wasm.Subset.Module.checkGemmExport
   have _ := @WasmGemmGnaf.Wasm.Subset.Module.checkClosed
-  have _ := @Store.alloc
-  have _ := @Store.loadBytes
-  have _ := @Store.storeBytes
+  have _ := @Subset.Store.alloc
+  have _ := @Subset.Store.loadBytes
+  have _ := @Subset.Store.storeBytes
   have _ := @Memory.grow
-  have _ := @Step.unreachable
-  have _ := @Step.nop
-  have _ := @Step.i32Const
-  have _ := @Step.drop
-  have _ := @Step.iBinOp
-  have _ := @Step.iBinOpTrap
-  have _ := @Step.iTestOp
-  have _ := @Step.iRelOp
-  have _ := @Step.localGet
-  have _ := @Step.localSet
-  have _ := @Step.localTee
-  have _ := @Step.globalGet
-  have _ := @Step.globalSet
-  have _ := @Step.load
-  have _ := @Step.loadTrap
-  have _ := @Step.store
-  have _ := @Step.storeTrap
-  have _ := @Step.memorySize
-  have _ := @Step.memoryGrowSucceed
-  have _ := @Step.memoryGrowRefuse
-  have _ := @Step.block
-  have _ := @Step.loop
-  have _ := @Step.ifFalse
-  have _ := @Step.ifTrue
-  have _ := @Step.brLoop
-  have _ := @Step.brBlock
-  have _ := @Step.brIfFalse
-  have _ := @Step.brIfLoop
-  have _ := @Step.brIfBlock
-  have _ := @Step.throwTag
-  have _ := @Step.exitLabel
-  have _ := @Step.returnGemm
-  have _ := @Step.enterGemm
-  have _ := @Step.installTrap
-  have _ := @Trap.unreachable
-  have _ := @Trap.outOfBounds
-  have _ := @Trap.divideByZero
+  have _ := @Subset.Step.unreachable
+  have _ := @Subset.Step.nop
+  have _ := @Subset.Step.i32Const
+  have _ := @Subset.Step.drop
+  have _ := @Subset.Step.iBinOp
+  have _ := @Subset.Step.iBinOpTrap
+  have _ := @Subset.Step.iTestOp
+  have _ := @Subset.Step.iRelOp
+  have _ := @Subset.Step.localGet
+  have _ := @Subset.Step.localSet
+  have _ := @Subset.Step.localTee
+  have _ := @Subset.Step.globalGet
+  have _ := @Subset.Step.globalSet
+  have _ := @Subset.Step.load
+  have _ := @Subset.Step.loadTrap
+  have _ := @Subset.Step.store
+  have _ := @Subset.Step.storeTrap
+  have _ := @Subset.Step.memorySize
+  have _ := @Subset.Step.memoryGrowSucceed
+  have _ := @Subset.Step.memoryGrowRefuse
+  have _ := @Subset.Step.block
+  have _ := @Subset.Step.loop
+  have _ := @Subset.Step.ifFalse
+  have _ := @Subset.Step.ifTrue
+  have _ := @Subset.Step.brLoop
+  have _ := @Subset.Step.brBlock
+  have _ := @Subset.Step.brIfFalse
+  have _ := @Subset.Step.brIfLoop
+  have _ := @Subset.Step.brIfBlock
+  have _ := @Subset.Step.throwTag
+  have _ := @Subset.Step.exitLabel
+  have _ := @Subset.Step.returnGemm
+  have _ := @Subset.Step.enterGemm
+  have _ := @Subset.Step.installTrap
+  have _ := @Subset.Trap.unreachable
+  have _ := @Subset.Trap.outOfBounds
+  have _ := @Subset.Trap.divideByZero
   have _ := @Num.growResults
   have _ := @Num.nanResults32
   have _ := @TableInst.get
@@ -1455,6 +1457,268 @@ theorem mapped_declarations_referenced : True := by
   have _ := @Ref.null
   have _ := @Ref.func
   trivial
+
+/-! ## Exhaustive generated public-Core authority map
+
+`CoreAuthorityBindings.lean` is generated from all 1,291 productions, rules,
+and defined numeric equations extracted from the pinned SpecTec sources.  Its
+`rN` declarations are definitional aliases of the unique declarations carrying
+the corresponding source markers.  `just core` checks the generated file
+byte-for-byte and elaborates every alias.  The finite index below therefore
+ranges over the extracted authority inventory itself, not over the legacy
+93-row diagnostic map above. -/
+
+/-- One exact index into the generated pinned Core authority inventory. -/
+abbrev PinnedCoreRuleId : Type := Fin pinnedCoreAuthoritySources.length
+
+namespace PinnedCoreRuleId
+
+/-- The duplicate-free complete enumeration inherited from the finite index. -/
+def all : List PinnedCoreRuleId := Foundation.Fintype.elems PinnedCoreRuleId
+
+theorem mem_all (id : PinnedCoreRuleId) : id ∈ all :=
+  Foundation.Fintype.mem_elems id
+
+theorem all_nodup : all.Nodup :=
+  Foundation.Fintype.elems_nodup PinnedCoreRuleId
+
+theorem all_length : all.length = pinnedCoreAuthoritySources.length := by
+  change (List.finRange pinnedCoreAuthoritySources.length).length =
+    pinnedCoreAuthoritySources.length
+  simp
+
+/-- The generated source record at this exact authority index. -/
+def source (id : PinnedCoreRuleId) : CoreAuthoritySource :=
+  pinnedCoreAuthoritySources.get id
+
+/-- The only source productions rejected by the public feature matrix are the
+explicit relaxed-SIMD productions/equations.  Shared generic syntax remains
+enabled because it also has enabled wasm32 instances. -/
+def family (id : PinnedCoreRuleId) : FeatureFamily :=
+  if id.source.rejectedByProfile then .relaxedSimd else .scalarCore
+
+/-- An inventory row is enabled exactly when the generated profile-classifier
+bit is false. -/
+def RuleEnabled (id : PinnedCoreRuleId) : Prop :=
+  id.source.rejectedByProfile = false
+
+instance instDecidableRuleEnabled (id : PinnedCoreRuleId) :
+    Decidable id.RuleEnabled := by unfold RuleEnabled; infer_instance
+
+/-- Stable, injective identifier of the exact extracted source row. -/
+def ruleId (id : PinnedCoreRuleId) : String :=
+  "spectec-rule-" ++ Nat.repr id.val
+
+/-- The source-side identity extracted from the pinned SpecTec inventory. -/
+def authorityAnchor (id : PinnedCoreRuleId) : String :=
+  id.source.authorityAnchor
+
+/-- The unique generated alias relative to `WasmGemmGnaf.Wasm`. -/
+def bindingRelative (id : PinnedCoreRuleId) : String :=
+  "Core.AuthorityBindings.r" ++ Nat.repr id.val
+
+def declarationNamespace : String := "WasmGemmGnaf.Wasm."
+
+/-- Rejected productions have no PUBLIC map entry. Their pinned transcription
+remains available for authority audit, but is not reachable in the profile. -/
+def leanDeclaration? (id : PinnedCoreRuleId) : Option String :=
+  if id.source.rejectedByProfile then none else some id.bindingRelative
+
+def fullDeclaration? (id : PinnedCoreRuleId) : Option String :=
+  if id.source.rejectedByProfile then none
+  else some (declarationNamespace ++ id.bindingRelative)
+
+def vendorAnchor? (id : PinnedCoreRuleId) : Option String :=
+  if id.source.rejectedByProfile then none else some id.authorityAnchor
+
+def anchorOf (id : PinnedCoreRuleId) : String := id.vendorAnchor?.getD ""
+
+def declarationOf (id : PinnedCoreRuleId) : String := id.leanDeclaration?.getD ""
+
+def status (id : PinnedCoreRuleId) : RuleStatus :=
+  if id.source.rejectedByProfile then .rejectedByProfile else .modelled
+
+theorem ruleEnabled_iff_family_enabled (id : PinnedCoreRuleId) :
+    id.RuleEnabled ↔ Enabled id.family := by
+  cases h : id.source.rejectedByProfile <;>
+    simp [RuleEnabled, family, Enabled, releaseDecision, h]
+
+theorem status_eq_rejected_iff (id : PinnedCoreRuleId) :
+    id.status = .rejectedByProfile ↔ Rejected id.family := by
+  cases h : id.source.rejectedByProfile <;>
+    simp [status, family, Rejected, releaseDecision, h]
+
+theorem indexedName_injective (namePrefix : String) :
+    Function.Injective
+      (fun id : PinnedCoreRuleId => namePrefix ++ Nat.repr id.val) := by
+  intro a b h
+  have hr : Nat.repr a.val = Nat.repr b.val :=
+    (String.append_right_inj namePrefix).mp h
+  exact Fin.ext (Nat.repr_injective hr)
+
+theorem ruleId_injective : Function.Injective ruleId := by
+  exact indexedName_injective "spectec-rule-"
+
+theorem bindingRelative_injective : Function.Injective bindingRelative := by
+  exact indexedName_injective "Core.AuthorityBindings.r"
+
+theorem leanDeclaration?_eq_none_iff (id : PinnedCoreRuleId) :
+    id.leanDeclaration? = none ↔ Rejected id.family := by
+  cases h : id.source.rejectedByProfile <;>
+    simp [leanDeclaration?, family, Rejected, releaseDecision, h]
+
+theorem vendorAnchor?_eq_none_iff (id : PinnedCoreRuleId) :
+    id.vendorAnchor? = none ↔ Rejected id.family := by
+  cases h : id.source.rejectedByProfile <;>
+    simp [vendorAnchor?, family, Rejected, releaseDecision, h]
+
+theorem exists_leanDeclaration_of_enabled {id : PinnedCoreRuleId}
+    (h : id.RuleEnabled) : ∃ name, id.leanDeclaration? = some name := by
+  refine ⟨id.bindingRelative, ?_⟩
+  simp [leanDeclaration?, RuleEnabled] at h ⊢
+  exact h
+
+theorem exists_vendorAnchor_of_enabled {id : PinnedCoreRuleId}
+    (h : id.RuleEnabled) : ∃ anchor, id.vendorAnchor? = some anchor := by
+  refine ⟨id.authorityAnchor, ?_⟩
+  simp [vendorAnchor?, RuleEnabled] at h ⊢
+  exact h
+
+theorem fullDeclaration?_injective_on_enabled {a b : PinnedCoreRuleId}
+    (ha : a.RuleEnabled) (hb : b.RuleEnabled)
+    (h : a.fullDeclaration? = b.fullDeclaration?) : a = b := by
+  simp [RuleEnabled] at ha hb
+  simp [fullDeclaration?, ha, hb] at h
+  exact bindingRelative_injective h
+
+/-- The exact enabled subinventory, in pinned source order. -/
+def enabledRuleIds : List PinnedCoreRuleId := all.filter RuleEnabled
+
+theorem mem_enabledRuleIds_iff (id : PinnedCoreRuleId) :
+    id ∈ enabledRuleIds ↔ id.RuleEnabled := by
+  simp [enabledRuleIds, mem_all]
+
+theorem enabledRuleIds_nodup : enabledRuleIds.Nodup :=
+  all_nodup.filter _
+
+end PinnedCoreRuleId
+
+/-! ### Exact public map object -/
+
+def PinnedCoreRuleId.row (id : PinnedCoreRuleId) : AdequacyRow :=
+  { ruleId := id.ruleId
+    vendorAnchor := id.anchorOf
+    leanDeclaration := id.declarationOf
+    family := id.family
+    status := id.status }
+
+def core3AdequacyMap : AdequacyMap :=
+  { revisionCommit := core3RevisionCommit
+    vendorTree := core3VendoredTree
+    rows := PinnedCoreRuleId.enabledRuleIds.map PinnedCoreRuleId.row }
+
+theorem core3AdequacyMap_revisionCommit :
+    core3AdequacyMap.revisionCommit = core3Revision.commit := rfl
+
+theorem core3AdequacyMap_vendorTree :
+    core3AdequacyMap.vendorTree = core3VendoredTree := rfl
+
+theorem core3AdequacyMap_vendorDigest :
+    core3AdequacyMap.vendorTree.manifestSha256 = core3VendorManifestSha256 := rfl
+
+theorem core3AdequacyMap_vendorTree_commit :
+    core3AdequacyMap.vendorTree.commit = core3AdequacyMap.revisionCommit := rfl
+
+theorem core_adequacy_profile_revision_agree (profile : Profile) :
+    profile.body.revisionCommit = core3AdequacyMap.revisionCommit :=
+  profile.revisionCommit_eq
+
+theorem core3AdequacyMap_covers {id : PinnedCoreRuleId}
+    (h : id.RuleEnabled) : id.row ∈ core3AdequacyMap.rows :=
+  List.mem_map_of_mem ((PinnedCoreRuleId.mem_enabledRuleIds_iff id).mpr h)
+
+theorem core3AdequacyMap_excludes_rejected {id : PinnedCoreRuleId}
+    (h : ¬ id.RuleEnabled) :
+    id.ruleId ∉ core3AdequacyMap.rows.map AdequacyRow.ruleId := by
+  intro hmem
+  simp only [core3AdequacyMap, List.map_map, List.mem_map] at hmem
+  obtain ⟨other, hother, heq⟩ := hmem
+  have hid : other = id := PinnedCoreRuleId.ruleId_injective heq
+  subst hid
+  exact h ((PinnedCoreRuleId.mem_enabledRuleIds_iff other).mp hother)
+
+theorem core3AdequacyMap_row_unique {id : PinnedCoreRuleId}
+    (h : id.RuleEnabled) :
+    ∃ row : AdequacyRow,
+      (row ∈ core3AdequacyMap.rows ∧ row.ruleId = id.ruleId) ∧
+      ∀ other : AdequacyRow,
+        other ∈ core3AdequacyMap.rows → other.ruleId = id.ruleId → other = row := by
+  refine ⟨id.row, ⟨core3AdequacyMap_covers h, rfl⟩, ?_⟩
+  intro other hmem hrule
+  simp only [core3AdequacyMap, List.mem_map] at hmem
+  obtain ⟨otherId, _, rfl⟩ := hmem
+  have : otherId = id := PinnedCoreRuleId.ruleId_injective hrule
+  rw [this]
+
+/-! ### SPEC §7.1 / §15 exact endpoint -/
+
+/-- The public profile and exhaustive generated Core map are identity-bound to
+the vendored revision, and every enabled extracted rule has exactly one unique
+generated declaration alias, row, and pinned-source anchor. -/
+theorem profile_matches_pinned_revision (profile : Profile) :
+    (profile.body.revisionCommit = core3AdequacyMap.revisionCommit ∧
+      core3AdequacyMap.revisionCommit = core3Revision.commit ∧
+      core3AdequacyMap.vendorTree = core3VendoredTree ∧
+      core3AdequacyMap.vendorTree.commit = core3AdequacyMap.revisionCommit ∧
+      core3AdequacyMap.vendorTree.manifestSha256 = core3VendorManifestSha256 ∧
+      (∀ r : RevisionBody,
+        RevisionBody.identity r = RevisionBody.identity core3Revision ↔
+          r = core3Revision) ∧
+      (∀ t : VendoredTreeBody,
+        VendoredTreeBody.identity t =
+            VendoredTreeBody.identity core3AdequacyMap.vendorTree ↔
+          t = core3AdequacyMap.vendorTree)) ∧
+    (∀ id : PinnedCoreRuleId, id.RuleEnabled →
+      (∃ name : String,
+        id.fullDeclaration? = some name ∧
+        ∀ other : String, id.fullDeclaration? = some other → other = name) ∧
+      (∃ row : AdequacyRow,
+        (row ∈ core3AdequacyMap.rows ∧ row.ruleId = id.ruleId) ∧
+        ∀ other : AdequacyRow,
+          other ∈ core3AdequacyMap.rows → other.ruleId = id.ruleId → other = row) ∧
+      (∃ anchor : String,
+        id.vendorAnchor? = some anchor ∧
+        ∀ other : String, id.vendorAnchor? = some other → other = anchor)) ∧
+    (∀ a b : PinnedCoreRuleId,
+      a.RuleEnabled → b.RuleEnabled →
+        a.fullDeclaration? = b.fullDeclaration? → a = b) ∧
+    (∀ id : PinnedCoreRuleId, ¬ id.RuleEnabled →
+      id.leanDeclaration? = none ∧
+      id.vendorAnchor? = none ∧
+      id.ruleId ∉ core3AdequacyMap.rows.map AdequacyRow.ruleId) := by
+  refine ⟨⟨core_adequacy_profile_revision_agree profile,
+      core3AdequacyMap_revisionCommit, core3AdequacyMap_vendorTree,
+      core3AdequacyMap_vendorTree_commit, core3AdequacyMap_vendorDigest,
+      adequacy_revision_identity_eq_iff, adequacy_vendorTree_identity_eq_iff⟩,
+    ?_, ?_, ?_⟩
+  · intro id h
+    have hs : id.source.rejectedByProfile = false := h
+    refine ⟨exists_unique_eq_some (a :=
+        PinnedCoreRuleId.declarationNamespace ++ id.bindingRelative) ?_,
+      core3AdequacyMap_row_unique h,
+      exists_unique_eq_some (a := id.authorityAnchor) ?_⟩
+    · simp [PinnedCoreRuleId.fullDeclaration?, hs]
+    · simp [PinnedCoreRuleId.vendorAnchor?, hs]
+  · intro a b ha hb h
+    exact PinnedCoreRuleId.fullDeclaration?_injective_on_enabled ha hb h
+  · intro id h
+    have hrejected : Rejected id.family := by
+      rw [← id.leanDeclaration?_eq_none_iff]
+      simp [PinnedCoreRuleId.leanDeclaration?, PinnedCoreRuleId.RuleEnabled] at h ⊢
+      exact h
+    exact ⟨(id.leanDeclaration?_eq_none_iff).mpr hrejected,
+      (id.vendorAnchor?_eq_none_iff).mpr hrejected,
+      core3AdequacyMap_excludes_rejected h⟩
 
 /-! ## Scope of the `modelledUnreachable` status
 
@@ -1487,21 +1751,21 @@ theorem checkInstr_vector_rejected (C : Ctx) (h : Nat) (s : VecShape)
 
 /-- The legacy subset reduction relation enumerates no successor for a vector
 instruction. -/
-theorem successorsOfInstr_vector_empty (c : Config) (rest : List Instr)
+theorem successorsOfInstr_vector_empty (c : Subset.Config) (rest : List Instr)
     (s : VecShape) (lane : Nat) (lo hi : UInt64) (arg : MemArg)
     (lanes : List Nat) (u : VecUnOp) (b : VecBinOp) (r : VecRelOp)
     (ext : Option SignExt) :
-    successorsOfInstr c (.vecConst lo hi) rest = [] ∧
-    successorsOfInstr c (.vecUnOp s u) rest = [] ∧
-    successorsOfInstr c (.vecBinOp s b) rest = [] ∧
-    successorsOfInstr c (.vecRelOp s r) rest = [] ∧
-    successorsOfInstr c .vecBitselect rest = [] ∧
-    successorsOfInstr c (.vecSplat s) rest = [] ∧
-    successorsOfInstr c (.vecExtractLane s lane ext) rest = [] ∧
-    successorsOfInstr c (.vecReplaceLane s lane) rest = [] ∧
-    successorsOfInstr c (.vecShuffle lanes) rest = [] ∧
-    successorsOfInstr c (.vecLoad arg) rest = [] ∧
-    successorsOfInstr c (.vecStore arg) rest = [] :=
+    Subset.successorsOfInstr c (.vecConst lo hi) rest = [] ∧
+    Subset.successorsOfInstr c (.vecUnOp s u) rest = [] ∧
+    Subset.successorsOfInstr c (.vecBinOp s b) rest = [] ∧
+    Subset.successorsOfInstr c (.vecRelOp s r) rest = [] ∧
+    Subset.successorsOfInstr c .vecBitselect rest = [] ∧
+    Subset.successorsOfInstr c (.vecSplat s) rest = [] ∧
+    Subset.successorsOfInstr c (.vecExtractLane s lane ext) rest = [] ∧
+    Subset.successorsOfInstr c (.vecReplaceLane s lane) rest = [] ∧
+    Subset.successorsOfInstr c (.vecShuffle lanes) rest = [] ∧
+    Subset.successorsOfInstr c (.vecLoad arg) rest = [] ∧
+    Subset.successorsOfInstr c (.vecStore arg) rest = [] :=
   ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 end WasmGemmGnaf.Wasm

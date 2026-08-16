@@ -32,6 +32,18 @@ open WasmGemmGnaf.Foundation
 the scalar and vector register files, the code/data tables, the status word and
 the constructed output. -/
 structure Machine where
+  /-- Base address of the raw invocation window.  Every ABI region offset is
+  relative to this value, exactly like the public `gemm(ptr,len)` call. -/
+  inputBase : Nat
+  /-- Exact byte length of the raw invocation window.  Public memory can be
+  larger because the Harness grows whole pages and source conformance treats
+  memory as a lower-bounded store. -/
+  inputLength : Nat := 0
+  /-- Result of the independently defined public GEMM classifier for the raw
+  invocation used to create this machine.  Canonical machines compute this
+  field from `Gemm.classify`; plan dispatch never reimplements a weaker
+  header-only classifier. -/
+  classification : Classification := .invalid
   mem : List Nat
   scratch : List Nat
   regs : List Nat
@@ -56,8 +68,8 @@ def vreg (m : Machine) (i : Nat) : List Nat := m.vregs.getD i []
 def withVreg (m : Machine) (i : Nat) (v : List Nat) : Machine :=
   { m with vregs := m.vregs.set i v }
 
-/-- A byte of the raw invocation. -/
-def byteAt (m : Machine) (i : Nat) : Nat := m.mem.getD i 0
+/-- A byte of the raw invocation, addressed relative to `inputBase`. -/
+def byteAt (m : Machine) (i : Nat) : Nat := m.mem.getD (m.inputBase + i) 0
 
 /-- A little-endian 16-bit field of the raw invocation (SPEC §8.3). -/
 def u16At (m : Machine) (i : Nat) : Nat := m.byteAt i + 256 * m.byteAt (i + 1)
@@ -81,6 +93,9 @@ def u16At (m : Machine) (i : Nat) : Nat := m.byteAt i + 256 * m.byteAt (i + 1)
 
 @[simp] theorem scratch_withReg (m : Machine) (i v : Nat) :
     (m.withReg i v).scratch = m.scratch := rfl
+
+@[simp] theorem inputBase_withReg (m : Machine) (i v : Nat) :
+    (m.withReg i v).inputBase = m.inputBase := rfl
 
 end Machine
 
@@ -129,60 +144,17 @@ def declaredTags (m : Machine) : Option (ScalarKind × ScalarKind × ArithmeticM
   | some stored, some acc, some mode => some (stored, acc, mode)
   | _, _, _ => none
 
-/-- The total raw-input classifier of SPEC §8.3, in the fixed precedence order:
-truncation or malformed header first, then unknown kind/mode tags, then
-incompatible tags, then the resource predicate. -/
-def classify (m : Machine) : Classification :=
-  if m.mem.length < headerSize then .invalid
-  else if ¬ m.headerOk then .invalid
-  else
-    match m.declaredTags with
-    | none => .unsupported
-    | some (stored, acc, mode) =>
-        if compatible mode stored acc then
-          if m.mem.length ≤ maxRawExtent then .valid else .resourceExhausted
-        else .invalid
+/-- The plan-visible classification is the result already computed by the
+public GEMM classifier when the canonical machine was created. -/
+def classify (m : Machine) : Classification := m.classification
 
 /-- Classification is total: it is a function, so every raw configuration has
 exactly one class. -/
 theorem classify_total (m : Machine) : ∃ c, m.classify = c := ⟨_, rfl⟩
 
 /-- A truncated invocation is `invalid`. -/
-theorem classify_of_short {m : Machine} (h : m.mem.length < headerSize) :
-    m.classify = .invalid := by
-  simp [classify, h]
-
-/-- A `valid` classification forces the exact released header. -/
-theorem headerOk_of_classify_valid {m : Machine} (h : m.classify = .valid) :
-    m.headerOk = true := by
-  unfold classify at h
-  by_cases h1 : m.mem.length < headerSize
-  · rw [if_pos h1] at h; exact absurd h (by decide)
-  · rw [if_neg h1] at h
-    by_cases h2 : m.headerOk = true
-    · exact h2
-    · rw [if_pos (by simpa using h2)] at h; exact absurd h (by decide)
-
-/-- A `valid` classification forces a compatible kind/mode triple: the plan
-language cannot enter its valid continuation on an incompatible descriptor. -/
-theorem compatible_of_classify_valid {m : Machine} (h : m.classify = .valid) :
-    ∃ stored acc mode,
-      m.declaredTags = some (stored, acc, mode) ∧ compatible mode stored acc = true := by
-  unfold classify at h
-  by_cases h1 : m.mem.length < headerSize
-  · rw [if_pos h1] at h; exact absurd h (by decide)
-  rw [if_neg h1] at h
-  by_cases h2 : ¬ m.headerOk = true
-  · rw [if_pos h2] at h; exact absurd h (by decide)
-  rw [if_neg h2] at h
-  cases hk : m.declaredTags with
-  | none => simp only [hk] at h; exact absurd h (by simp)
-  | some t =>
-    obtain ⟨stored, acc, mode⟩ := t
-    simp only [hk] at h
-    by_cases hc : compatible mode stored acc = true
-    · exact ⟨stored, acc, mode, by first | exact hk | rfl, hc⟩
-    · rw [if_neg hc] at h; exact absurd h (by simp)
+theorem classify_of_stored_invalid {m : Machine}
+    (h : m.classification = .invalid) : m.classify = .invalid := h
 
 /-- The stored element width declared by the header. -/
 def storedWidth (m : Machine) : Nat :=
@@ -444,11 +416,13 @@ theorem reduceFold_modular_lt (c : ArithmeticContract) (h : c.mode = .modular)
 
 /-- The scratch store produced by a `pack` node. -/
 def packedScratch (m : Machine) (src dst : RegionRef) (map : IndexMap) : List Nat :=
-  gather m.scratch dst.base m.mem (fun i => src.base + map.apply i 0 0) src.count 0
+  gather m.scratch dst.base m.mem
+    (fun i => m.inputBase + src.base + map.apply i 0 0) src.count 0
 
 /-- The memory store produced by an `unpack` node. -/
 def unpackedMem (m : Machine) (src dst : RegionRef) (map : IndexMap) : List Nat :=
-  gather m.mem dst.base m.scratch (fun i => src.base + map.apply i 0 0) src.count 0
+  gather m.mem (m.inputBase + dst.base) m.scratch
+    (fun i => src.base + map.apply i 0 0) src.count 0
 
 /-- The address a `storeReg` node writes.  It is the destination region's base
 offset by the index map evaluated at the machine's loop indices, which the
@@ -458,7 +432,7 @@ traversal indices in registers `1` and `2` (the `b`, `i`, `j` slots of
 `IndexMap.apply`).  This is the same `base + map` addressing `unpack` uses, with
 the loop indices in place of `unpack`'s copy counter. -/
 def storeAddr (m : Machine) (dst : RegionRef) (map : IndexMap) : Nat :=
-  dst.base + map.apply (m.reg 0) (m.reg 1) (m.reg 2)
+  m.inputBase + dst.base + map.apply (m.reg 0) (m.reg 1) (m.reg 2)
 
 /-- The memory store produced by a `storeReg` node: the little-endian byte image
 of the register, deposited by exactly the primitive `unpack` uses.  An address
@@ -611,6 +585,68 @@ theorem eval_allocScratch_zero (body : Plan) (m : Machine) :
   rw [eval_allocScratch]
   cases m
   simp
+
+/-- A loop whose body preserves the raw-window base preserves it. -/
+theorem runLoop_inputBase {f : Machine → Machine}
+    (hf : ∀ m : Machine, (f m).inputBase = m.inputBase) (r : Nat) :
+    ∀ (n i : Nat) (m : Machine), (runLoop f r n i m).inputBase = m.inputBase := by
+  intro n
+  induction n with
+  | zero => intro i m; rfl
+  | succ n ih =>
+      intro i m
+      rw [runLoop_succ, ih, hf]
+      simp
+
+/-- **Evaluation never moves the raw window.**  Every plan constructor updates
+registers, memory contents, scratch, tables, status, or output; none rebases
+the invocation window. -/
+@[simp] theorem eval_inputBase : ∀ (p : Plan) (m : Machine),
+    (p.eval m).inputBase = m.inputBase
+  | nop, m => rfl
+  | seq a b, m => by rw [eval_seq, eval_inputBase b, eval_inputBase a]
+  | classifyRaw v i u e, m => by
+      rw [eval_classifyRaw]
+      cases m.classify with
+      | valid => exact eval_inputBase v m
+      | invalid => exact eval_inputBase i m
+      | unsupported => exact eval_inputBase u m
+      | resourceExhausted => exact eval_inputBase e m
+  | dispatchLayout r c g, m => by
+      rw [eval_dispatchLayout]
+      cases m.layoutClass with
+      | rowMajor => exact eval_inputBase r m
+      | colMajor => exact eval_inputBase c m
+      | general => exact eval_inputBase g m
+  | branch co t f, m => by
+      rw [eval_branch]
+      by_cases h : co.eval m = true
+      · rw [if_pos h]; exact eval_inputBase t m
+      · rw [if_neg h]; exact eval_inputBase f m
+  | pack _ _ _ _, m => rfl
+  | unpack _ _ _ _, m => rfl
+  | storeReg _ _ _ _, m => rfl
+  | loadReg _ _ _ _, m => rfl
+  | loopNest axis body, m =>
+      runLoop_inputBase (eval_inputBase body) axis.indexReg axis.extent 0 m
+  | loopReg indexReg extentReg hint body, m =>
+      runLoop_inputBase (eval_inputBase body) indexReg _ 0 m
+  | tiled _ tiling extents body, m =>
+      runLoop_inputBase (eval_inputBase body) 0 _ 0 m
+  | reduce contract acc lhs rhs, m => by
+      rw [eval]
+      split <;> rfl
+  | allocScratch bytes body, m => by
+      rw [eval]
+      exact eval_inputBase body _
+  | setReg _ _, m => rfl
+  | scalarOp _ _ _ _, m => rfl
+  | vectorOp _ _ _ _ _, m => rfl
+  | emitTable _ _, m => rfl
+  | tableLoad _ _ _, m => rfl
+  | setStatus _, m => rfl
+  | buildOutput _, m => rfl
+  | opaqueProcess _ body, m => eval_inputBase body m
 
 end Plan
 
@@ -798,27 +834,33 @@ def Eval (p : Plan) : Machine → Machine := p.eval
 
 @[simp] theorem Eval_apply (p : Plan) (m : Machine) : Eval p m = p.eval m := rfl
 
-/-- The plan accepts an input/output configuration pair. -/
-def Accepts (p : Plan) (input output : Machine) : Prop := Eval p input = output
+/-- The plan accepts an input/output *source-machine* pair.  The public
+raw-invocation/`Wasm.ExecutionObservation` relation required by compiler
+refinement is `GNAF.Accepts`, defined at the checked-plan boundary in
+`GNAF/Accepts.lean`. -/
+def MachineAccepts (p : Plan) (input output : Machine) : Prop :=
+  Eval p input = output
 
 /-- Plan behaviour is total: every configuration has an outcome. -/
-theorem accepts_total (p : Plan) (input : Machine) : ∃ output, Accepts p input output :=
+theorem machineAccepts_total (p : Plan) (input : Machine) :
+    ∃ output, MachineAccepts p input output :=
   ⟨Eval p input, rfl⟩
 
 /-- Plan behaviour is deterministic. -/
-theorem accepts_deterministic {p : Plan} {input o o' : Machine}
-    (h : Accepts p input o) (h' : Accepts p input o') : o = o' := by
-  unfold Accepts at h h'
+theorem machineAccepts_deterministic {p : Plan} {input o o' : Machine}
+    (h : MachineAccepts p input o) (h' : MachineAccepts p input o') : o = o' := by
+  unfold MachineAccepts at h h'
   rw [← h, ← h']
 
 /-- Sequential composition of behaviour (authority §5.7). -/
-theorem accepts_seq {a b : Plan} {m n o : Machine}
-    (ha : Accepts a m n) (hb : Accepts b n o) : Accepts (Plan.seq a b) m o := by
-  unfold Accepts Eval at *
+theorem machineAccepts_seq {a b : Plan} {m n o : Machine}
+    (ha : MachineAccepts a m n) (hb : MachineAccepts b n o) :
+    MachineAccepts (Plan.seq a b) m o := by
+  unfold MachineAccepts Eval at *
   simp only [Plan.eval_seq]
   rw [ha, hb]
 
-theorem accepts_nop (m : Machine) : Accepts Plan.nop m m := rfl
+theorem machineAccepts_nop (m : Machine) : MachineAccepts Plan.nop m m := rfl
 
 /-- Semantic equivalence of plans: equality of the complete behaviour, as
 authority §6.2 requires (behaviour, not syntax). -/

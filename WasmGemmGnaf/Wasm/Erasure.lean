@@ -64,7 +64,7 @@ import WasmGemmGnaf.Wasm.Costed
 
 set_option autoImplicit false
 
-namespace WasmGemmGnaf.Wasm
+namespace WasmGemmGnaf.Wasm.Subset
 
 open WasmGemmGnaf.Foundation
 
@@ -541,4 +541,4 @@ def CostedFiniteExecution.maximalExecution {P : Profile} {initial : Config}
     MaximalExecution initial :=
   .finite observation h.erase (isTerminalObservation observation)
 
-end WasmGemmGnaf.Wasm
+end WasmGemmGnaf.Wasm.Subset

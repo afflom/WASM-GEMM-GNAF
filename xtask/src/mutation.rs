@@ -33,29 +33,108 @@ type Falsifier = fn(&Path) -> Result<bool>;
 pub fn run(root: &Path) -> Result<Outcome> {
     println!("mutation suite (SPEC 18)\n");
 
-    let falsifiers: [(&str, Falsifier); 22] = [
-        ("M1 mutated authority bytes rejected by digest recomputation", m1),
+    let falsifiers: [(&str, Falsifier); 38] = [
+        (
+            "M1 mutated authority bytes rejected by digest recomputation",
+            m1,
+        ),
         ("M2 duplicate claim id rejected", m2),
         ("M3 orphan claim dependency rejected", m3),
-        ("M4 formalProof claim without a Lean declaration rejected", m4),
+        (
+            "M4 formalProof claim without a Lean declaration rejected",
+            m4,
+        ),
         ("M5 planted sorry caught by forbidden-construct scan", m5),
         ("M6 release gate step 9 rejects an absent final theorem", m6),
-        ("M7 Atlas scope-blindness proof rejects a missing dependency", m7),
-        ("M8 root checker rejects source drift despite a stale olean", m8),
+        (
+            "M7 Atlas scope-blindness proof rejects a missing dependency",
+            m7,
+        ),
+        (
+            "M8 root checker rejects source drift despite a stale olean",
+            m8,
+        ),
         ("M9 conclusion-dependent import rejected by firewall", m9),
-        ("M10 manifest checker rejects a backward stage-identity binding", m10),
-        ("M11 weakened GlobalOptimal breaks the Iff.rfl schema binding and the schema audit", m11),
-        ("M12 choice-tainted required declaration reported TAINTED, not discharged", m12),
-        ("M13 mutated vendored SHA256SUMS breaks the pinned-revision binding", m13),
-        ("M14 fabricated Core coverage marker rejected by the extracted checklist", m14),
-        ("M15 required name carrying `Nat := 0` rejected by the signature binding", m15),
-        ("M16 circular reflection theorem rejected by the independence check", m16),
-        ("M17 amendment-set identity drift rejected by the authority binding", m17),
-        ("M18 malformed opcode-275 shape rejected by the AMD-012 binding", m18),
-        ("M19 missing supertype validity rejected by the AMD-013 binding", m19),
-        ("M20 wrapped Core type-group indices rejected by validator soundness", m20),
-        ("M21 overlapping lane-store successors retained by exact enumeration", m21),
-        ("M22 broken public encoders rejected by both round-trip proofs", m22),
+        (
+            "M10 manifest checker rejects a backward stage-identity binding",
+            m10,
+        ),
+        (
+            "M11 weakened GlobalOptimal breaks the Iff.rfl schema binding and the schema audit",
+            m11,
+        ),
+        (
+            "M12 choice-tainted required declaration reported TAINTED, not discharged",
+            m12,
+        ),
+        (
+            "M13 mutated vendored SHA256SUMS breaks the pinned-revision binding",
+            m13,
+        ),
+        (
+            "M14 fabricated Core coverage marker rejected by the extracted checklist",
+            m14,
+        ),
+        (
+            "M15 required name carrying `Nat := 0` rejected by the signature binding",
+            m15,
+        ),
+        (
+            "M16 circular reflection theorem rejected by the independence check",
+            m16,
+        ),
+        (
+            "M17 amendment-set identity drift rejected by the authority binding",
+            m17,
+        ),
+        (
+            "M18 malformed opcode-275 shape rejected by the AMD-012 binding",
+            m18,
+        ),
+        (
+            "M19 missing supertype validity rejected by the AMD-013 binding",
+            m19,
+        ),
+        (
+            "M20 wrapped Core type-group indices rejected by validator soundness",
+            m20,
+        ),
+        (
+            "M21 overlapping lane-store successors retained by exact enumeration",
+            m21,
+        ),
+        (
+            "M22 broken public encoders rejected by both round-trip proofs",
+            m22,
+        ),
+        (
+            "M23 aggregate byte accounting rejected when detached from emitted bytes",
+            m23,
+        ),
+        (
+            "M24 pinned same-state constant initialization rejected by AMD-014",
+            m24,
+        ),
+        (
+            "M25 mixed recursive-suffix scope reset rejected by AMD-015",
+            m25,
+        ),
+        ("M26 public costed-step erasure mismatch rejected", m26),
+        ("M27 public compiler status epilogue deletion rejected", m27),
+        ("M28 forged public evaluator completion rejected", m28),
+        ("M29 malformed byte-solved float target rejected", m29),
+        ("M30 disconnected canonical costed explorer rejected", m30),
+        ("M31 one-page-short Harness raw growth rejected", m31),
+        ("M32 implicit-select BOT rejection detected", m32),
+        (
+            "M33 reducible indexed-null initializer target rejected",
+            m33,
+        ),
+        ("M34 missing computed Harness ABI readiness rejected", m34),
+        ("M35 missing local value-type validity rejected", m35),
+        ("M36 missing recursive heap-shape coherence rejected", m36),
+        ("M37 omitted compiled status assignment rejected", m37),
+        ("M38 perturbed compiler execution charge rejected", m38),
     ];
 
     let mut failed: Vec<&str> = Vec::new();
@@ -67,7 +146,10 @@ pub fn run(root: &Path) -> Result<Outcome> {
             Ok(rejected) => (rejected, String::new()),
             Err(err) => (false, format!(" — {err}")),
         };
-        println!("  [{}] {name}{note}", if rejected { "PASS" } else { "FAIL" });
+        println!(
+            "  [{}] {name}{note}",
+            if rejected { "PASS" } else { "FAIL" }
+        );
         if !rejected {
             failed.push(name);
         }
@@ -144,9 +226,12 @@ fn registry_text() -> Result<String> {
 /// a second copy in after it. Working on the TEXT rather than on a parsed value
 /// keeps the planted file a genuine input to the parser.
 fn plant_duplicate_claim(text: &str) -> Result<String> {
-    let start = text
-        .find("\n    {")
-        .ok_or_else(|| SpecError::new(CLAUSE, "the claim registry has no claim object to duplicate"))?;
+    let start = text.find("\n    {").ok_or_else(|| {
+        SpecError::new(
+            CLAUSE,
+            "the claim registry has no claim object to duplicate",
+        )
+    })?;
     let end = text[start..]
         .find("\n    },")
         .map(|i| start + i + "\n    },".len())
@@ -184,7 +269,10 @@ fn m3(_root: &Path) -> Result<bool> {
         1,
     );
     if planted_text == text {
-        return Err(SpecError::new(CLAUSE, "could not plant an orphan dependency"));
+        return Err(SpecError::new(
+            CLAUSE,
+            "could not plant an orphan dependency",
+        ));
     }
 
     let control = registry_findings(&tmp, "control.json", &text)?;
@@ -206,11 +294,15 @@ fn m4(_root: &Path) -> Result<bool> {
     let victim = claims
         .iter()
         .find(|c| {
-            field(c, "level") == "open" && c.get("leanDeclaration").and_then(Value::as_str).is_none()
+            field(c, "level") == "open"
+                && c.get("leanDeclaration").and_then(Value::as_str).is_none()
         })
         .map(|c| field(c, "id").to_string())
         .ok_or_else(|| {
-            SpecError::new(CLAUSE, "the claim registry has no open claim to forge a promotion of")
+            SpecError::new(
+                CLAUSE,
+                "the claim registry has no open claim to forge a promotion of",
+            )
         })?;
 
     let anchor = format!("\"id\": \"{victim}\",\n      \"level\": \"open\"");
@@ -230,7 +322,9 @@ fn m4(_root: &Path) -> Result<bool> {
     let planted = registry_findings(&tmp, "planted.json", &planted_text)?;
 
     Ok(control.is_empty()
-        && planted.iter().any(|f| f.contains("formalProof with no leanDeclaration")))
+        && planted
+            .iter()
+            .any(|f| f.contains("formalProof with no leanDeclaration")))
 }
 
 // ---------------------------------------------------------------------------
@@ -289,10 +383,8 @@ fn m6(_root: &Path) -> Result<bool> {
 // ---------------------------------------------------------------------------
 fn m7(root: &Path) -> Result<bool> {
     const COVERAGE_SCOPE: &str = "WasmGemmGnaf/Atlas/CoverageScope.lean";
-    const REQUIRED_HYPOTHESIS: &str =
-        "(hp : s₁.body.searchPartitions = s₂.body.searchPartitions)";
-    const UNRELATED_HYPOTHESIS: &str =
-        "(hp : s₁.body.declarationBase = s₂.body.declarationBase)";
+    const REQUIRED_HYPOTHESIS: &str = "(hp : s₁.body.searchPartitions = s₂.body.searchPartitions)";
+    const UNRELATED_HYPOTHESIS: &str = "(hp : s₁.body.declarationBase = s₂.body.declarationBase)";
 
     let source_path = root.join(COVERAGE_SCOPE);
     let source = fs::read_to_string(&source_path).map_err(|e| {
@@ -306,19 +398,12 @@ fn m7(root: &Path) -> Result<bool> {
     if source.matches(REQUIRED_HYPOTHESIS).count() != 1 {
         return Err(SpecError::new(
             CLAUSE,
-            format!(
-                "M7 expected exactly one search-partition hypothesis in {COVERAGE_SCOPE}"
-            ),
+            format!("M7 expected exactly one search-partition hypothesis in {COVERAGE_SCOPE}"),
         ));
     }
 
     let tmp = TempDir::new("m7")?;
-    let control_result = probe_source(
-        CLAUSE,
-        root,
-        &tmp.path().join("M7Control.lean"),
-        &source,
-    )?;
+    let control_result = probe_source(CLAUSE, root, &tmp.path().join("M7Control.lean"), &source)?;
     if !control_result.success {
         return Err(SpecError::new(
             CLAUSE,
@@ -331,12 +416,7 @@ fn m7(root: &Path) -> Result<bool> {
     }
 
     let mutant = source.replacen(REQUIRED_HYPOTHESIS, UNRELATED_HYPOTHESIS, 1);
-    let mutant_result = probe_source(
-        CLAUSE,
-        root,
-        &tmp.path().join("M7Mutant.lean"),
-        &mutant,
-    )?;
+    let mutant_result = probe_source(CLAUSE, root, &tmp.path().join("M7Mutant.lean"), &mutant)?;
     Ok(control_result.success && !mutant_result.success)
 }
 
@@ -389,9 +469,17 @@ fn m8(_root: &Path) -> Result<bool> {
 
     let olean = planted.join(".lake/build/lib/lean/WasmGemmGnaf.olean");
     fs::create_dir_all(olean.parent().expect("M8 olean has a parent")).map_err(|e| {
-        SpecError::io(CLAUSE, "cannot create the M8 stale-object directory at", &olean, e)
+        SpecError::io(
+            CLAUSE,
+            "cannot create the M8 stale-object directory at",
+            &olean,
+            e,
+        )
     })?;
-    write(&olean, "stale compiled root -- intentionally not a valid olean\n")?;
+    write(
+        &olean,
+        "stale compiled root -- intentionally not a valid olean\n",
+    )?;
     write(
         &layer.join("Planted.lean"),
         "set_option autoImplicit false\n\ntheorem m8Planted : True := trivial\n",
@@ -415,7 +503,10 @@ fn m9(_root: &Path) -> Result<bool> {
     let tree = tmp.path().join("WasmGemmGnaf").join("Universal");
     fs::create_dir_all(&tree)
         .map_err(|e| SpecError::io(CLAUSE, "cannot build the planted tree", &tree, e))?;
-    write(&tree.join("Competitor.lean"), "import WasmGemmGnaf.Artifact.Bytes\n")?;
+    write(
+        &tree.join("Competitor.lean"),
+        "import WasmGemmGnaf.Artifact.Bytes\n",
+    )?;
 
     // `xtask` locates the tree it checks by the pair of files that identify a
     // WASM-GEMM-GNAF repository, so the planted copy needs both to be checked as
@@ -759,11 +850,19 @@ fn planted_witness(
          \n\
          #print axioms WasmGemmGnaf.Gemm.{name}\n"
     );
-    let probe = probe_source(CLAUSE, root, &tmp.path().join(format!("M12_{tag}.lean")), &src)?;
+    let probe = probe_source(
+        CLAUSE,
+        root,
+        &tmp.path().join(format!("M12_{tag}.lean")),
+        &src,
+    )?;
     if !probe.success {
         return Err(SpecError::new(
             CLAUSE,
-            format!("the planted {tag} witness does not elaborate: {}", first_line(&probe.combined())),
+            format!(
+                "the planted {tag} witness does not elaborate: {}",
+                first_line(&probe.combined())
+            ),
         ));
     }
     Ok(probe.combined())
@@ -819,8 +918,14 @@ fn m13(root: &Path) -> Result<bool> {
     }
 
     let sums_path = planted.join("SHA256SUMS");
-    let original = fs::read_to_string(&sums_path)
-        .map_err(|e| SpecError::io(CLAUSE, "cannot read the planted digest manifest", &sums_path, e))?;
+    let original = fs::read_to_string(&sums_path).map_err(|e| {
+        SpecError::io(
+            CLAUSE,
+            "cannot read the planted digest manifest",
+            &sums_path,
+            e,
+        )
+    })?;
 
     // (a) a flipped digest: the manifest lies about a file it lists.
     let flipped = flip_first_digest(&original)?;
@@ -830,21 +935,23 @@ fn m13(root: &Path) -> Result<bool> {
         .findings
         .iter()
         .any(|f| f.starts_with("vendored file digest mismatch"))
-        && corrupted.findings.iter().any(|f| f.contains("have drifted apart"));
+        && corrupted
+            .findings
+            .iter()
+            .any(|f| f.contains("have drifted apart"));
 
     // (b) an appended line: every per-file digest still checks out. Only the
     //     digest of digests notices, which is the whole point of recording it.
     write(&sums_path, &format!("{original}\n"))?;
     let appended = crate::vendor::binding(&planted, root)?;
     let rejects_append = appended.content_failures.is_empty()
-        && appended.findings.iter().any(|f| f.contains("have drifted apart"));
+        && appended
+            .findings
+            .iter()
+            .any(|f| f.contains("have drifted apart"));
 
     // (c) a deleted entry: the vendored file count no longer matches Lean's.
-    let shortened: String = original
-        .lines()
-        .skip(1)
-        .map(|l| format!("{l}\n"))
-        .collect();
+    let shortened: String = original.lines().skip(1).map(|l| format!("{l}\n")).collect();
     write(&sums_path, &shortened)?;
     let deleted = crate::vendor::binding(&planted, root)?;
     let rejects_delete = deleted
@@ -887,7 +994,10 @@ fn flip_first_digest(text: &str) -> Result<String> {
             return Ok(format!("{}\n", out.join("\n")));
         }
     }
-    Err(SpecError::new(CLAUSE, "the planted digest manifest has no digest line to flip"))
+    Err(SpecError::new(
+        CLAUSE,
+        "the planted digest manifest has no digest line to flip",
+    ))
 }
 
 // ---------------------------------------------------------------------------
@@ -919,7 +1029,11 @@ fn m14(_root: &Path) -> Result<bool> {
              M14 would pass for the wrong reason",
         ));
     }
-    let control_total: usize = control.parts.iter().map(super::core::Coverage::covered).sum();
+    let control_total: usize = control
+        .parts
+        .iter()
+        .map(super::core::Coverage::covered)
+        .sum();
 
     // (a) an invented opcode. No such production exists in the pinned grammar.
     let plant = planted_lean.join("PlantedCoverage.lean");
@@ -948,8 +1062,11 @@ fn m14(_root: &Path) -> Result<bool> {
 
     // (d) and the number must not have moved: a fabricated marker must not be
     //     able to raise the covered count even while it is being rejected.
-    let planted_total: usize =
-        invented_syntax.parts.iter().map(super::core::Coverage::covered).sum();
+    let planted_total: usize = invented_syntax
+        .parts
+        .iter()
+        .map(super::core::Coverage::covered)
+        .sum();
     let count_unmoved = planted_total == control_total;
 
     // (e) a REAL item claimed by a marker attached to nothing. An external audit
@@ -961,8 +1078,8 @@ fn m14(_root: &Path) -> Result<bool> {
         "-- core-rule: Instr_ok/nop\n\n/- an ordinary block comment, not a declaration -/\n",
     )?;
     let floating = crate::core::report(spectec, &planted_lean)?;
-    let rejects_floating = !floating.is_ok()
-        && floating.parts.iter().any(|p| !p.unattached.is_empty());
+    let rejects_floating =
+        !floating.is_ok() && floating.parts.iter().any(|p| !p.unattached.is_empty());
 
     // (f) a REAL item claimed by a marker above a declaration the COMPILED
     //     environment does not have. The planted copy supplies the name; the
@@ -973,8 +1090,7 @@ fn m14(_root: &Path) -> Result<bool> {
         "-- core-rule: Instr_ok/nop\ndef thisNameIsNotInTheCompiledEnvironment : Nat := 0\n",
     )?;
     let ghost = crate::core::report_elaborated(Path::new("."), spectec, &planted_lean)?;
-    let rejects_ghost =
-        !ghost.is_ok() && ghost.parts.iter().any(|p| !p.unelaborated.is_empty());
+    let rejects_ghost = !ghost.is_ok() && ghost.parts.iter().any(|p| !p.unelaborated.is_empty());
 
     fs::remove_file(&plant).ok();
 
@@ -1061,19 +1177,23 @@ fn m15(root: &Path) -> Result<bool> {
     // It must fail as a TYPE MISMATCH, not because the planted name is unknown:
     // an "unknown identifier" would mean the plant never entered the environment
     // and the binding rejected nothing.
-    let rejects_nat = mutant.combined().contains("Type mismatch")
-        || mutant.combined().contains("type mismatch");
+    let rejects_nat =
+        mutant.combined().contains("Type mismatch") || mutant.combined().contains("type mismatch");
 
     // ---- the wiring half ----------------------------------------------------
     let spec = fs::read_to_string(Path::new("SPEC.md"))
         .map_err(|e| SpecError::io(CLAUSE, "cannot read", Path::new("SPEC.md"), e))?;
     let required = crate::required::required_names(&spec)?;
     let deviations = crate::signature::deviation_ids()?;
-    let real = fs::read_to_string(Path::new(SIGNATURE_BINDINGS)).map_err(|e| {
-        SpecError::io(CLAUSE, "cannot read", Path::new(SIGNATURE_BINDINGS), e)
-    })?;
-    if !crate::signature::audit(&required, &crate::signature::parse(&real), &deviations, &spec)
-        .is_empty()
+    let real = fs::read_to_string(Path::new(SIGNATURE_BINDINGS))
+        .map_err(|e| SpecError::io(CLAUSE, "cannot read", Path::new(SIGNATURE_BINDINGS), e))?;
+    if !crate::signature::audit(
+        &required,
+        &crate::signature::parse(&real),
+        &deviations,
+        &spec,
+    )
+    .is_empty()
     {
         return Err(SpecError::new(
             CLAUSE,
@@ -1089,7 +1209,10 @@ fn m15(root: &Path) -> Result<bool> {
     //     by nothing, which is the state the audit found the repository in.
     let deleted = real.replacen(MARKER, "", 1);
     if deleted == real {
-        return Err(SpecError::new(CLAUSE, "could not delete the validation_progress marker"));
+        return Err(SpecError::new(
+            CLAUSE,
+            "could not delete the validation_progress marker",
+        ));
     }
     let bindings = crate::signature::parse(&deleted);
     let exact = crate::signature::exact_names(&bindings);
@@ -1112,7 +1235,10 @@ fn m15(root: &Path) -> Result<bool> {
     //     and accepts anything tomorrow; only `:= @Name` is definitional.
     let tactic = real.replacen(CLOSURE, "  by exact @Wasm.decode_sound\n", 1);
     if tactic == real {
-        return Err(SpecError::new(CLAUSE, "could not replace the decode_sound closure"));
+        return Err(SpecError::new(
+            CLAUSE,
+            "could not replace the decode_sound closure",
+        ));
     }
     let rejects_tactic = crate::signature::audit(
         &required,
@@ -1143,7 +1269,10 @@ fn m15(root: &Path) -> Result<bool> {
         1,
     );
     if amended_spec == spec {
-        return Err(SpecError::new(CLAUSE, "could not amend the SPEC 7.3 decode block"));
+        return Err(SpecError::new(
+            CLAUSE,
+            "could not amend the SPEC 7.3 decode block",
+        ));
     }
     let rejects_stale_quote = crate::signature::audit(
         &required,
@@ -1214,7 +1343,8 @@ fn copy_tree(from: &Path, to: &Path) -> Result<()> {
     let entries = fs::read_dir(from)
         .map_err(|e| SpecError::io(CLAUSE, "cannot read the vendored tree at", from, e))?;
     for entry in entries {
-        let entry = entry.map_err(|e| SpecError::io(CLAUSE, "cannot read an entry under", from, e))?;
+        let entry =
+            entry.map_err(|e| SpecError::io(CLAUSE, "cannot read an entry under", from, e))?;
         let source = entry.path();
         let target = to.join(entry.file_name());
         if source.is_dir() {
@@ -1257,7 +1387,12 @@ fn write(path: &Path, text: &str) -> Result<()> {
 }
 
 fn first_line(text: &str) -> String {
-    text.lines().find(|l| !l.trim().is_empty()).unwrap_or("").chars().take(200).collect()
+    text.lines()
+        .find(|l| !l.trim().is_empty())
+        .unwrap_or("")
+        .chars()
+        .take(200)
+        .collect()
 }
 
 /// A scratch directory outside the repository, removed on drop.
@@ -1275,10 +1410,8 @@ impl TempDir {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.subsec_nanos() as u64 + d.as_secs())
             .unwrap_or(0);
-        let path = std::env::temp_dir().join(format!(
-            "wgg-mutation-{tag}-{}-{nanos}",
-            std::process::id()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("wgg-mutation-{tag}-{}-{nanos}", std::process::id()));
         fs::create_dir_all(&path)
             .map_err(|e| SpecError::io(CLAUSE, "cannot create a scratch directory at", &path, e))?;
         Ok(TempDir { path })
@@ -1308,7 +1441,10 @@ mod tests {
             assert!(path.is_dir());
             path
         };
-        assert!(!path.exists(), "the planted tree must not outlive the falsifier");
+        assert!(
+            !path.exists(),
+            "the planted tree must not outlive the falsifier"
+        );
     }
 
     #[test]
@@ -1377,6 +1513,134 @@ mod tests {
             .expect("xtask has a repository parent");
         assert!(m22(root).expect("M22 runs"));
     }
+
+    #[test]
+    fn m23_rejects_detached_module_byte_accounting() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask has a repository parent");
+        assert!(m23(root).expect("M23 runs"));
+    }
+
+    #[test]
+    fn m24_rejects_same_state_constant_initialization() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask has a repository parent");
+        assert!(m24(root).expect("M24 runs"));
+    }
+
+    #[test]
+    fn m25_rejects_mixed_recursive_suffix_scope_reset() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask has a repository parent");
+        assert!(m25(root).expect("M25 runs"));
+    }
+
+    #[test]
+    fn m26_rejects_public_costed_step_erasure_mismatch() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask has a repository parent");
+        assert!(m26(root).expect("M26 runs"));
+    }
+
+    #[test]
+    fn m27_rejects_public_compiler_status_epilogue_deletion() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask has a repository parent");
+        assert!(m27(root).expect("M27 runs"));
+    }
+
+    #[test]
+    fn m28_rejects_forged_public_evaluator_completion() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask has a repository parent");
+        assert!(m28(root).expect("M28 runs"));
+    }
+
+    #[test]
+    fn m29_rejects_malformed_byte_solved_float_target() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask has a repository parent");
+        assert!(m29(root).expect("M29 runs"));
+    }
+
+    #[test]
+    fn m30_rejects_disconnected_canonical_costed_explorer() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask has a repository parent");
+        assert!(m30(root).expect("M30 runs"));
+    }
+
+    #[test]
+    fn m31_rejects_one_page_short_harness_growth() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask has a repository parent");
+        assert!(m31(root).expect("M31 runs"));
+    }
+
+    #[test]
+    fn m32_rejects_implicit_select_bottom_loss() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask has a repository parent");
+        assert!(m32(root).expect("M32 runs"));
+    }
+
+    #[test]
+    fn m33_rejects_reducible_indexed_null_initializer_target() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask has a repository parent");
+        assert!(m33(root).expect("M33 runs"));
+    }
+
+    #[test]
+    fn m34_rejects_missing_computed_harness_abi_readiness() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask has a repository parent");
+        assert!(m34(root).expect("M34 runs"));
+    }
+
+    #[test]
+    fn m35_rejects_missing_local_value_type_validity() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask has a repository parent");
+        assert!(m35(root).expect("M35 runs"));
+    }
+
+    #[test]
+    fn m36_rejects_missing_recursive_heap_shape_coherence() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask has a repository parent");
+        assert!(m36(root).expect("M36 runs"));
+    }
+
+    #[test]
+    fn m37_rejects_omitted_compiled_status_assignment() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask has a repository parent");
+        assert!(m37(root).expect("M37 runs"));
+    }
+
+    #[test]
+    fn m38_rejects_perturbed_compiler_execution_charge() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("xtask has a repository parent");
+        assert!(m38(root).expect("M38 runs"));
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1440,7 +1704,10 @@ fn m16(root: &Path) -> Result<bool> {
     ];
     let planted = crate::independence::report_over(root, PLANTED)?;
     let rejects_known = planted.rejected()
-        == vec!["Wasm.decode_complete".to_string(), "Wasm.decode_sound".to_string()];
+        == vec![
+            "Wasm.decode_complete".to_string(),
+            "Wasm.decode_sound".to_string(),
+        ];
 
     // The control: the SAME declarations, with nothing forbidden, must produce
     // no finding. Without this the half above would also pass a checker that
@@ -1458,8 +1725,8 @@ fn m16(root: &Path) -> Result<bool> {
     let mut report = crate::required::environment_report(root)?;
     let before = report.discharged;
     crate::required::apply_independence(&mut report, &["Wasm.decode_sound".to_string()]);
-    let demoted = report.discharged + 1 == before
-        && report.circular == vec!["Wasm.decode_sound".to_string()];
+    let demoted =
+        report.discharged + 1 == before && report.circular == vec!["Wasm.decode_sound".to_string()];
 
     Ok(rejects_known && control.is_ok() && demoted)
 }
@@ -1596,9 +1863,7 @@ fn m20(root: &Path) -> Result<bool> {
     if source.matches(GUARD).count() != 1 {
         return Err(SpecError::new(
             CLAUSE,
-            format!(
-                "M20 expected exactly one executable type-group range guard in {VALIDATOR}"
-            ),
+            format!("M20 expected exactly one executable type-group range guard in {VALIDATOR}"),
         ));
     }
 
@@ -1671,7 +1936,9 @@ fn m21(root: &Path) -> Result<bool> {
     if source.matches(UNION).count() != 1 {
         return Err(SpecError::new(
             CLAUSE,
-            format!("M21 expected exactly one independent lane-store successor union in {SUCCESSORS}"),
+            format!(
+                "M21 expected exactly one independent lane-store successor union in {SUCCESSORS}"
+            ),
         ));
     }
 
@@ -1730,13 +1997,11 @@ fn m22(root: &Path) -> Result<bool> {
     const CORE_BACKEND: &str = "WasmGemmGnaf/Wasm/CoreBackEnd.lean";
     const CORE_IMPLEMENTATION: &str =
         "def encode (module : Module) : ByteArray := Core.Binary.encodeA module.core";
-    const CORE_BROKEN: &str =
-        "def encode (_module : Module) : ByteArray := ByteArray.empty";
+    const CORE_BROKEN: &str = "def encode (_module : Module) : ByteArray := ByteArray.empty";
     const EMITTER: &str = "WasmGemmGnaf/Artifact/Emit.lean";
     const IMPLEMENTATION: &str =
         "def emit (module : Wasm.Module) : ByteArray := Wasm.encode module";
-    const BROKEN: &str =
-        "def emit (_module : Wasm.Module) : ByteArray := ByteArray.empty";
+    const BROKEN: &str = "def emit (_module : Wasm.Module) : ByteArray := ByteArray.empty";
 
     let core_path = root.join(CORE_BACKEND);
     let core_source = fs::read_to_string(&core_path)
@@ -1810,19 +2075,16 @@ fn m22(root: &Path) -> Result<bool> {
     // expose the mutated encoder in its conclusion. This requires the actual
     // `encode_decode_roundtrip` proof term itself to reject empty bytes.
     const ROUNDTRIP_HEAD: &str = "theorem encode_decode_roundtrip";
-    let roundtrip_start = core_source.find(ROUNDTRIP_HEAD).ok_or_else(|| {
-        SpecError::new(CLAUSE, "M22 could not find Wasm.encode_decode_roundtrip")
-    })?;
+    let roundtrip_start = core_source
+        .find(ROUNDTRIP_HEAD)
+        .ok_or_else(|| SpecError::new(CLAUSE, "M22 could not find Wasm.encode_decode_roundtrip"))?;
     let roundtrip_tail = &core_source[roundtrip_start..];
     let roundtrip_end = roundtrip_tail
         .find("\n\nend WasmGemmGnaf.Wasm")
         .ok_or_else(|| SpecError::new(CLAUSE, "M22 could not bound the round-trip theorem"))?;
     let real_roundtrip = &roundtrip_tail[..roundtrip_end];
-    let copied_roundtrip = real_roundtrip.replacen(
-        ROUNDTRIP_HEAD,
-        "theorem m22_encode_decode_roundtrip",
-        1,
-    );
+    let copied_roundtrip =
+        real_roundtrip.replacen(ROUNDTRIP_HEAD, "theorem m22_encode_decode_roundtrip", 1);
     let roundtrip_module = |theorem: &str| {
         format!(
             "import WasmGemmGnaf.Wasm.CoreBackEnd\n\n\
@@ -1847,11 +2109,8 @@ fn m22(root: &Path) -> Result<bool> {
             ),
         ));
     }
-    let empty_roundtrip = copied_roundtrip.replacen(
-        "decode (encode module)",
-        "decode ByteArray.empty",
-        1,
-    );
+    let empty_roundtrip =
+        copied_roundtrip.replacen("decode (encode module)", "decode ByteArray.empty", 1);
     if empty_roundtrip == copied_roundtrip {
         return Err(SpecError::new(
             CLAUSE,
@@ -1907,10 +2166,1264 @@ fn m22(root: &Path) -> Result<bool> {
     {
         return Err(SpecError::new(
             CLAUSE,
-            format!("M22's mutant failed for an unrelated reason: {}", first_line(&diagnostic)),
+            format!(
+                "M22's mutant failed for an unrelated reason: {}",
+                first_line(&diagnostic)
+            ),
         ));
     }
     Ok(rejects_core_source && rejects_core_roundtrip)
+}
+
+// ---------------------------------------------------------------------------
+// M23: the exact aggregate must obtain moduleBytes from the emitted byte array,
+// not from an unrelated constant.  The real projection theorem is retained in
+// a copied source file, so changing only the defining conjunct must make that
+// proof stop elaborating.  The unmodified file is the control.
+// ---------------------------------------------------------------------------
+fn m23(root: &Path) -> Result<bool> {
+    const AGGREGATE: &str = "WasmGemmGnaf/Cost/Aggregate.lean";
+    const EXACT: &str = "cost.static.moduleBytes = bytes.size ∧";
+    const BROKEN: &str = "cost.static.moduleBytes = 0 ∧";
+
+    let source_path = root.join(AGGREGATE);
+    let source = fs::read_to_string(&source_path)
+        .map_err(|e| SpecError::io(CLAUSE, "cannot read the M23 aggregate", &source_path, e))?;
+    if source.matches(EXACT).count() != 1 {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!("M23 expected exactly one module-byte conjunct in {AGGREGATE}"),
+        ));
+    }
+
+    let tmp = TempDir::new("m23")?;
+    let lean_path = root.join(".lake/build/lib/lean");
+    let control_path = tmp.path().join("M23Control.lean");
+    write(&control_path, &source)?;
+    let control = run_command(
+        Command::new("lean")
+            .arg(&control_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if !control.ok {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the unmodified aggregate copy does not elaborate: {}",
+                first_line(&format!("{}\n{}", control.stdout, control.stderr))
+            ),
+        ));
+    }
+
+    let mutant_path = tmp.path().join("M23Mutant.lean");
+    write(&mutant_path, &source.replacen(EXACT, BROKEN, 1))?;
+    let mutant = run_command(
+        Command::new("lean")
+            .arg(&mutant_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if mutant.ok {
+        return Ok(false);
+    }
+    let diagnostic = format!("{}\n{}", mutant.stdout, mutant.stderr);
+    if !diagnostic.contains("module_bytes_exact")
+        && !diagnostic.contains("Type mismatch")
+        && !diagnostic.contains("type mismatch")
+    {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "M23 mutant failed for an unrelated reason: {}",
+                first_line(&diagnostic)
+            ),
+        ));
+    }
+    Ok(!diagnostic.contains("unknown identifier"))
+}
+
+// ---------------------------------------------------------------------------
+// M24: AMD-014 must thread the post-expression state through public constant
+// initialization. Restoring the pinned same-state premise must break the real
+// executable-to-relational initializer soundness proof retained in the file.
+// ---------------------------------------------------------------------------
+fn m24(root: &Path) -> Result<bool> {
+    const INITIALIZER: &str = "WasmGemmGnaf/Wasm/Core/InstantiationAmended.lean";
+    const THREADED: &str = "Eval_exprEraseA state expression evaluated [value] →";
+    const PINNED: &str = "Eval_exprEraseA state expression state [value] →";
+
+    let source_path = root.join(INITIALIZER);
+    let source = fs::read_to_string(&source_path).map_err(|e| {
+        SpecError::io(
+            CLAUSE,
+            "cannot read the M24 amended initializer",
+            &source_path,
+            e,
+        )
+    })?;
+    if source.matches(THREADED).count() != 1 {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!("M24 expected exactly one state-threaded global premise in {INITIALIZER}"),
+        ));
+    }
+
+    let tmp = TempDir::new("m24")?;
+    let lean_path = root.join(".lake/build/lib/lean");
+    let control_path = tmp.path().join("M24Control.lean");
+    write(&control_path, &source)?;
+    let control = run_command(
+        Command::new("lean")
+            .arg(&control_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if !control.ok {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the unmodified AMD-014 initializer copy does not elaborate: {}",
+                first_line(&format!("{}\n{}", control.stdout, control.stderr))
+            ),
+        ));
+    }
+
+    let mutant_path = tmp.path().join("M24Mutant.lean");
+    write(&mutant_path, &source.replacen(THREADED, PINNED, 1))?;
+    let mutant = run_command(
+        Command::new("lean")
+            .arg(&mutant_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if mutant.ok {
+        return Ok(false);
+    }
+    let diagnostic = format!("{}\n{}", mutant.stdout, mutant.stderr);
+    if !diagnostic.contains("evalGlobals_sound")
+        && !diagnostic.contains("Type mismatch")
+        && !diagnostic.contains("type mismatch")
+    {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "M24 mutant failed for an unrelated reason: {}",
+                first_line(&diagnostic)
+            ),
+        ));
+    }
+    Ok(!diagnostic.contains("unknown identifier"))
+}
+
+// ---------------------------------------------------------------------------
+// M25: AMD-015 keeps the executable ordinary-cons arm aligned with the sole
+// amended recursive-type relation. Removing only its suffix-scope check must
+// break the real soundness proof that constructs `Rectype_okA.cons`.
+// ---------------------------------------------------------------------------
+fn m25(root: &Path) -> Result<bool> {
+    const VALIDATOR: &str = "WasmGemmGnaf/Wasm/Core/ValidateTypes.lean";
+    const SCOPE_CHECK: &str =
+        "        (RecType.recr (SubTypes.ofList sts)).noRebasedRecSupers &&\n";
+
+    let source_path = root.join(VALIDATOR);
+    let source = fs::read_to_string(&source_path).map_err(|e| {
+        SpecError::io(
+            CLAUSE,
+            "cannot read the M25 amended type validator",
+            &source_path,
+            e,
+        )
+    })?;
+    if source.matches(SCOPE_CHECK).count() != 1 {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!("M25 expected exactly one AMD-015 suffix-scope check in {VALIDATOR}"),
+        ));
+    }
+
+    let tmp = TempDir::new("m25")?;
+    let lean_path = root.join(".lake/build/lib/lean");
+    let control_path = tmp.path().join("M25Control.lean");
+    write(&control_path, &source)?;
+    let control = run_command(
+        Command::new("lean")
+            .arg(&control_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if !control.ok {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the unmodified AMD-015 validator copy does not elaborate: {}",
+                first_line(&format!("{}\n{}", control.stdout, control.stderr))
+            ),
+        ));
+    }
+
+    let mutant_path = tmp.path().join("M25Mutant.lean");
+    write(&mutant_path, &source.replacen(SCOPE_CHECK, "", 1))?;
+    let mutant = run_command(
+        Command::new("lean")
+            .arg(&mutant_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if mutant.ok {
+        return Ok(false);
+    }
+    let diagnostic = format!("{}\n{}", mutant.stdout, mutant.stderr);
+    if !diagnostic.contains("checkRectypeListA_sound")
+        && !diagnostic.contains("Application type mismatch")
+        && !diagnostic.contains("application type mismatch")
+        && !diagnostic.contains("Invalid projection")
+        && !diagnostic.contains("Type mismatch")
+        && !diagnostic.contains("type mismatch")
+    {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "M25 mutant failed for an unrelated reason: {}",
+                first_line(&diagnostic)
+            ),
+        ));
+    }
+    Ok(!diagnostic.contains("unknown identifier"))
+}
+
+// ---------------------------------------------------------------------------
+// M26: the public costed reduction must consume exactly the Harness event that
+//      `CostedEvent.erase` exposes. Replacing that premise by another valid
+//      Harness event must break the real structural erasure proof.
+// ---------------------------------------------------------------------------
+fn m26(root: &Path) -> Result<bool> {
+    // The public `CostedReduces` and its structural `erase` proof live in
+    // `Wasm/Evaluate.lean`; `Wasm/CoreErasure.lean` only restates the SPEC
+    // name over them.
+    const SOURCE: &str = "WasmGemmGnaf/Wasm/Evaluate.lean";
+    const EXACT_STEP: &str = "      (step : Core.Harness.StepA initial costed.erase next) :\n";
+    const WRONG_STEP: &str = "      (step : Core.Harness.StepA initial (.initialize []) next) :\n";
+
+    let source_path = root.join(SOURCE);
+    let source = fs::read_to_string(&source_path).map_err(|e| {
+        SpecError::io(
+            CLAUSE,
+            "cannot read the M26 public erasure module",
+            &source_path,
+            e,
+        )
+    })?;
+    if source.matches(EXACT_STEP).count() != 1 {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!("M26 expected exactly one public costed-step premise in {SOURCE}"),
+        ));
+    }
+
+    let tmp = TempDir::new("m26")?;
+    let lean_path = root.join(".lake/build/lib/lean");
+    let control_path = tmp.path().join("M26Control.lean");
+    write(&control_path, &source)?;
+    let control = run_command(
+        Command::new("lean")
+            .arg(&control_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if !control.ok {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the unmodified public erasure copy does not elaborate: {}",
+                first_line(&format!("{}\n{}", control.stdout, control.stderr))
+            ),
+        ));
+    }
+
+    let mutant_path = tmp.path().join("M26Mutant.lean");
+    write(&mutant_path, &source.replacen(EXACT_STEP, WRONG_STEP, 1))?;
+    let mutant = run_command(
+        Command::new("lean")
+            .arg(&mutant_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if mutant.ok {
+        return Ok(false);
+    }
+    let diagnostic = format!("{}\n{}", mutant.stdout, mutant.stderr);
+    if !diagnostic.contains("CostedReduces.erase")
+        && !diagnostic.contains("costed_erase_iff_plain_run")
+        && !diagnostic.contains("Application type mismatch")
+        && !diagnostic.contains("application type mismatch")
+        && !diagnostic.contains("Type mismatch")
+        && !diagnostic.contains("type mismatch")
+    {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "M26 mutant failed for an unrelated reason: {}",
+                first_line(&diagnostic)
+            ),
+        ));
+    }
+    Ok(!diagnostic.contains("unknown identifier"))
+}
+
+// ---------------------------------------------------------------------------
+// M27: the public direct compiler must retain the private status-local epilogue.
+// Changing the real lowering in a complete source copy must break the real
+// kernel-checked lowering equation in that same file.
+// ---------------------------------------------------------------------------
+fn m27(root: &Path) -> Result<bool> {
+    const SOURCE: &str = "WasmGemmGnaf/GNAF/Compile.lean";
+    const EXACT: &str =
+        "def bodyCode (e : CompileEnv) (scr : Nat) (p : Plan) : List Wasm.Core.Instr :=\n  code e 0 scr p ++ [localGet e.statusLocal, wrapI64]\n";
+    const BROKEN: &str =
+        "def bodyCode (e : CompileEnv) (scr : Nat) (p : Plan) : List Wasm.Core.Instr :=\n  code e 0 scr p\n";
+
+    let source_path = root.join(SOURCE);
+    let source = fs::read_to_string(&source_path).map_err(|e| {
+        SpecError::io(
+            CLAUSE,
+            "cannot read the M27 public compiler",
+            &source_path,
+            e,
+        )
+    })?;
+    if source.matches(EXACT).count() != 1 {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!("M27 expected exactly one status epilogue lowering in {SOURCE}"),
+        ));
+    }
+
+    let tmp = TempDir::new("m27")?;
+    let lean_path = root.join(".lake/build/lib/lean");
+    let control_path = tmp.path().join("M27Control.lean");
+    write(&control_path, &source)?;
+    let control = run_command(
+        Command::new("lean")
+            .arg(&control_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if !control.ok {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the unmodified direct compiler copy does not elaborate: {}",
+                first_line(&format!("{}\n{}", control.stdout, control.stderr))
+            ),
+        ));
+    }
+
+    let mutant_path = tmp.path().join("M27Mutant.lean");
+    write(&mutant_path, &source.replacen(EXACT, BROKEN, 1))?;
+    let mutant = run_command(
+        Command::new("lean")
+            .arg(&mutant_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if mutant.ok {
+        return Ok(false);
+    }
+    let diagnostic = format!("{}\n{}", mutant.stdout, mutant.stderr);
+    if !diagnostic.contains("bodyCode_has_status_epilogue")
+        && !diagnostic.contains("type mismatch")
+        && !diagnostic.contains("Type mismatch")
+        && !diagnostic.contains("rfl")
+    {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "M27 mutant failed outside the lowering equation: {}",
+                first_line(&diagnostic)
+            ),
+        ));
+    }
+    Ok(!diagnostic.contains("unknown identifier"))
+}
+
+// ---------------------------------------------------------------------------
+// M28: a system evaluation is related only when the sole public evaluator
+// actually returns it. Replacing that computation by reflexivity must break
+// the real extensional soundness proof in the same complete source copy.
+// ---------------------------------------------------------------------------
+fn m28(root: &Path) -> Result<bool> {
+    const SOURCE: &str = "WasmGemmGnaf/Universal/Evaluate.lean";
+    const EXACT: &str = "  Universal.evaluate S bytes = .complete evaluation\n";
+    const FORGED: &str = "  EvaluationResult.complete evaluation = .complete evaluation\n";
+
+    let source_path = root.join(SOURCE);
+    let source = fs::read_to_string(&source_path).map_err(|e| {
+        SpecError::io(
+            CLAUSE,
+            "cannot read the M28 public evaluator",
+            &source_path,
+            e,
+        )
+    })?;
+    if source.matches(EXACT).count() != 1 {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!("M28 expected exactly one canonical evaluator relation in {SOURCE}"),
+        ));
+    }
+
+    let tmp = TempDir::new("m28")?;
+    let lean_path = root.join(".lake/build/lib/lean");
+    let control_path = tmp.path().join("M28Control.lean");
+    write(&control_path, &source)?;
+    let control = run_command(
+        Command::new("lean")
+            .arg(&control_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if !control.ok {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the unmodified public evaluator copy does not elaborate: {}",
+                first_line(&format!("{}\n{}", control.stdout, control.stderr))
+            ),
+        ));
+    }
+
+    let mutant_path = tmp.path().join("M28Mutant.lean");
+    write(&mutant_path, &source.replacen(EXACT, FORGED, 1))?;
+    let mutant = run_command(
+        Command::new("lean")
+            .arg(&mutant_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if mutant.ok {
+        return Ok(false);
+    }
+    let diagnostic = format!("{}\n{}", mutant.stdout, mutant.stderr);
+    if !diagnostic.contains("system_evaluation_rel_sound")
+        && !diagnostic.contains("evaluateFinite_complete_profileValid")
+        && !diagnostic.contains("Application type mismatch")
+        && !diagnostic.contains("application type mismatch")
+        && !diagnostic.contains("Type mismatch")
+        && !diagnostic.contains("type mismatch")
+    {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "M28 mutant failed outside evaluator reflection: {}",
+                first_line(&diagnostic)
+            ),
+        ));
+    }
+    Ok(!diagnostic.contains("unknown identifier"))
+}
+
+// ---------------------------------------------------------------------------
+// M29: raw `FN` contains constructor terms excluded by the pinned `fN` syntax
+// sort. Making the amended byte-solved-result premise vacuous must break the
+// real kernel theorem that extracts well-formedness from `load-num-val`.
+// ---------------------------------------------------------------------------
+fn m29(root: &Path) -> Result<bool> {
+    const SOURCE: &str = "WasmGemmGnaf/Wasm/Core/Execution.lean";
+    const EXACT: &str = "  | .amended => Num_.wf type value = true\n";
+    const BROKEN: &str = "  | .amended => True\n";
+
+    let source_path = root.join(SOURCE);
+    let source = fs::read_to_string(&source_path).map_err(|e| {
+        SpecError::io(
+            CLAUSE,
+            "cannot read the M29 public execution relation",
+            &source_path,
+            e,
+        )
+    })?;
+    if source.matches(EXACT).count() != 1 {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!("M29 expected exactly one amended byte-solved numeric premise in {SOURCE}"),
+        ));
+    }
+
+    let tmp = TempDir::new("m29")?;
+    let lean_path = root.join(".lake/build/lib/lean");
+    let control_path = tmp.path().join("M29Control.lean");
+    write(&control_path, &source)?;
+    let control = run_command(
+        Command::new("lean")
+            .arg(&control_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if !control.ok {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the unmodified public execution copy does not elaborate: {}",
+                first_line(&format!("{}\n{}", control.stdout, control.stderr))
+            ),
+        ));
+    }
+
+    let mutant_path = tmp.path().join("M29Mutant.lean");
+    write(&mutant_path, &source.replacen(EXACT, BROKEN, 1))?;
+    let mutant = run_command(
+        Command::new("lean")
+            .arg(&mutant_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if mutant.ok {
+        return Ok(false);
+    }
+    let diagnostic = format!("{}\n{}", mutant.stdout, mutant.stderr);
+    if !diagnostic.contains("loadNumVal_result_wf")
+        && !diagnostic.contains("unsolved goals")
+        && !diagnostic.contains("Application type mismatch")
+        && !diagnostic.contains("application type mismatch")
+        && !diagnostic.contains("Type mismatch")
+        && !diagnostic.contains("type mismatch")
+    {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "M29 mutant failed outside the byte-solved well-formedness theorem: {}",
+                first_line(&diagnostic)
+            ),
+        ));
+    }
+    Ok(!diagnostic.contains("unknown identifier"))
+}
+
+// ---------------------------------------------------------------------------
+// M30: the Universal checker must call the sole canonical public costed
+// explorer. Replacing that call by unconditional failure must break the real
+// per-input and whole-system completeness proofs in the same source copy.
+// ---------------------------------------------------------------------------
+fn m30(root: &Path) -> Result<bool> {
+    const SOURCE: &str = "WasmGemmGnaf/Universal/Evaluate.lean";
+    const EXACT: &str = "      match htree : S.machine.exploreAllCosted S.problem.maxSteps\n          initialization.initial with\n";
+    const BROKEN: &str = "      match htree :\n          (Wasm.CostedTreeResult.initializationFailure Wasm.invalidModuleInitialization :\n            CostedTreeResult P S.problem.maxSteps initialization.initial) with\n";
+
+    let source_path = root.join(SOURCE);
+    let source = fs::read_to_string(&source_path).map_err(|e| {
+        SpecError::io(
+            CLAUSE,
+            "cannot read the M30 canonical Universal evaluator",
+            &source_path,
+            e,
+        )
+    })?;
+    if source.matches(EXACT).count() != 1 {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!("M30 expected exactly one operative canonical explorer call in {SOURCE}"),
+        ));
+    }
+
+    let tmp = TempDir::new("m30")?;
+    let lean_path = root.join(".lake/build/lib/lean");
+    let control_path = tmp.path().join("M30Control.lean");
+    write(&control_path, &source)?;
+    let control = run_command(
+        Command::new("lean")
+            .arg(&control_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if !control.ok {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the unmodified Universal evaluator copy does not elaborate: {}",
+                first_line(&format!("{}\n{}", control.stdout, control.stderr))
+            ),
+        ));
+    }
+
+    let mutant_path = tmp.path().join("M30Mutant.lean");
+    write(&mutant_path, &source.replacen(EXACT, BROKEN, 1))?;
+    let mutant = run_command(
+        Command::new("lean")
+            .arg(&mutant_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if mutant.ok {
+        return Ok(false);
+    }
+    let diagnostic = format!("{}\n{}", mutant.stdout, mutant.stderr);
+    if !diagnostic.contains("execution_checker_complete_within_sublevel")
+        && !diagnostic.contains("system_evaluation_rel_complete")
+        && !diagnostic.contains("Application type mismatch")
+        && !diagnostic.contains("application type mismatch")
+        && !diagnostic.contains("Type mismatch")
+        && !diagnostic.contains("type mismatch")
+        && !diagnostic.contains("unsolved goals")
+        && !diagnostic.contains("contradiction")
+    {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "M30 mutant failed outside canonical evaluator completeness: {}",
+                first_line(&diagnostic)
+            ),
+        ));
+    }
+    Ok(!diagnostic.contains("unknown identifier"))
+}
+
+// ---------------------------------------------------------------------------
+// M31: the Harness must grow to the exact page ceiling of the complete raw
+// window.  Reducing that target by one page must break the real theorem that
+// the subsequent Core splice is available.
+// ---------------------------------------------------------------------------
+fn m31(root: &Path) -> Result<bool> {
+    const SOURCE: &str = "WasmGemmGnaf/Wasm/Core/HarnessExecution.lean";
+    const EXACT: &str = "  requiredPages (request.rawPtr.val + request.rawLen.val)\n";
+    const BROKEN: &str = "  requiredPages (request.rawPtr.val + request.rawLen.val) - 1\n";
+
+    let source_path = root.join(SOURCE);
+    let source = fs::read_to_string(&source_path).map_err(|e| {
+        SpecError::io(
+            CLAUSE,
+            "cannot read the M31 Harness relation",
+            &source_path,
+            e,
+        )
+    })?;
+    if source.matches(EXACT).count() != 1 {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!("M31 expected exactly one operative raw target-page equation in {SOURCE}"),
+        ));
+    }
+
+    let tmp = TempDir::new("m31")?;
+    let lean_path = root.join(".lake/build/lib/lean");
+    let control_path = tmp.path().join("M31Control.lean");
+    write(&control_path, &source)?;
+    let control = run_command(
+        Command::new("lean")
+            .arg(&control_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if !control.ok {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the unmodified Harness copy does not elaborate: {}",
+                first_line(&format!("{}\n{}", control.stdout, control.stderr))
+            ),
+        ));
+    }
+
+    let mutant_path = tmp.path().join("M31Mutant.lean");
+    write(&mutant_path, &source.replacen(EXACT, BROKEN, 1))?;
+    let mutant = run_command(
+        Command::new("lean")
+            .arg(&mutant_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if mutant.ok {
+        return Ok(false);
+    }
+    let diagnostic = format!("{}\n{}", mutant.stdout, mutant.stderr);
+    if !diagnostic.contains("growMemoryForRaw_splice_available")
+        && !diagnostic.contains("unsolved goals")
+        && !diagnostic.contains("tactic 'change' failed")
+        && !diagnostic.contains("Tactic `change` failed")
+        && !diagnostic.contains("maximum recursion depth has been reached")
+        && !diagnostic.contains("Application type mismatch")
+        && !diagnostic.contains("application type mismatch")
+        && !diagnostic.contains("Type mismatch")
+        && !diagnostic.contains("type mismatch")
+    {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "M31 mutant failed outside the raw-splice availability proof: {}",
+                first_line(&diagnostic)
+            ),
+        ));
+    }
+    Ok(!diagnostic.contains("unknown identifier"))
+}
+
+// ---------------------------------------------------------------------------
+// M32: implicit select must accept the stack-polymorphic BOT operand inferred
+// after `unreachable`. Restoring the narrower num/vector-only test must break
+// the real two-instruction completeness witness.
+// ---------------------------------------------------------------------------
+fn m32(root: &Path) -> Result<bool> {
+    const SOURCE: &str = "WasmGemmGnaf/Wasm/Core/ValidateInstr.lean";
+    // The amended checker's implicit-select test is the one followed by the
+    // amended `subOfA` comparison; the legacy `checkInstr` arm above it uses
+    // plain `subOf`, so this two-line anchor is unique to `checkInstrA`.
+    const EXACT: &str =
+        "if (ValType.nvb t₁ && ValType.nvb t₂) &&\n                      (subOfA C t₁ t₂ || subOfA C t₂ t₁) then\n";
+    const BROKEN: &str =
+        "if (t₁.isNumOrVec && t₂.isNumOrVec) &&\n                      (subOfA C t₁ t₂ || subOfA C t₂ t₁) then\n";
+
+    let source_path = root.join(SOURCE);
+    let source = fs::read_to_string(&source_path).map_err(|e| {
+        SpecError::io(
+            CLAUSE,
+            "cannot read the M32 full amended checker completeness source",
+            &source_path,
+            e,
+        )
+    })?;
+    if source.matches(EXACT).count() != 1 {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!("M32 expected exactly one amended implicit-select BOT test in {SOURCE}"),
+        ));
+    }
+
+    let tmp = TempDir::new("m32")?;
+    let lean_path = root.join(".lake/build/lib/lean");
+    let control_path = tmp.path().join("M32Control.lean");
+    write(&control_path, &source)?;
+    let control = run_command(
+        Command::new("lean")
+            .arg(&control_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if !control.ok {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the unmodified full validator completeness copy does not elaborate: {}",
+                first_line(&format!("{}\n{}", control.stdout, control.stderr))
+            ),
+        ));
+    }
+
+    let mutant_path = tmp.path().join("M32Mutant.lean");
+    write(&mutant_path, &source.replacen(EXACT, BROKEN, 1))?;
+    let mutant = run_command(
+        Command::new("lean")
+            .arg(&mutant_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if mutant.ok {
+        return Ok(false);
+    }
+    let diagnostic = format!("{}\n{}", mutant.stdout, mutant.stderr);
+    if !diagnostic.contains("unreachable_select_checkSeqA")
+        && !diagnostic.contains("checkSeqA_complete")
+        && !diagnostic.contains("Tactic `rfl` failed")
+        && !diagnostic.contains("unsolved goals")
+        && !diagnostic.contains("Application type mismatch")
+        && !diagnostic.contains("application type mismatch")
+        && !diagnostic.contains("Type mismatch")
+        && !diagnostic.contains("type mismatch")
+    {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "M32 mutant failed outside implicit-select completeness: {}",
+                first_line(&diagnostic)
+            ),
+        ));
+    }
+    Ok(!diagnostic.contains("unknown identifier"))
+}
+
+// ---------------------------------------------------------------------------
+// M33: a reducible indexed `ref.null` must not be accepted as a second fresh
+// initialization target.  Disconnecting the relational constructor from the
+// ordinary executable candidate must break its real target-functionality proof.
+// ---------------------------------------------------------------------------
+fn m33(root: &Path) -> Result<bool> {
+    const SOURCE: &str = "WasmGemmGnaf/Wasm/Core/HarnessExecution.lean";
+    const EXACT: &str = "      initializationCandidate? request =\n        some (.beforeEntry\n          { request := request, memoryAddr := memory, gemmAddr := gemm } core) →\n";
+    const BROKEN: &str =
+        "      initializationCandidate? request = initializationCandidate? request →\n";
+
+    let source_path = root.join(SOURCE);
+    let source = fs::read_to_string(&source_path).map_err(|e| {
+        SpecError::io(
+            CLAUSE,
+            "cannot read the M33 Harness initialization relation",
+            &source_path,
+            e,
+        )
+    })?;
+    if source.matches(EXACT).count() != 1 {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!("M33 expected exactly one executable-candidate premise in {SOURCE}"),
+        ));
+    }
+
+    let tmp = TempDir::new("m33")?;
+    let lean_path = root.join(".lake/build/lib/lean");
+    let control_path = tmp.path().join("M33Control.lean");
+    write(&control_path, &source)?;
+    let control = run_command(
+        Command::new("lean")
+            .arg(&control_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if !control.ok {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the unmodified Harness initialization control does not elaborate: {}",
+                first_line(&format!("{}\n{}", control.stdout, control.stderr))
+            ),
+        ));
+    }
+
+    let mutant_path = tmp.path().join("M33Mutant.lean");
+    write(&mutant_path, &source.replacen(EXACT, BROKEN, 1))?;
+    let mutant = run_command(
+        Command::new("lean")
+            .arg(&mutant_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if mutant.ok {
+        return Ok(false);
+    }
+    let diagnostic = format!("{}\n{}", mutant.stdout, mutant.stderr);
+    if !diagnostic.contains("InitializesA.target_functional")
+        && !diagnostic.contains("Application type mismatch")
+        && !diagnostic.contains("application type mismatch")
+        && !diagnostic.contains("Type mismatch")
+        && !diagnostic.contains("type mismatch")
+        && !diagnostic.contains("unsolved goals")
+    {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "M33 mutant failed outside initialization target functionality: {}",
+                first_line(&diagnostic)
+            ),
+        ));
+    }
+    Ok(!diagnostic.contains("unknown identifier"))
+}
+
+// ---------------------------------------------------------------------------
+// M34: public Harness requests must carry the ordinary computations required
+// by their selected callable and raw-memory endpoint. Replacing either checked
+// predicate by `True` must break the production extraction/refutation proofs.
+// ---------------------------------------------------------------------------
+fn m34(root: &Path) -> Result<bool> {
+    const SOURCE: &str = "WasmGemmGnaf/Wasm/Core/HarnessExecution.lean";
+    const GEMM_EXACT: &str = "def GemmFunctionReady (h : Harness) (store : Store) : Prop :=\n  (store.funcs[h.gemmAddr]?).bind (fun function => expandDt function.type) =\n    some (.func\n      (ValTypes.ofList [.num .i32, .num .i32])\n      (ValTypes.ofList [.num .i32]))\n";
+    const GEMM_BROKEN: &str =
+        "def GemmFunctionReady (_h : Harness) (_store : Store) : Prop := True\n";
+    const INSTALL_EXACT: &str = "def RawInstallReady (h : Harness) (state : State) : Prop :=\n  (installRaw? h state).isSome = true\n";
+    const INSTALL_BROKEN: &str =
+        "def RawInstallReady (_h : Harness) (_state : State) : Prop := True\n";
+
+    let source_path = root.join(SOURCE);
+    let source = fs::read_to_string(&source_path).map_err(|e| {
+        SpecError::io(
+            CLAUSE,
+            "cannot read the M34 Harness ABI readiness source",
+            &source_path,
+            e,
+        )
+    })?;
+    if source.matches(GEMM_EXACT).count() != 1 || source.matches(INSTALL_EXACT).count() != 1 {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!("M34 expected one callable and one raw-install predicate in {SOURCE}"),
+        ));
+    }
+
+    let tmp = TempDir::new("m34")?;
+    let lean_path = root.join(".lake/build/lib/lean");
+    let run_source = |name: &str, text: &str| -> Result<crate::gate::Ran> {
+        let path = tmp.path().join(name);
+        write(&path, text)?;
+        run_command(
+            Command::new("lean")
+                .arg(&path)
+                .env("LEAN_PATH", &lean_path)
+                .current_dir(root),
+        )
+    };
+
+    let control = run_source("M34Control.lean", &source)?;
+    if !control.ok {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the unmodified Harness ABI readiness control does not elaborate: {}",
+                first_line(&format!("{}\n{}", control.stdout, control.stderr))
+            ),
+        ));
+    }
+
+    for (name, exact, broken, expected) in [
+        (
+            "M34GemmMutant.lean",
+            GEMM_EXACT,
+            GEMM_BROKEN,
+            "exists_function",
+        ),
+        (
+            "M34InstallMutant.lean",
+            INSTALL_EXACT,
+            INSTALL_BROKEN,
+            "exists_result",
+        ),
+    ] {
+        let mutant = run_source(name, &source.replacen(exact, broken, 1))?;
+        if mutant.ok {
+            return Ok(false);
+        }
+        let diagnostic = format!("{}\n{}", mutant.stdout, mutant.stderr);
+        if !diagnostic.contains(expected)
+            && !diagnostic.contains("not_gemmFunctionReady_of_missing")
+            && !diagnostic.contains("not_rawInstallReady_of_memory_zero_missing")
+            && !diagnostic.contains("unsolved goals")
+            && !diagnostic.contains("Application type mismatch")
+            && !diagnostic.contains("application type mismatch")
+            && !diagnostic.contains("Type mismatch")
+            && !diagnostic.contains("type mismatch")
+            && !diagnostic.contains("Tactic `rewrite` failed")
+            && !diagnostic.contains("Tactic `cases` failed")
+            && !diagnostic.contains("`simp` made no progress")
+        {
+            return Err(SpecError::new(
+                CLAUSE,
+                format!(
+                    "M34 mutant failed outside computed ABI readiness: {}",
+                    first_line(&diagnostic)
+                ),
+            ));
+        }
+        if diagnostic.contains("unknown identifier") {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+// ---------------------------------------------------------------------------
+// M35: both amended local-validation constructors must retain ordinary value-
+// type validity. Defaultability alone admits an out-of-range non-null
+// reference local and breaks the real extraction and rejection theorems.
+// ---------------------------------------------------------------------------
+fn m35(root: &Path) -> Result<bool> {
+    const SOURCE: &str = "WasmGemmGnaf/Wasm/Core/Validation/ModulesCombinedAmended.lean";
+    const VALIDITY: &str = "      Valtype_okA C l.valtype →\n";
+
+    let source_path = root.join(SOURCE);
+    let source = fs::read_to_string(&source_path).map_err(|e| {
+        SpecError::io(
+            CLAUSE,
+            "cannot read the M35 amended local-validation relation",
+            &source_path,
+            e,
+        )
+    })?;
+    if source.matches(VALIDITY).count() != 2 {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!("M35 expected two local value-type premises in {SOURCE}"),
+        ));
+    }
+
+    let tmp = TempDir::new("m35")?;
+    let lean_path = root.join(".lake/build/lib/lean");
+    let control_path = tmp.path().join("M35Control.lean");
+    write(&control_path, &source)?;
+    let control = run_command(
+        Command::new("lean")
+            .arg(&control_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if !control.ok {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the unmodified amended local-validation control does not elaborate: {}",
+                first_line(&format!("{}\n{}", control.stdout, control.stderr))
+            ),
+        ));
+    }
+
+    let mutant_path = tmp.path().join("M35Mutant.lean");
+    write(&mutant_path, &source.replace(VALIDITY, ""))?;
+    let mutant = run_command(
+        Command::new("lean")
+            .arg(&mutant_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if mutant.ok {
+        return Ok(false);
+    }
+    let diagnostic = format!("{}\n{}", mutant.stdout, mutant.stderr);
+    if !diagnostic.contains("valtype_ok")
+        && !diagnostic.contains("rejects_out_of_range_ref_local")
+        && !diagnostic.contains("unsolved goals")
+        && !diagnostic.contains("Application type mismatch")
+        && !diagnostic.contains("application type mismatch")
+        && !diagnostic.contains("Type mismatch")
+        && !diagnostic.contains("type mismatch")
+        && !diagnostic.contains("No goals to be solved")
+        && !diagnostic.contains("Tactic `assumption` failed")
+    {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "M35 mutant failed outside local value-type validity: {}",
+                first_line(&diagnostic)
+            ),
+        ));
+    }
+    Ok(!diagnostic.contains("unknown identifier"))
+}
+
+// ---------------------------------------------------------------------------
+// M36: a rolled recursive variable must retain the exact outer composite
+// shape stored at its `C.RECS` entry.  Removing the operative STRUCT edge must
+// break the production REC-to-ANY bridge used by rolled type validity.
+// ---------------------------------------------------------------------------
+fn m36(root: &Path) -> Result<bool> {
+    const SOURCE: &str = "WasmGemmGnaf/Wasm/Core/Validation/SubtypingAmended.lean";
+    const REC_STRUCT: &str =
+        "  /-- AMD-022: a recursive variable retains the exact STRUCT shape stored at\n      its `C.RECS` entry. -/\n  | rec_struct {C : Context} {i : Nat} {fin : Option Final} {sups : TypeUses}\n      {fts : FieldTypes} :\n      C.recs[i]? = some (.sub fin sups (.struct fts)) →\n      Heaptype_subA C (.use (.recu i)) (.abs .struct)\n";
+
+    let source_path = root.join(SOURCE);
+    let source = fs::read_to_string(&source_path).map_err(|e| {
+        SpecError::io(
+            CLAUSE,
+            "cannot read the M36 amended heap-subtyping relation",
+            &source_path,
+            e,
+        )
+    })?;
+    if source.matches(REC_STRUCT).count() != 1 {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!("M36 expected one operative REC-to-STRUCT rule in {SOURCE}"),
+        ));
+    }
+
+    let tmp = TempDir::new("m36")?;
+    let lean_path = root.join(".lake/build/lib/lean");
+    let control_path = tmp.path().join("M36Control.lean");
+    write(&control_path, &source)?;
+    let control = run_command(
+        Command::new("lean")
+            .arg(&control_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if !control.ok {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the unmodified amended heap-subtyping control does not elaborate: {}",
+                first_line(&format!("{}\n{}", control.stdout, control.stderr))
+            ),
+        ));
+    }
+
+    let mutant_path = tmp.path().join("M36Mutant.lean");
+    write(&mutant_path, &source.replacen(REC_STRUCT, "", 1))?;
+    let mutant = run_command(
+        Command::new("lean")
+            .arg(&mutant_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if mutant.ok {
+        return Ok(false);
+    }
+    let diagnostic = format!("{}\n{}", mutant.stdout, mutant.stderr);
+    if !diagnostic.contains("rec_struct_any")
+        && !diagnostic.contains("rec_struct")
+        && !diagnostic.contains("Invalid field")
+        && !diagnostic.contains("unknown constant")
+        && !diagnostic.contains("unsolved goals")
+        && !diagnostic.contains("Application type mismatch")
+        && !diagnostic.contains("application type mismatch")
+        && !diagnostic.contains("Type mismatch")
+        && !diagnostic.contains("type mismatch")
+    {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "M36 mutant failed outside recursive heap-shape coherence: {}",
+                first_line(&diagnostic)
+            ),
+        ));
+    }
+    Ok(true)
+}
+
+// ---------------------------------------------------------------------------
+// M37: deleting the operative setStatus extraction must break the real
+// source/lowering status correspondence used by compiler refinement.
+// ---------------------------------------------------------------------------
+fn m37(root: &Path) -> Result<bool> {
+    const SOURCE: &str = "WasmGemmGnaf/GNAF/CompileScalarRuntime.lean";
+    const EXACT: &str = "  | .setStatus status => [status.code]\n";
+    const BROKEN: &str = "  | .setStatus _ => []\n";
+
+    let source_path = root.join(SOURCE);
+    let source = fs::read_to_string(&source_path).map_err(|e| {
+        SpecError::io(
+            CLAUSE,
+            "cannot read the M37 scalar compiler runtime bridge",
+            &source_path,
+            e,
+        )
+    })?;
+    if source.matches(EXACT).count() != 1 {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!("M37 expected one operative setStatus extraction in {SOURCE}"),
+        ));
+    }
+
+    let tmp = TempDir::new("m37")?;
+    let lean_path = root.join(".lake/build/lib/lean");
+    let control_path = tmp.path().join("M37Control.lean");
+    write(&control_path, &source)?;
+    let control = run_command(
+        Command::new("lean")
+            .arg(&control_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if !control.ok {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the unmodified scalar compiler runtime control does not elaborate: {}",
+                first_line(&format!("{}\n{}", control.stdout, control.stderr))
+            ),
+        ));
+    }
+
+    let mutant_path = tmp.path().join("M37Mutant.lean");
+    write(&mutant_path, &source.replacen(EXACT, BROKEN, 1))?;
+    let mutant = run_command(
+        Command::new("lean")
+            .arg(&mutant_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if mutant.ok {
+        return Ok(false);
+    }
+    let diagnostic = format!("{}\n{}", mutant.stdout, mutant.stderr);
+    if !diagnostic.contains("apply_statusAssignments")
+        && !diagnostic.contains("supportedStatus")
+        && !diagnostic.contains("unsolved goals")
+        && !diagnostic.contains("Application type mismatch")
+        && !diagnostic.contains("application type mismatch")
+        && !diagnostic.contains("Type mismatch")
+        && !diagnostic.contains("type mismatch")
+        && !diagnostic.contains("simp made no progress")
+    {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "M37 mutant failed outside source/status correspondence: {}",
+                first_line(&diagnostic)
+            ),
+        ));
+    }
+    Ok(!diagnostic.contains("unknown identifier"))
+}
+
+// ---------------------------------------------------------------------------
+// M38: perturbing one real execution-cost coordinate must break the
+// coordinatewise equality with the independently defined source formula.
+// ---------------------------------------------------------------------------
+fn m38(root: &Path) -> Result<bool> {
+    const SOURCE: &str = "WasmGemmGnaf/GNAF/CompileCost.lean";
+    const EXACT: &str = "      dispatchSteps := 5\n";
+    const BROKEN: &str = "      dispatchSteps := 6\n";
+
+    let source_path = root.join(SOURCE);
+    let source = fs::read_to_string(&source_path).map_err(|e| {
+        SpecError::io(
+            CLAUSE,
+            "cannot read the M38 exact compiler cost module",
+            &source_path,
+            e,
+        )
+    })?;
+    if source.matches(EXACT).count() != 1 {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!("M38 expected one execution dispatch coordinate in {SOURCE}"),
+        ));
+    }
+
+    let tmp = TempDir::new("m38")?;
+    let lean_path = root.join(".lake/build/lib/lean");
+    let control_path = tmp.path().join("M38Control.lean");
+    write(&control_path, &source)?;
+    let control = run_command(
+        Command::new("lean")
+            .arg(&control_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if !control.ok {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "the unmodified exact compiler cost control does not elaborate: {}",
+                first_line(&format!("{}\n{}", control.stdout, control.stderr))
+            ),
+        ));
+    }
+
+    let mutant_path = tmp.path().join("M38Mutant.lean");
+    write(&mutant_path, &source.replacen(EXACT, BROKEN, 1))?;
+    let mutant = run_command(
+        Command::new("lean")
+            .arg(&mutant_path)
+            .env("LEAN_PATH", &lean_path)
+            .current_dir(root),
+    )?;
+    if mutant.ok {
+        return Ok(false);
+    }
+    let diagnostic = format!("{}\n{}", mutant.stdout, mutant.stderr);
+    if !diagnostic.contains("compose_formula_eq_certifiedCost")
+        && !diagnostic.contains("omega could not prove")
+        && !diagnostic.contains("unsolved goals")
+        && !diagnostic.contains("Application type mismatch")
+        && !diagnostic.contains("application type mismatch")
+        && !diagnostic.contains("Type mismatch")
+        && !diagnostic.contains("type mismatch")
+    {
+        return Err(SpecError::new(
+            CLAUSE,
+            format!(
+                "M38 mutant failed outside exact compiler cost composition: {}",
+                first_line(&diagnostic)
+            ),
+        ));
+    }
+    Ok(!diagnostic.contains("unknown identifier"))
 }
 
 fn authority_amendment_mutation(
@@ -1963,12 +3476,7 @@ fn authority_amendment_mutation(
     mutation_rejected(&planted, &authority, old, new)
 }
 
-fn mutation_rejected(
-    root: &Path,
-    path: &Path,
-    old: &str,
-    new: &str,
-) -> Result<bool> {
+fn mutation_rejected(root: &Path, path: &Path, old: &str, new: &str) -> Result<bool> {
     let original = fs::read_to_string(path)
         .map_err(|e| SpecError::io(CLAUSE, "cannot read the mutation control", path, e))?;
     let planted = original.replacen(old, new, 1);

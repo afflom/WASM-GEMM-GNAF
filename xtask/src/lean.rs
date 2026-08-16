@@ -98,7 +98,11 @@ pub fn splitlines(s: &str) -> Vec<&str> {
             }
             b'\r' => {
                 out.push(&s[start..i]);
-                i += if i + 1 < b.len() && b[i + 1] == b'\n' { 2 } else { 1 };
+                i += if i + 1 < b.len() && b[i + 1] == b'\n' {
+                    2
+                } else {
+                    1
+                };
                 start = i;
             }
             _ => i += 1,
@@ -174,7 +178,9 @@ pub fn noncomputable_decl(line: &str) -> Option<(&'static str, String)> {
     let after = require_space(rest)?;
     for kind in ["def", "abbrev", "instance"] {
         if let Some(tail) = after.strip_prefix(kind) {
-            let Some(named) = require_space(tail) else { continue };
+            let Some(named) = require_space(tail) else {
+                continue;
+            };
             let name: String = named.chars().take_while(|c| !c.is_whitespace()).collect();
             if !name.is_empty() {
                 return Some((kind, name));
@@ -284,7 +290,8 @@ mod tests {
 
     #[test]
     fn doc_comment_mentioning_sorry_is_invisible() {
-        let src = "/-- SPEC 19 bans `sorry` on the proof path. -/\ntheorem good : True := trivial\n";
+        let src =
+            "/-- SPEC 19 bans `sorry` on the proof path. -/\ntheorem good : True := trivial\n";
         let code = strip(src);
         assert!(!splitlines(&code).iter().any(|l| has_placeholder(l)));
     }
@@ -345,7 +352,10 @@ mod tests {
             Some(("def", "decider".to_string()))
         );
         assert_eq!(noncomputable_decl("def decider : D := c"), None);
-        assert_eq!(import_target("import WasmGemmGnaf.Atlas.Seal"), Some("WasmGemmGnaf.Atlas.Seal"));
+        assert_eq!(
+            import_target("import WasmGemmGnaf.Atlas.Seal"),
+            Some("WasmGemmGnaf.Atlas.Seal")
+        );
         assert_eq!(import_target("importWasmGemmGnaf"), None);
     }
 

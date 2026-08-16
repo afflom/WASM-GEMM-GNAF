@@ -89,7 +89,10 @@ pub fn run(root: &Path) -> Result<Outcome> {
     println!("WGG-GO-1 schema binding (SPEC 1)");
     println!("  authority : {AUTHORITY}");
     println!("  bindings  : {BINDINGS}");
-    println!("  required  : {} scope-critical definition(s)\n", required.len());
+    println!(
+        "  required  : {} scope-critical definition(s)\n",
+        required.len()
+    );
 
     let mut failures = audit(&required, &bindings, &gaps);
 
@@ -151,7 +154,10 @@ pub fn run(root: &Path) -> Result<Outcome> {
 
     println!();
     if !failures.is_empty() {
-        println!("SCHEMA: FAIL — {} unbound, duplicate, or unsound item(s):", failures.len());
+        println!(
+            "SCHEMA: FAIL — {} unbound, duplicate, or unsound item(s):",
+            failures.len()
+        );
         for failure in &failures {
             println!("  {failure}");
         }
@@ -170,7 +176,8 @@ pub fn run(root: &Path) -> Result<Outcome> {
     } else {
         println!(
             "SCHEMA INVENTORY: PASS — {} exact binding(s), {} explicit uncredited gap(s)",
-            bindings.len(), gaps.len()
+            bindings.len(),
+            gaps.len()
         );
         println!("PUBLIC WGG-GO-1 SCHEMA: OPEN — carrier migration remains outstanding");
     }
@@ -218,16 +225,21 @@ pub fn audit(required: &[String], bindings: &[Binding], gaps: &[Gap]) -> Vec<Str
     let mut failures = Vec::new();
 
     for definition in required {
-        let found: Vec<&Binding> =
-            bindings.iter().filter(|b| b.definition == *definition).collect();
-        let found_gaps: Vec<&Gap> = gaps.iter().filter(|g| g.definition == *definition).collect();
+        let found: Vec<&Binding> = bindings
+            .iter()
+            .filter(|b| b.definition == *definition)
+            .collect();
+        let found_gaps: Vec<&Gap> = gaps
+            .iter()
+            .filter(|g| g.definition == *definition)
+            .collect();
         match (found.as_slice(), found_gaps.as_slice()) {
             ([], []) => failures.push(format!(
                 "{definition} -- NO BINDING OR GAP. Add `{MARKER} {definition}` above an \
                  exact definitional theorem, or `{GAP_MARKER} {definition}` while the public \
                  carrier remains unimplemented."
             )),
-            ([], [_]) => {},
+            ([], [_]) => {}
             ([binding], []) => {
                 // The marker must sit on a theorem that actually mentions the
                 // definition; otherwise it is a label, not a binding.
@@ -250,7 +262,9 @@ pub fn audit(required: &[String], bindings: &[Binding], gaps: &[Gap]) -> Vec<Str
             (many, gap_many) => failures.push(format!(
                 "{definition} -- accounted {} times ({} exact binding(s), {} gap(s)); \
                  require exactly one",
-                many.len() + gap_many.len(), many.len(), gap_many.len()
+                many.len() + gap_many.len(),
+                many.len(),
+                gap_many.len()
             )),
         }
     }
@@ -301,7 +315,9 @@ pub fn parse(source: &str) -> Vec<Binding> {
 
     for (index, line) in lines.iter().enumerate() {
         let trimmed = line.trim();
-        let Some(rest) = trimmed.strip_prefix(MARKER) else { continue };
+        let Some(rest) = trimmed.strip_prefix(MARKER) else {
+            continue;
+        };
         let definition = rest.trim().to_string();
         if definition.is_empty() {
             continue;
@@ -318,7 +334,9 @@ pub fn parse(source: &str) -> Vec<Binding> {
             }
             break;
         }
-        let Some(head) = lines.get(cursor) else { continue };
+        let Some(head) = lines.get(cursor) else {
+            continue;
+        };
         let Some(theorem) = head.trim().strip_prefix("theorem ") else {
             bindings.push(Binding {
                 definition,
@@ -478,7 +496,9 @@ theorem wasmProfile_matches_authority_schema (profile : Wasm.Profile) :
         assert_eq!(found[1].proof, "rfl");
         assert!(found[1].statement.contains("(body := profile.body)"));
         assert_eq!(
-            split_assignment("  (body := x) :=", 0).0.map(|(_, a)| a.trim()),
+            split_assignment("  (body := x) :=", 0)
+                .0
+                .map(|(_, a)| a.trim()),
             Some("")
         );
         assert_eq!(split_assignment("    (body := x)", 0).0, None);
@@ -493,8 +513,13 @@ theorem wasmProfile_matches_authority_schema (profile : Wasm.Profile) :
         let (_, after_open) = split_assignment("    (ProfileValid P releasedBytes ∧", 0);
         assert_eq!(after_open, 1);
         let (split, _) = split_assignment("      CanonicalBytesLE a b) :=", after_open);
-        assert!(split.is_some(), "the terminating := must be found at carried depth");
-        assert!(split_assignment("      CanonicalBytesLE a b) :=", 0).0.is_none());
+        assert!(
+            split.is_some(),
+            "the terminating := must be found at carried depth"
+        );
+        assert!(split_assignment("      CanonicalBytesLE a b) :=", 0)
+            .0
+            .is_none());
     }
 
     #[test]
@@ -553,7 +578,11 @@ theorem wasmProfile_matches_authority_schema (profile : Wasm.Profile) :
         // makes the hard-coding pointless: the required list is read.
         let names = definitions_from(&repo_file(AUTHORITY)).expect("authority readable");
         assert!(names.contains(&"GlobalOptimal".to_string()));
-        assert!(names.len() >= 14, "the frozen authority lists {} names", names.len());
+        assert!(
+            names.len() >= 14,
+            "the frozen authority lists {} names",
+            names.len()
+        );
     }
 
     #[test]

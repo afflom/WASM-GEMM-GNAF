@@ -198,7 +198,7 @@ Load-bearing results:
 | `Core.vstoreLaneVal_mem_directSuccessors` | the exact lane-store success branch remains enumerable even when the pinned OOB branch overlaps it |
 | `Universal.exists_globalOptimal_of_nonempty` | generic classical argmin existence under its explicit nonempty/decision hypotheses — §3.1 |
 | `Atlas.semantic_closure_least` | least closure, and it *equals* the derivation closure |
-| `Atlas.incremental_eq_full_rebuild` | incremental accumulation = full rebuild for coherent unscoped state bodies; the scoped required-name theorem remains open |
+| `Atlas.incremental_eq_full_rebuild` | incremental accumulation = full rebuild for coherent state bodies in their own scope; exact AMD-003 required-name theorem |
 | `Atlas.universalCoverCompleteCheck_scope_blind` | **hardening** — see §3.2 |
 
 `coordinate_le_score` is the hinge: it is what makes every score sublevel finite,

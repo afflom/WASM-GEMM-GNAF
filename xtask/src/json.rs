@@ -101,14 +101,18 @@ impl Value {
 
     /// A required string field, with an error naming the SPEC clause.
     pub fn required_str(&self, clause: &'static str, key: &str, context: &str) -> Result<&str> {
-        self.get(key)
-            .and_then(Value::as_str)
-            .ok_or_else(|| SpecError::new(clause, format!("{context}: missing string field `{key}`")))
+        self.get(key).and_then(Value::as_str).ok_or_else(|| {
+            SpecError::new(clause, format!("{context}: missing string field `{key}`"))
+        })
     }
 }
 
 pub fn parse(clause: &'static str, text: &str) -> Result<Value> {
-    let mut p = Parser { chars: text.chars().collect(), pos: 0, clause };
+    let mut p = Parser {
+        chars: text.chars().collect(),
+        pos: 0,
+        clause,
+    };
     p.skip_ws();
     let value = p.value()?;
     p.skip_ws();
@@ -126,7 +130,10 @@ struct Parser {
 
 impl Parser {
     fn error(&self, message: &str) -> SpecError {
-        SpecError::new(self.clause, format!("malformed JSON at character {}: {message}", self.pos))
+        SpecError::new(
+            self.clause,
+            format!("malformed JSON at character {}: {message}", self.pos),
+        )
     }
 
     fn peek(&self) -> Option<char> {
@@ -251,7 +258,9 @@ impl Parser {
     fn unicode_escape(&mut self) -> Result<char> {
         let mut code = 0u32;
         for _ in 0..4 {
-            let c = self.bump().ok_or_else(|| self.error("truncated \\u escape"))?;
+            let c = self
+                .bump()
+                .ok_or_else(|| self.error("truncated \\u escape"))?;
             let digit = c
                 .to_digit(16)
                 .ok_or_else(|| self.error("non-hex digit in \\u escape"))?;
@@ -301,7 +310,12 @@ pub fn s(text: impl Into<String>) -> Out {
 
 /// An object literal, keys kept in the order given.
 pub fn obj(fields: Vec<(&str, Out)>) -> Out {
-    Out::Obj(fields.into_iter().map(|(k, v)| (k.to_string(), v)).collect())
+    Out::Obj(
+        fields
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v))
+            .collect(),
+    )
 }
 
 impl Out {
@@ -443,14 +457,20 @@ mod tests {
         let v = parse("17", text).expect("parses");
         let claims = v.get("claims").and_then(Value::as_array).expect("array");
         assert_eq!(claims.len(), 1);
-        assert_eq!(claims[0].get("level").and_then(Value::as_str), Some("formalProof"));
+        assert_eq!(
+            claims[0].get("level").and_then(Value::as_str),
+            Some("formalProof")
+        );
     }
 
     #[test]
     fn handles_escapes_and_nesting() {
         let v = parse("17", r#"{"a":"x\tyA","b":[1,-2.5e3,true,null,{}]}"#).expect("parses");
         assert_eq!(v.get("a").and_then(Value::as_str), Some("x\tyA"));
-        assert_eq!(v.get("b").and_then(Value::as_array).map(<[Value]>::len), Some(5));
+        assert_eq!(
+            v.get("b").and_then(Value::as_array).map(<[Value]>::len),
+            Some(5)
+        );
     }
 
     #[test]

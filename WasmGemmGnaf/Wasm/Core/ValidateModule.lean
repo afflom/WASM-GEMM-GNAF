@@ -293,7 +293,7 @@ theorem type_ok_of_frag {C : Context} {td : TypeDef}
   · rename_i fin dom cod heq
     rw [heq]
     simp only [Bool.and_eq_true] at h
-    refine Rectype_okA.cons ?_ Rectype_okA.empty
+    refine Rectype_okA.cons ?_ (by rfl) Rectype_okA.empty
     refine Subtype_okA.mk (xs := []) (cts' := []) (by simp) rfl
       (fun j a b ha _ => by simp at ha) (Comptype_okA.func ?_ ?_) (fun a ha => by simp at ha)
     · exact resulttype_okA_of_nvb (nvs_nvb h.1)
@@ -358,13 +358,13 @@ theorem checkFunc_sound {C : Context} {f : Func} (h : checkFunc C f = true) :
             rw [List.getElem?_map, ha] at hb
             simp only [Option.map_some, Option.some.injEq] at hb
             subst hb
-            refine .set (.mk ?_)
-            have := List.all_eq_true.mp h.1 a (List.mem_of_getElem? ha)
+            have hnv := List.all_eq_true.mp h.1 a (List.mem_of_getElem? ha)
+            refine .set (valtype_okA_of_nvb (ValType.nvb_of_nv hnv)) (.mk ?_)
             cases hv : a.valtype with
             | num _ => rfl
             | vec _ => rfl
-            | ref _ => rw [hv] at this; exact absurd this (by simp [ValType.nv])
-            | bot => rw [hv] at this; exact absurd this (by simp [ValType.nv])
+            | ref _ => rw [hv] at hnv; exact absurd hnv (by simp [ValType.nv])
+            | bot => rw [hv] at hnv; exact absurd hnv (by simp [ValType.nv])
           · rw [hd, hc]
             exact checkExpr_sound h.2 hnvcod
 

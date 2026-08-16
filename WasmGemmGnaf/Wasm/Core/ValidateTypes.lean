@@ -94,14 +94,15 @@ def checkRectypeOk2A (C : Context) (qt : RecType) (x : TypeIdx) (i : Nat) : Bool
   match qt with
   | .recr sts => checkSubtypeListOk2A C (SubTypes.toList sts) x i
 
-/-- `Rectype_okA`, following its recursive grammar exactly.  A cons proof may
-continue with either another ordinary cons proof or a `_rec2` proof for the
-remaining suffix; testing only "all cons" versus "all rec2" would miss that
-mixed declarative derivation. -/
+/-- `Rectype_okA`, following its amended recursive grammar exactly.  The
+ordinary arm carries AMD-015's structural guard before recurring into a
+suffix; the `_rec2` arm remains available at every suffix whose declared
+supertypes do not contain a rebased relative `REC`. -/
 def checkRectypeListA (C : Context) : List SubType → TypeIdx → Bool
   | [], _ => true
   | st :: sts, x =>
       (checkSubtypeOkA C x st &&
+        (RecType.recr (SubTypes.ofList sts)).noRebasedRecSupers &&
         checkRectypeListA C sts (TypeIdx.ofNat (x.val + 1))) ||
       checkSubtypeListOk2A (C.withRecs (st :: sts)) (st :: sts) x 0
 
@@ -351,8 +352,8 @@ theorem checkRectypeListA_sound {C : Context} :
       intro x h
       rw [checkRectypeListA, Bool.or_eq_true] at h
       rcases h with hc | hr
-      · rw [Bool.and_eq_true] at hc
-        exact .cons (checkSubtypeOkA_sound hc.1) (ih hc.2)
+      · simp only [Bool.and_eq_true] at hc
+        exact .cons (checkSubtypeOkA_sound hc.1.1) hc.1.2 (ih hc.2)
       · exact .rec2 (checkSubtypeListOk2A_sound (by simpa using hr))
 
 theorem checkRectypeOkA_sound {C : Context} {qt : RecType} {x : TypeIdx}
@@ -583,11 +584,11 @@ theorem checkRectypeListA_complete_of_heap {C : Context}
       simp only [List.all_cons, Bool.and_eq_true] at hsyn
       rw [checkRectypeListA, Bool.or_eq_true]
       cases h with
-      | cons hst htail =>
+      | cons hst hscope htail =>
           apply Or.inl
-          rw [Bool.and_eq_true]
-          exact ⟨checkSubtypeOkA_complete_of_heap hsyn.1 hheap hst,
-            ih hsyn.2 htail⟩
+          simp only [Bool.and_eq_true]
+          exact ⟨⟨checkSubtypeOkA_complete_of_heap hsyn.1 hheap hst,
+            hscope⟩, ih hsyn.2 htail⟩
       | rec2 h2 =>
           apply Or.inr
           have h2' : Rectype_ok2A (C.withRecs (st :: sts))

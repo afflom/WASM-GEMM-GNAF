@@ -17,7 +17,10 @@ pub struct SpecError {
 
 impl SpecError {
     pub fn new(clause: &'static str, message: impl Into<String>) -> Self {
-        SpecError { clause, message: message.into() }
+        SpecError {
+            clause,
+            message: message.into(),
+        }
     }
 
     /// Wrap an I/O failure against a path, keeping the SPEC clause.

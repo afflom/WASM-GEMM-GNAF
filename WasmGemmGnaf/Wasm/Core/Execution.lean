@@ -44,7 +44,7 @@
   this development calls 61 -- and `Core/Numerics.lean`'s header names them.
 -/
 import WasmGemmGnaf.Wasm.Core.ConcreteNumerics
-import WasmGemmGnaf.Wasm.Core.Runtime
+import WasmGemmGnaf.Wasm.Core.HandlerExecutionAmendment
 
 set_option autoImplicit false
 set_option maxHeartbeats 1000000
@@ -701,6 +701,27 @@ inductive ReadRule where
 
 variable [authority : ExecutionAuthority]
 
+/-- AMD-016's explicit rendering of the pinned `num_(nt)` syntax-sort side
+condition at a result reconstructed only from bytes.  The pinned authority
+keeps its original implicit sorted-metavariable reading; the public amended
+authority excludes raw `FN` constructor terms that do not inhabit that sort. -/
+def ByteSolvedNumWfFor [authority : ExecutionAuthority]
+    (type : NumType) (value : Num_ type) : Prop :=
+  match authority.revision with
+  | .pinned => True
+  | .amended => Num_.wf type value = true
+
+/-- AMD-016's storage-literal counterpart.  Integer, vector and packed
+carriers are bounded by construction; only numeric storage can expose the raw
+float representation and therefore delegates to `ByteSolvedNumWfFor`. -/
+def ByteSolvedLiteralWfFor [authority : ExecutionAuthority] :
+    (storage : StorageType) → Lit_ storage → Prop
+  | .val (.num type), value => ByteSolvedNumWfFor type value
+  | .val (.vec _), _ => True
+  | .val (.ref _), value => value.elim
+  | .val .bot, value => value.elim
+  | .pack _, _ => True
+
 /-- `relation Step_read: config ~> instr*  hint(name "E")`, under the selected
 execution authority. -/
 inductive Step_read (Nm : Numerics) :
@@ -1101,6 +1122,7 @@ inductive Step_read (Nm : Numerics) :
       {x : MemIdx} {ao : MemArg} {mi : MemInst} {c : Num_ nt} :
       z.memOf x = some mi →
       Nm.nbytes_ nt c = slice mi.bytes (i.val + ao.offset.val) (nt.size / 8) →
+      ByteSolvedNumWfFor nt c →
       Step_read Nm z .loadNumVal [constAddr att i, .plain (.load nt none x ao)]
         [.plain (.const nt c)]
   /-- `rule Step_read/load-pack-oob: z; (CONST at i) (LOAD Inn (n _ sx) x ao) ~> TRAP
@@ -1528,6 +1550,7 @@ inductive Step_read (Nm : Numerics) :
       (cs.map (fun c => Nm.zbytes_ (fieldStorage ft) c)).flatten =
         slice di.bytes i.val (n.val * zs / 8) →
       cs.mapM (Nm.cunpackConst (fieldStorage ft)) = some is →
+      (∀ c ∈ cs, ByteSolvedLiteralWfFor (fieldStorage ft) c) →
       Step_read Nm z .arrayNewDataNum [constI32 i, constI32 n, .plain (.arrayNewData x y)]
         (plains is ++ [.plain (.arrayNewFixed x n)])
   /-- `rule Step_read/array.get-null:
@@ -1824,6 +1847,7 @@ inductive Step_read (Nm : Numerics) :
       ¬ (j.val + n.val * zs / 8 > di.bytes.length) → n.val ≠ 0 →
       Nm.zbytes_ (fieldStorage ft) c = slice di.bytes j.val (zs / 8) →
       Nm.cunpackConst (fieldStorage ft) c = some ci →
+      ByteSolvedLiteralWfFor (fieldStorage ft) c →
       i'.val = i.val + 1 → j'.val = j.val + zs / 8 → n.val = n'.val + 1 →
       Step_read Nm z .arrayInitDataNum
         [.addrref (.arrayAddr a), constI32 i, constI32 j, constI32 n,
@@ -1868,6 +1892,18 @@ inductive Step (Nm : Numerics) : State → List AdminInstr → State → List Ad
   | ctxtFrame {s s' : Store} {f f' f'' : Frame} {n : Nat} {is is' : List AdminInstr} :
       Step Nm ⟨s, f'⟩ is ⟨s', f''⟩ is' →
       Step Nm ⟨s, f⟩ [.frame n f' is] ⟨s', f⟩ [.frame n f'' is']
+  /-- AMD-023 `Step/ctxt-handler`: the administrative handler evaluates its
+  body while retaining its result arity and catch clauses. -/
+  | ctxtHandler {z z' : State} {n : Nat} {cs : List Catch}
+      {is is' : List AdminInstr} :
+      HandlerAdministrativeRulesFor → Step Nm z is z' is' →
+      Step Nm z [.handler n cs is] z' [.handler n cs is']
+  /-- AMD-023 `Step_pure/trap-handler`: a completed trap escapes its
+  administrative handler.  It is represented at this authority-selected
+  layer so the byte-identical pinned `Step_pure` endpoint remains unchanged. -/
+  | trapHandler {z : State} {n : Nat} {cs : List Catch} :
+      HandlerAdministrativeRulesFor →
+      Step Nm z [.handler n cs [.trap]] z [.trap]
   /-- `rule Step/throw:
       z; val^n (THROW x) ~> $add_exninst(z, exn); (REF.EXN_ADDR a) THROW_REF
       -- Expand: $as_deftype($tag(z, x).TYPE) ~~ FUNC t^n -> eps
@@ -2169,6 +2205,34 @@ abbrev Step_readAmendedFor := @Step_read amendedExecutionAuthority
 
 /-- The sole public AMD-011 store-reading relation, bound to released numerics. -/
 abbrev Step_readA := Step_readAmendedFor releasedNumerics
+
+/-- Recognize the well-formedness bit of a singleton numeric-constant result.
+This nondependent projection lets rule inversion transport a result across the
+dependent `Num_` family without eliminating its type index by hand. -/
+def singletonNumConstWf : List AdminInstr → Bool
+  | [.plain (.const type value)] => Num_.wf type value
+  | _ => false
+
+/-- AMD-016 is operative on the public full-width load rule: every literal
+solved from memory bytes inhabits the pinned side-conditioned numeric syntax
+sort.  M29 makes the selector premise vacuous and requires this theorem to
+stop elaborating. -/
+theorem Step_readA.loadNumVal_result_wf {z : State} {att : AddrType}
+    {i : AddrLit att} {nt : NumType} {x : MemIdx} {ao : MemArg}
+    {c : Num_ nt}
+    (step : Step_readA z .loadNumVal
+      [constAddr att i, .plain (.load nt none x ao)]
+      [.plain (.const nt c)]) :
+    Num_.wf nt c = true := by
+  generalize hsource :
+      [constAddr att i, .plain (.load nt none x ao)] = source at step
+  generalize htarget :
+      ([AdminInstr.plain (.const nt c)] : List AdminInstr) = target at step
+  cases step
+  case loadNumVal hmem hbytes hwf =>
+    change singletonNumConstWf [AdminInstr.plain (.const nt c)] = true
+    rw [congrArg singletonNumConstWf htarget]
+    simpa [singletonNumConstWf, ByteSolvedNumWfFor] using hwf
 
 /-- The byte-identical pinned one-step relation. -/
 abbrev StepPinned := @Step pinnedExecutionAuthority

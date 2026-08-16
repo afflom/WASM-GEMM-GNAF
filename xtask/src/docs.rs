@@ -39,7 +39,10 @@ pub fn run(check: bool) -> Result<Outcome> {
             .map(|b| String::from_utf8_lossy(&b).into_owned())
             .unwrap_or_default();
         if current == text {
-            println!("{OUTPUT} current: {} claims, {outstanding} outstanding", claims.len());
+            println!(
+                "{OUTPUT} current: {} claims, {outstanding} outstanding",
+                claims.len()
+            );
             return Ok(Outcome::Pass);
         }
         println!(
@@ -52,7 +55,10 @@ pub fn run(check: bool) -> Result<Outcome> {
 
     std::fs::write(Path::new(OUTPUT), &text)
         .map_err(|e| SpecError::io(CLAUSE, "cannot write", Path::new(OUTPUT), e))?;
-    println!("{OUTPUT}: {} claims, {outstanding} outstanding", claims.len());
+    println!(
+        "{OUTPUT}: {} claims, {outstanding} outstanding",
+        claims.len()
+    );
     Ok(Outcome::Pass)
 }
 
@@ -74,7 +80,9 @@ fn render(registry: &Value, claims: &[Value]) -> Result<String> {
         commas(lines),
         commas(theorems)
     ));
-    l.push("Generated live; prose documents cite this table rather than repeating counts.\n".into());
+    l.push(
+        "Generated live; prose documents cite this table rather than repeating counts.\n".into(),
+    );
     l.push("Generated from `model/claims.json` by `just docs`. Do not edit by hand.\n".into());
     l.push("Claim levels are load-bearing (SPEC 17.1). Only `formalProof` supports the".into());
     l.push("words \"proved\", \"theorem\", or \"globally optimal\".\n".into());
@@ -104,7 +112,11 @@ fn render(registry: &Value, claims: &[Value]) -> Result<String> {
                 .filter_map(Value::as_str)
                 .map(|a| format!("`{a}`"))
                 .collect();
-            let rendered = if axioms.is_empty() { "none".to_string() } else { axioms.join(", ") };
+            let rendered = if axioms.is_empty() {
+                "none".to_string()
+            } else {
+                axioms.join(", ")
+            };
             l.push(format!("- `{}` — {rendered}", field(c, "id")));
         }
     }
@@ -128,17 +140,17 @@ fn render(registry: &Value, claims: &[Value]) -> Result<String> {
     }
 
     l.push("\n## Outstanding obligations\n".into());
-    let outstanding: Vec<&Value> = claims.iter().filter(|c| status(c) == "outstanding").collect();
+    let outstanding: Vec<&Value> = claims
+        .iter()
+        .filter(|c| status(c) == "outstanding")
+        .collect();
     l.push(format!(
         "{} outstanding. Terminal answer for `GO-001`: `WorkloadIncomplete`",
         outstanding.len()
     ));
     l.push("(UOR-GNAF v1-draft.2 section 10.9). See `CERTIFICATION.md`.\n".into());
     for c in outstanding {
-        let obligation = c
-            .get("obligation")
-            .and_then(Value::as_str)
-            .unwrap_or("—");
+        let obligation = c.get("obligation").and_then(Value::as_str).unwrap_or("—");
         l.push(format!(
             "- `{}` ({obligation}) — {}",
             field(c, "id"),

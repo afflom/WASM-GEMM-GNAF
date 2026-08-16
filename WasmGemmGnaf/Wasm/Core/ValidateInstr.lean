@@ -1231,6 +1231,32 @@ def applyTypeA (C : Context) (st : St) (it : InstrType) : Option St :=
   | some st' => some (st'.pushs it.cod)
   | none => none
 
+/-- Appendix `top_heap_type`, including the Core 3.0 exception hierarchy.
+Semantic `BOT` cannot occur in source syntax, so it has no validation top. -/
+def validationTopA (C : Context) : HeapType → Option HeapType
+  | .abs .any => some (.abs .any)
+  | .abs .eq => some (.abs .any)
+  | .abs .i31 => some (.abs .any)
+  | .abs .struct => some (.abs .any)
+  | .abs .array => some (.abs .any)
+  | .abs .none => some (.abs .any)
+  | .abs .func => some (.abs .func)
+  | .abs .nofunc => some (.abs .func)
+  | .abs .exn => some (.abs .exn)
+  | .abs .noexn => some (.abs .exn)
+  | .abs .extern => some (.abs .extern)
+  | .abs .noextern => some (.abs .extern)
+  | .abs .bot => none
+  | .use tu =>
+      match C.typeuseShape tu with
+      | some .struct => some (.abs .any)
+      | some .array => some (.abs .any)
+      | some .func => some (.abs .func)
+      | _ => none
+
+def validationInputTopA (C : Context) : RefType → Option RefType
+  | .ref _ ht => (validationTopA C ht).map (fun top => .ref (some .null) top)
+
 mutual
 
 def checkInstrA (C : Context) (st : St) : Instr → Option (List LocalIdx × St)
@@ -1244,7 +1270,7 @@ def checkInstrA (C : Context) (st : St) : Instr → Option (List LocalIdx × St)
       | some st₁ => match st₁.pop with
           | some (t₁, st₂) => match st₂.pop with
               | some (t₂, st₃) =>
-                  if (t₁.isNumOrVec && t₂.isNumOrVec) &&
+                  if (ValType.nvb t₁ && ValType.nvb t₂) &&
                       (subOfA C t₁ t₂ || subOfA C t₂ t₁) then
                     some ([], st₃.push (if t₁ == ValType.bot then t₂ else t₁))
                   else none
@@ -1383,21 +1409,21 @@ def checkInstrA (C : Context) (st : St) : Instr → Option (List LocalIdx × St)
           some ([], st'.push (.ref (.ref none ht)))
       | none => none
   | .refTest rt =>
-      if checkReftypeOkA C rt then match st.popRef with
-        | some (rt'?, st') =>
-            let rt' := rt'?.getD rt
-            if decReftypeSubN C C.subtypeFuel rt rt' then
-              some ([], st'.push ValType.i32)
-            else none
+      if checkReftypeOkA C rt then
+        match validationInputTopA C rt with
+        | some input =>
+            match st.popEA C (.ref input) with
+            | some st' => some ([], st'.push ValType.i32)
+            | none => none
         | none => none
       else none
   | .refCast rt =>
-      if checkReftypeOkA C rt then match st.popRef with
-        | some (rt'?, st') =>
-            let rt' := rt'?.getD rt
-            if decReftypeSubN C C.subtypeFuel rt rt' then
-              some ([], st'.push (.ref rt))
-            else none
+      if checkReftypeOkA C rt then
+        match validationInputTopA C rt with
+        | some input =>
+            match st.popEA C (.ref input) with
+            | some st' => some ([], st'.push (.ref rt))
+            | none => none
         | none => none
       else none
   | .externConvertAny =>
@@ -1501,6 +1527,30 @@ def checkExprA (C : Context) (e : Expr) (ts : List ValType) : Bool :=
   match checkSeqA C (St.mk false []) e with
   | some (_, st) => st.finishA C ts
   | none => false
+
+/-! ## The AMD-018 implicit-select witness
+
+Stated beside `checkInstrA` so the SPEC 18 falsifier M32 can plant its fault
+in the production checker and elaborate this same source: replacing the
+amended `ValType.nvb` operand test by the pre-amendment `isNumOrVec` test
+makes `unreachable_select_checkSeqA` stop elaborating. -/
+
+/-- The exact pre-AMD-018 gate rejected the `BOT` operand inferred after an
+unreachable instruction. -/
+theorem unreachable_select_rejected_before_amd018 :
+    (if ((ValType.bot.isNumOrVec && ValType.bot.isNumOrVec) &&
+        (subOfA Context.empty ValType.bot ValType.bot ||
+          subOfA Context.empty ValType.bot ValType.bot)) then
+      some () else none) = none := by
+  rfl
+
+/-- AMD-018's pinned two-instruction witness: the production checker retains
+stack-polymorphic bottom through implicit select. -/
+theorem unreachable_select_checkSeqA :
+    checkSeqA Context.empty (St.mk false [])
+      (.cons .unreachable (.cons (.select none) .nil)) =
+      some ([], (St.mk true []).push ValType.bot) := by
+  rfl
 
 /-! ## Soundness of the computed instruction types
 

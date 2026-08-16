@@ -173,7 +173,10 @@ pub fn run(root: &Path) -> Result<Outcome> {
         );
     }
 
-    let quoted = bindings.iter().filter(|b| spec_block(&spec, &b.name).is_some()).count();
+    let quoted = bindings
+        .iter()
+        .filter(|b| spec_block(&spec, &b.name).is_some())
+        .count();
     println!(
         "\n  {} binding(s); {} exact, {} quoting a verbatim SPEC block",
         bindings.len(),
@@ -194,7 +197,10 @@ pub fn run(root: &Path) -> Result<Outcome> {
     }
 
     if !failures.is_empty() {
-        println!("\nSIGNATURE: FAIL — {} unbound or unsound binding(s):", failures.len());
+        println!(
+            "\nSIGNATURE: FAIL — {} unbound or unsound binding(s):",
+            failures.len()
+        );
         for failure in &failures {
             println!("  {failure}");
         }
@@ -206,9 +212,7 @@ pub fn run(root: &Path) -> Result<Outcome> {
         );
         return Ok(Outcome::Fail);
     }
-    println!(
-        "SIGNATURE: PASS — every credited SPEC 15 declaration is definitionally bound"
-    );
+    println!("SIGNATURE: PASS — every credited SPEC 15 declaration is definitionally bound");
     Ok(Outcome::Pass)
 }
 
@@ -338,7 +342,9 @@ pub fn audit(
 /// and the namespace prefix is optional -- the binding file sits inside
 /// `WasmGemmGnaf`, so it writes the relative form.
 fn closes_definitionally(proof: &str, name: &str) -> bool {
-    let Some(term) = proof.strip_prefix('@') else { return false };
+    let Some(term) = proof.strip_prefix('@') else {
+        return false;
+    };
     let term = term.trim();
     if term.is_empty() || term.contains(char::is_whitespace) {
         return false;
@@ -366,7 +372,8 @@ fn mentions(statement: &str, name: &str) -> bool {
     // `decodeHeader`. Match on the longest leading word of the leaf that the
     // statement actually contains, which is a real test for a marker pasted onto
     // an unrelated theorem and not a test the binding can trivially satisfy.
-    leaf.split('_').any(|part| part.len() >= 4 && statement.contains(part))
+    leaf.split('_')
+        .any(|part| part.len() >= 4 && statement.contains(part))
 }
 
 /// The `theorem <leaf>` block inside a Lean fence in `SPEC.md`, if any.
@@ -378,7 +385,13 @@ fn mentions(statement: &str, name: &str) -> bool {
 /// proposition and must not mask a later change to the fenced statement.
 pub fn spec_block(spec: &str, name: &str) -> Option<String> {
     const KEYWORDS: [&str; 8] = [
-        "theorem ", "def ", "structure ", "inductive ", "instance ", "abbrev ", "end ",
+        "theorem ",
+        "def ",
+        "structure ",
+        "inductive ",
+        "instance ",
+        "abbrev ",
+        "end ",
         "namespace ",
     ];
     let leaf = name.rsplit('.').next().unwrap_or(name);
@@ -400,9 +413,10 @@ pub fn spec_block(spec: &str, name: &str) -> Option<String> {
             continue;
         }
         let candidate = line.trim_start();
-        if candidate.strip_prefix(&head).is_some_and(|rest| {
-            !rest.starts_with(|c: char| c.is_alphanumeric() || c == '_')
-        }) {
+        if candidate
+            .strip_prefix(&head)
+            .is_some_and(|rest| !rest.starts_with(|c: char| c.is_alphanumeric() || c == '_'))
+        {
             start = Some(index);
             break;
         }
@@ -440,7 +454,9 @@ pub fn parse(source: &str) -> Vec<Binding> {
 
     for (index, line) in lines.iter().enumerate() {
         let trimmed = line.trim();
-        let Some((kind, rest)) = marker(trimmed) else { continue };
+        let Some((kind, rest)) = marker(trimmed) else {
+            continue;
+        };
         let (name, kind) = match kind {
             MarkerKind::Exact => (rest.trim().to_string(), Kind::Exact),
             MarkerKind::Weaker => (rest.trim().to_string(), Kind::Weaker),
@@ -463,7 +479,9 @@ pub fn parse(source: &str) -> Vec<Binding> {
             }
             break;
         }
-        let Some(head) = lines.get(cursor) else { continue };
+        let Some(head) = lines.get(cursor) else {
+            continue;
+        };
         let opener = OPENERS.iter().find_map(|k| head.trim().strip_prefix(k));
         let Some(opener) = opener else {
             bindings.push(Binding {
@@ -515,17 +533,25 @@ fn marker(trimmed: &str) -> Option<(MarkerKind, &str)> {
     if let Some(rest) = trimmed.strip_prefix(WEAKER) {
         return Some((MarkerKind::Weaker, rest));
     }
-    trimmed.strip_prefix(EXACT).map(|rest| (MarkerKind::Exact, rest))
+    trimmed
+        .strip_prefix(EXACT)
+        .map(|rest| (MarkerKind::Exact, rest))
 }
 
 /// `Name (deviation DEV-001)` -> `("Name", "DEV-001")`. A missing or malformed
 /// citation yields an empty id, which the audit then reports as unrecorded.
 fn split_deviation(rest: &str) -> (String, String) {
     let rest = rest.trim();
-    let Some(open) = rest.find('(') else { return (rest.to_string(), String::new()) };
+    let Some(open) = rest.find('(') else {
+        return (rest.to_string(), String::new());
+    };
     let name = rest[..open].trim().to_string();
     let inside = rest[open + 1..].trim_end_matches(')').trim();
-    let id = inside.strip_prefix("deviation").unwrap_or("").trim().to_string();
+    let id = inside
+        .strip_prefix("deviation")
+        .unwrap_or("")
+        .trim()
+        .to_string();
     (name, id)
 }
 
@@ -691,16 +717,31 @@ theorem decode_sound
         // `by exact @Name` proves the same proposition today. `by` accepts
         // anything tomorrow, and the entire value of this file is that it accepts
         // only definitional agreement.
-        assert!(closes_definitionally("@Wasm.decode_sound", "Wasm.decode_sound"));
+        assert!(closes_definitionally(
+            "@Wasm.decode_sound",
+            "Wasm.decode_sound"
+        ));
         assert!(closes_definitionally(
             "@WasmGemmGnaf.Wasm.decode_sound",
             "Wasm.decode_sound"
         ));
-        assert!(closes_definitionally("@Theorems.decode_sound", "Wasm.decode_sound"));
-        assert!(!closes_definitionally("by exact @Wasm.decode_sound", "Wasm.decode_sound"));
+        assert!(closes_definitionally(
+            "@Theorems.decode_sound",
+            "Wasm.decode_sound"
+        ));
+        assert!(!closes_definitionally(
+            "by exact @Wasm.decode_sound",
+            "Wasm.decode_sound"
+        ));
         assert!(!closes_definitionally("by simp", "Wasm.decode_sound"));
-        assert!(!closes_definitionally("Wasm.decode_sound", "Wasm.decode_sound"));
-        assert!(!closes_definitionally("@Wasm.decode_sound_weaker", "Wasm.decode_sound"));
+        assert!(!closes_definitionally(
+            "Wasm.decode_sound",
+            "Wasm.decode_sound"
+        ));
+        assert!(!closes_definitionally(
+            "@Wasm.decode_sound_weaker",
+            "Wasm.decode_sound"
+        ));
         assert!(!closes_definitionally("@Wasm.other", "Wasm.decode_sound"));
     }
 
@@ -714,9 +755,16 @@ theorem decode_sound
     #[test]
     fn a_marker_naming_something_spec_does_not_require_is_rejected() {
         let source = SAMPLE.replace("Wasm.decode_sound\n", "Wasm.not_required\n");
-        let failures = audit(&sample_required(), &parse(&source), &["DEV-001".into()], SPEC);
+        let failures = audit(
+            &sample_required(),
+            &parse(&source),
+            &["DEV-001".into()],
+            SPEC,
+        );
         assert!(
-            failures.iter().any(|f| f.contains("SPEC section 15 does not require it")),
+            failures
+                .iter()
+                .any(|f| f.contains("SPEC section 15 does not require it")),
             "{failures:?}"
         );
     }
@@ -735,9 +783,16 @@ theorem decode_sound
         // SPEC is the source of the quoted block. Edit SPEC and the binding must
         // stop passing, so nobody can leave a stale quotation looking normative.
         let drifted = SPEC.replace("DeclarativeBinaryRelation", "SomeWeakerRelation");
-        let failures = audit(&sample_required(), &parse(SAMPLE), &["DEV-001".into()], &drifted);
+        let failures = audit(
+            &sample_required(),
+            &parse(SAMPLE),
+            &["DEV-001".into()],
+            &drifted,
+        );
         assert!(
-            failures.iter().any(|f| f.contains("does not quote it verbatim")),
+            failures
+                .iter()
+                .any(|f| f.contains("does not quote it verbatim")),
             "{failures:?}"
         );
     }
@@ -769,7 +824,10 @@ theorem decode_sound
         let source = "-- spec-signature: Wasm.decode_sound\n\
                       theorem unrelated : True :=\n  @Wasm.decode_sound\n";
         let failures = audit(&["Wasm.decode_sound"], &parse(source), &[], SPEC);
-        assert!(failures.iter().any(|f| f.contains("does not mention it")), "{failures:?}");
+        assert!(
+            failures.iter().any(|f| f.contains("does not mention it")),
+            "{failures:?}"
+        );
     }
 
     #[test]
@@ -777,7 +835,10 @@ theorem decode_sound
         let (_, after_open) = split_assignment("    ∀ {bytes : ByteArray} (h : P bytes", 0);
         assert_eq!(after_open, 1);
         let (split, _) = split_assignment("      → Q bytes) :=", after_open);
-        assert!(split.is_some(), "the terminating := must be found at carried depth");
+        assert!(
+            split.is_some(),
+            "the terminating := must be found at carried depth"
+        );
     }
 
     /// A tracked file, located from the crate rather than the working directory:
@@ -817,7 +878,11 @@ theorem decode_sound
         // fifty-eight names; they are read from SPEC.md every run.
         let spec = repo_file("SPEC.md");
         let required = crate::required::required_names(&spec).expect("SPEC 15 parsed");
-        assert!(required.len() >= 60, "SPEC section 15 lists {}", required.len());
+        assert!(
+            required.len() >= 60,
+            "SPEC section 15 lists {}",
+            required.len()
+        );
         assert!(required.contains(&"Artifact.released_wasm_gemm_gnaf_global_optimal"));
     }
 }

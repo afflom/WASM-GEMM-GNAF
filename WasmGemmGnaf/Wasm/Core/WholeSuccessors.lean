@@ -2002,4 +2002,138 @@ theorem vstoreLaneVal_mem_directSuccessors {z z' : State}
         rw [mem_stateWrite?_iff]
         exact ⟨rfl, rfl, by simpa [hbs] using hwrite⟩)
 
+theorem structNew_mem_directSuccessors {z : State} {vs : List Val}
+    {x : TypeIdx} {dt : DefType} {fts : FieldTypes} {n : Nat}
+    {a : StructAddr} {fvs : List FieldVal} {si : StructInst}
+    (htype : z.typeOf x = some dt) (hexpand : Expand dt (.struct fts))
+    (hfts : fts.toList.length = n) (hvs : vs.length = n)
+    (ha : a = z.structinst.length)
+    (hpack : (fts.toList.zip vs).mapM
+      (fun p => releasedNumerics.packfield_ (fieldStorage p.1) p.2) = some fvs)
+    (hsi : si = { type := dt, fields := fvs }) :
+    ((.structNew x n),
+      (z.addStructInst [si], [.addrref (.structAddr a)])) ∈
+      directSuccessors (z, vals vs ++ [.plain (.structNew x)]) := by
+  apply mem_directSuccessors_of_mem_directSuccessorsOf rfl
+  rcases hexpand with ⟨hexpand⟩
+  simp only [directSuccessorsOf, htype]
+  rw [hexpand]
+  simp only
+  rw [if_pos (hfts.trans hvs.symm), hpack]
+  subst a
+  subst si
+  simp [hvs]
+
+theorem structSetNull_mem_directSuccessors {z : State} {ht : HeapType}
+    {v : Val} {x : TypeIdx} {i : U32} :
+    ((.structSetNull x i), (z, [.trap])) ∈ directSuccessors
+      (z, [Ref.toAdmin (.null ht), v.toAdmin, .plain (.structSet x i)]) := by
+  simpa using mem_directSuccessors_of_mem_directSuccessorsOf
+    (z := z) (vs := [.ref (.null ht), v]) (instruction := .structSet x i) rfl
+    (by simp [directSuccessorsOf])
+
+theorem structSetStruct_mem_directSuccessors {z z' : State}
+    {a : StructAddr} {v : Val} {x : TypeIdx} {i : U32} {dt : DefType}
+    {fts : FieldTypes} {ft : FieldType} {fv : FieldVal}
+    (htype : z.typeOf x = some dt) (hexpand : Expand dt (.struct fts))
+    (hfield : fts.toList[i.val]? = some ft)
+    (hpack : releasedNumerics.packfield_ (fieldStorage ft) v = some fv)
+    (hset : z.withStruct a i.val fv = some z') :
+    ((.structSetStruct x i), (z', [])) ∈ directSuccessors
+      (z, [.addrref (.structAddr a), v.toAdmin, .plain (.structSet x i)]) := by
+  simpa [vals, Val.toAdmin] using mem_directSuccessors_of_mem_directSuccessorsOf
+    (z := z) (vs := [.ref (.addr (.structAddr a)), v])
+      (instruction := .structSet x i) rfl (by
+        rcases hexpand with ⟨hexpand⟩
+        simp only [directSuccessorsOf, htype]
+        rw [hexpand]
+        simp only
+        rw [hfield]
+        simp only
+        rw [hpack]
+        simp [stateWrite?, hset])
+
+theorem arrayNewFixed_mem_directSuccessors {z : State} {vs : List Val}
+    {x : TypeIdx} {n : U32} {dt : DefType} {ft : FieldType}
+    {a : ArrayAddr} {fvs : List FieldVal} {ai : ArrayInst}
+    (htype : z.typeOf x = some dt) (hexpand : Expand dt (.array ft))
+    (hlen : vs.length = n.val) (ha : a = z.arrayinst.length)
+    (hpack : vs.mapM
+      (fun v => releasedNumerics.packfield_ (fieldStorage ft) v) = some fvs)
+    (hai : ai = { type := dt, fields := fvs }) :
+    ((.arrayNewFixed x n.val),
+      (z.addArrayInst [ai], [.addrref (.arrayAddr a)])) ∈
+      directSuccessors (z, vals vs ++ [.plain (.arrayNewFixed x n)]) := by
+  apply mem_directSuccessors_of_mem_directSuccessorsOf rfl
+  rcases hexpand with ⟨hexpand⟩
+  simp only [directSuccessorsOf, hlen, ↓reduceIte, htype]
+  rw [hexpand]
+  simp only
+  rw [show vs.mapM (releasedNumerics.packfield_ (fieldStorage ft)) = some fvs by
+    simpa using hpack]
+  subst a
+  subst ai
+  simp
+
+theorem arraySetNull_mem_directSuccessors {z : State} {ht : HeapType}
+    {i : U32} {v : Val} {x : TypeIdx} :
+    ((.arraySetNull x), (z, [.trap])) ∈ directSuccessors
+      (z, [Ref.toAdmin (.null ht), constI32 i, v.toAdmin,
+        .plain (.arraySet x)]) := by
+  simpa using mem_directSuccessors_of_mem_directSuccessorsOf
+    (z := z) (vs := [.ref (.null ht), .num ⟨.i32, i⟩, v])
+      (instruction := .arraySet x) rfl
+      (by simp [directSuccessorsOf])
+
+theorem withArray_eq_some_arrayinst_and_bound {z z' : State}
+    {a : ArrayAddr} {i : Nat} {fv : FieldVal}
+    (hset : z.withArray a i fv = some z') :
+    ∃ ai, z.arrayinst[a]? = some ai ∧ i < ai.fields.length := by
+  unfold State.withArray at hset
+  cases harray : z.store.arrays[a]? with
+  | none => simp [harray] at hset
+  | some ai =>
+      cases hfields : setAt? ai.fields i fv with
+      | none => simp [harray, hfields] at hset
+      | some fields =>
+          refine ⟨ai, harray, ?_⟩
+          unfold setAt? at hfields
+          split at hfields
+          · assumption
+          · contradiction
+
+theorem arraySetOob_mem_directSuccessors {z : State} {a : ArrayAddr}
+    {i : U32} {v : Val} {x : TypeIdx} {ai : ArrayInst}
+    (harray : z.arrayinst[a]? = some ai) (hoob : i.val ≥ ai.fields.length) :
+    ((.arraySetOob x), (z, [.trap])) ∈ directSuccessors
+      (z, [.addrref (.arrayAddr a), constI32 i, v.toAdmin,
+        .plain (.arraySet x)]) := by
+  simpa [vals, Val.toAdmin, constI32] using
+    mem_directSuccessors_of_mem_directSuccessorsOf
+      (z := z) (vs := [.ref (.addr (.arrayAddr a)), .num ⟨.i32, i⟩, v])
+      (instruction := .arraySet x) rfl
+      (by simp [directSuccessorsOf, harray, hoob])
+
+theorem arraySetArray_mem_directSuccessors {z z' : State}
+    {a : ArrayAddr} {i : U32} {v : Val} {x : TypeIdx} {dt : DefType}
+    {ft : FieldType} {fv : FieldVal}
+    (htype : z.typeOf x = some dt) (hexpand : Expand dt (.array ft))
+    (hpack : releasedNumerics.packfield_ (fieldStorage ft) v = some fv)
+    (hset : z.withArray a i.val fv = some z') :
+    ((.arraySetArray x), (z', [])) ∈ directSuccessors
+      (z, [.addrref (.arrayAddr a), constI32 i, v.toAdmin,
+        .plain (.arraySet x)]) := by
+  obtain ⟨ai, harray, hin⟩ := withArray_eq_some_arrayinst_and_bound hset
+  simpa [vals, Val.toAdmin, constI32] using
+    mem_directSuccessors_of_mem_directSuccessorsOf
+      (z := z) (vs := [.ref (.addr (.arrayAddr a)), .num ⟨.i32, i⟩, v])
+      (instruction := .arraySet x) rfl (by
+        rcases hexpand with ⟨hexpand⟩
+        simp only [directSuccessorsOf, harray,
+          if_neg (Nat.not_le_of_lt hin), htype]
+        rw [hexpand]
+        simp only
+        rw [hpack]
+        simp [stateWrite?, hset])
+
 end WasmGemmGnaf.Wasm.Core.Exec

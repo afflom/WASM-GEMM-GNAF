@@ -8,11 +8,10 @@
 
   A name check cannot do that: a weaker or conditional proposition under the right
   name passes it. Exact bindings below spell a scope-critical definition out and
-  close by `Iff.rfl` (propositions) or `rfl` (data). Definitions that still use the
-  legacy `Wasm.Subset` carrier are instead marked `authority-gap`; their accompanying
-  definitional theorems document the current implementation but receive no public
-  schema credit. This distinction prevents a self-restatement of the legacy body
-  from being reported as agreement with the public SPEC schema.
+  close by `Iff.rfl` (propositions) or `rfl` (data). All three execution-sensitive
+  definitions are now stated over the public amended-Core module, decoder,
+  configuration, trace and cost carriers; an accidental regression to
+  `Wasm.Subset` therefore stops one of the definitional proofs from elaborating.
 
   THE LIST IS NOT MAINTAINED HERE.  `authority/global-optimality-WGG-GO-1.json`
   lists the `scopeCriticalDefinitions`; `xtask schema` reads that array and fails
@@ -57,8 +56,7 @@ no scope predicate; the lower-bound clause is the conjunction SPEC §1 gives, no
 an implication; and the tie-break clause carries `CanonicalBytesLE`.
 
 `Iff.rfl` is the whole proof, which is the point: it holds only while the
-definition is *definitionally* this proposition. The public schema is still open
-because foundational predicates below retain acknowledged legacy-carrier gaps.
+definition is *definitionally* this proposition.
 -/
 -- authority-binding: GlobalOptimal
 theorem globalOptimal_matches_authority_schema [Foundation.Fintype (Gemm.RawInvocation P)]
@@ -91,31 +89,28 @@ theorem globalOptimal_matches_authority_schema [Foundation.Fintype (Gemm.RawInvo
 
 /-! ## 2. The extensional competitor predicates (SPEC §10.1) -/
 
-/-- **Current legacy `ProfileValid` shape.** This theorem documents the four
-extensional conditions implemented over `Wasm.Subset.Module`; it is not a public
-SPEC schema binding. -/
--- authority-gap: Universal.ProfileValid
+/-- **`ProfileValid` matches the frozen public amended-Core schema.** -/
+-- authority-binding: Universal.ProfileValid
 theorem profileValid_matches_authority_schema
     (profile : Wasm.Profile) (bytes : ByteArray) :
     ProfileValid profile bytes ↔
-      (∃ module : Wasm.Subset.Module,
-        Wasm.Subset.decode bytes = .ok module ∧
-        Universal.validateUnder profile module = true ∧
-        module.imports = [] ∧
+      (∃ module : Wasm.Module,
+        Wasm.decode bytes = .ok module ∧
+        Wasm.validateUnder profile module = true ∧
+        module.core.imports = [] ∧
         Universal.HasExactGemmExports profile module) :=
   Iff.rfl
 
 /--
-**Current legacy `SemanticCorrect` shape.**
+**`SemanticCorrect` matches the frozen public amended-Core schema.**
 
 Unfolded through `SemanticCorrectAt`, `IsMaximalExecution` and
 `StartsCostedInvocation`, because that is where the strength lives: the raw
 quantifier is over *every* `Gemm.RawInvocation P`, the execution quantifier over
-*every* inhabitant of the legacy `Wasm.MaximalExecution initial`, and the
-existential half is present. The public amended-Core execution carrier remains
-open, so this is an acknowledged schema gap rather than an authority binding.
+*every* inhabitant of `Wasm.MaximalExecution initial`, and the existential half
+is present.
 -/
--- authority-gap: Universal.SemanticCorrect
+-- authority-binding: Universal.SemanticCorrect
 theorem semanticCorrect_matches_authority_schema
     (S : Setting P) (bytes : ByteArray) :
     SemanticCorrect S bytes ↔
@@ -123,19 +118,19 @@ theorem semanticCorrect_matches_authority_schema
         ((∃ initialization : InitializationObservation P,
            ∃ initial : Wasm.Config,
            ∃ execution : Wasm.MaximalExecution initial,
-             (∃ module : Wasm.Subset.Module,
-               Wasm.Subset.decode bytes = .ok module ∧
-               Universal.validateUnder P module = true ∧
-               S.machine.initialGemmInvocationCosted module
+             (∃ module : Wasm.Module,
+               Wasm.decode bytes = .ok module ∧
+               Wasm.validateUnder P module = true ∧
+               Wasm.initialGemmInvocationCosted P module
                    (Universal.toWasmInvocation raw) = .ok initialization ∧
                initialization.initial = initial) ∧
              IsMaximalExecutionFrom initial execution) ∧
          ∀ (initialization : InitializationObservation P)
            (initial : Wasm.Config) (execution : Wasm.MaximalExecution initial),
-           ((∃ module : Wasm.Subset.Module,
-               Wasm.Subset.decode bytes = .ok module ∧
-               Universal.validateUnder P module = true ∧
-               S.machine.initialGemmInvocationCosted module
+           ((∃ module : Wasm.Module,
+               Wasm.decode bytes = .ok module ∧
+               Wasm.validateUnder P module = true ∧
+               Wasm.initialGemmInvocationCosted P module
                    (Universal.toWasmInvocation raw) = .ok initialization ∧
                initialization.initial = initial) ∧
             IsMaximalExecutionFrom initial execution) →
@@ -145,15 +140,14 @@ theorem semanticCorrect_matches_authority_schema
   Iff.rfl
 
 /--
-**Current legacy `SemanticWithinResources` shape.**
+**`SemanticWithinResources` matches the frozen public amended-Core schema.**
 
 Both halves: no *valid prefix* reaches `maxSteps + 1` — the budget is enforced on
 prefixes, so an execution cannot buy time by never becoming maximal — and every
 maximal execution is charged componentwise inside the problem's limit, with the
-initialization charge sequentially composed in rather than dropped. Its execution
-carrier is still the legacy subset machine, so it receives no public schema credit.
+initialization charge sequentially composed in rather than dropped.
 -/
--- authority-gap: Universal.SemanticWithinResources
+-- authority-binding: Universal.SemanticWithinResources
 theorem semanticWithinResources_matches_authority_schema
     (S : Setting P) (bytes : ByteArray) :
     SemanticWithinResources S bytes ↔
@@ -161,22 +155,22 @@ theorem semanticWithinResources_matches_authority_schema
         ((¬ ∃ initialization : InitializationObservation P,
             ∃ initial : Wasm.Config,
             ∃ pre : RelationalPrefix initial (S.problem.maxSteps + 1),
-              (∃ module : Wasm.Subset.Module,
-                Wasm.Subset.decode bytes = .ok module ∧
-                Universal.validateUnder P module = true ∧
-                S.machine.initialGemmInvocationCosted module
+              (∃ module : Wasm.Module,
+                Wasm.decode bytes = .ok module ∧
+                Wasm.validateUnder P module = true ∧
+                Wasm.initialGemmInvocationCosted P module
                     (Universal.toWasmInvocation raw) = .ok initialization ∧
                 initialization.initial = initial) ∧ pre.Valid) ∧
          (∀ (initialization : InitializationObservation P)
             (initial : Wasm.Config) (execution : Wasm.MaximalExecution initial),
-            ((∃ module : Wasm.Subset.Module,
-                Wasm.Subset.decode bytes = .ok module ∧
-                Universal.validateUnder P module = true ∧
-                S.machine.initialGemmInvocationCosted module
+            ((∃ module : Wasm.Module,
+                Wasm.decode bytes = .ok module ∧
+                Wasm.validateUnder P module = true ∧
+                Wasm.initialGemmInvocationCosted P module
                     (Universal.toWasmInvocation raw) = .ok initialization ∧
                 initialization.initial = initial) ∧
              IsMaximalExecutionFrom initial execution) →
-            ∃ costed : CostedExecutionObservation S.semantics initial,
+            ∃ costed : CostedExecutionObservation P initial,
               CostedAs (S := S) execution costed ∧
               Cost.DynamicVector.ComponentwiseLE
                 (Cost.sequentialCompose initialization.cost costed.cost)
@@ -186,33 +180,28 @@ theorem semanticWithinResources_matches_authority_schema
 /-! ## 3. The evaluation record and its relation -/
 
 /--
-**Current legacy `SystemEvaluation` shape, field for field.**
+**`SystemEvaluation` matches the frozen public amended-Core schema, field for field.**
 
 Structure eta makes the reconstruction definitional, so the binding pins the
 *exact* field list: adding a field breaks the constructor application, removing
 one breaks the projection, and weakening a field's type breaks the ascription.
 `perInput` is total over the raw carrier and `observationsComplete` covers every
-legacy maximal execution — neither may be narrowed to a sampled or reachable
-subset. The stored module and decoder are explicitly `Wasm.Subset`, so this is
-an acknowledged public-schema gap.
+public-Core maximal execution — neither may be narrowed to a sampled or reachable
+subset.
 -/
--- authority-gap: Universal.SystemEvaluation
+-- authority-binding: Universal.SystemEvaluation
 theorem systemEvaluation_matches_authority_schema [Foundation.Fintype (Gemm.RawInvocation P)]
     (S : Setting P) (bytes : ByteArray) (E : SystemEvaluation S bytes) :
     E = SystemEvaluation.mk
-      (module := (E.module : Wasm.Subset.Module))
-      (decodeEq := (E.decodeEq : Wasm.Subset.decode bytes = .ok E.module))
+      (module := (E.module : Wasm.Module))
+      (decodeEq := (E.decodeEq : Wasm.decode bytes = .ok E.module))
       (perInput := (E.perInput :
         ∀ raw : Gemm.RawInvocation P, InputEvaluation S E.module raw))
       (observationsComplete := (E.observationsComplete :
         ∀ raw : Gemm.RawInvocation P, (E.perInput raw).CoversEveryMaximalExecution))
       (cost := (E.cost : Cost.CompleteSystemCost))
       (costExact := (E.costExact :
-        Cost.ExactAggregateCost bytes (Wasm.Subset.decode bytes = .ok E.module)
-          (P.body.costTableBody.decodeCost bytes)
-          (S.semantics.validationSteps E.module)
-          (S.semantics.staticDataBytes E.module)
-          S.problem.workloadRepetitions
+        Cost.ExactAggregateCost P bytes E.module S.problem.workloadRepetitions
           (fun raw => (E.perInput raw).resourceVector) E.cost)) :=
   rfl
 
@@ -309,18 +298,10 @@ theorem unsignedLexicographicLE_step (a b : UInt8) (as bs : List UInt8) :
 
 /-! ## 6. The reference relation and the two indices (SPEC §8) -/
 
-/--
-**Current `Gemm.Reference.Accepts` shape over the legacy observation carrier.**
-
-Unfolded through `ReferenceSemanticAccepts`. A trapped or uncaught-exception
-observation has no `returned` outcome and is rejected; the entry store must be
-exactly what the harness installed; the final ABI-visible store must be exactly
-what the reference prescribes at *every* index; and the write-containment
-conjunct is checked against the problem's own sanctioned regions, not the
-candidate's. Public amended-Core harness observations are not yet exposed at this
-name, so the authority binding remains open.
--/
--- authority-gap: Gemm.Reference.Accepts
+/-- **`Gemm.Reference.Accepts` matches the frozen public observation schema.**
+Unfolding exposes the exact returned status, complete entry/final stores and
+sanctioned write-containment conjunct over `Wasm.ExecutionObservation`. -/
+-- authority-binding: Gemm.Reference.Accepts
 theorem gemmReferenceAccepts_matches_authority_schema
     (problem : Gemm.Problem P) (raw : Gemm.RawInvocation P)
     (observation : Wasm.ExecutionObservation) :

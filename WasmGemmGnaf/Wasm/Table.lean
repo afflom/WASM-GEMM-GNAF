@@ -1071,17 +1071,17 @@ this file's header.  They say what this module does **not** establish. -/
 
 /-- The legacy subset validator accepts only modules that declare no table and no
 element segment: `Subset.Module.checkClosed` is one of its conjuncts. -/
-theorem validate_checkClosed {m : Subset.Module} (h : validate m = true) :
+theorem validate_checkClosed {m : Subset.Module} (h : Subset.validate m = true) :
     Subset.Module.checkClosed m = true := by
   cases hc : Subset.Module.checkClosed m with
   | true => rfl
   | false =>
-    rw [validate, hc] at h
+    rw [Subset.validate, hc] at h
     simp at h
 
 /-- **A module accepted by the legacy subset validator declares no table and no
 element segment.** -/
-theorem validate_tables_empty {m : Subset.Module} (h : validate m = true) :
+theorem validate_tables_empty {m : Subset.Module} (h : Subset.validate m = true) :
     m.tables = [] ∧ m.elems = [] := by
   have hc := validate_checkClosed h
   unfold Subset.Module.checkClosed at hc
@@ -1106,15 +1106,15 @@ theorem checkInstr_table_rejected (C : Ctx) (h : Nat) (n m : Nat) :
 /-- The legacy subset reduction relation enumerates no successor for a table
 instruction: `Wasm/Step.lean` owns every reduction rule and has none for this
 family. -/
-theorem successorsOfInstr_table_empty (c : Config) (rest : List Instr) (n m : Nat) :
-    successorsOfInstr c (.tableGet n) rest = [] ∧
-    successorsOfInstr c (.tableSet n) rest = [] ∧
-    successorsOfInstr c (.tableSize n) rest = [] ∧
-    successorsOfInstr c (.tableGrow n) rest = [] ∧
-    successorsOfInstr c (.tableFill n) rest = [] ∧
-    successorsOfInstr c (.tableCopy n m) rest = [] ∧
-    successorsOfInstr c (.tableInit n m) rest = [] ∧
-    successorsOfInstr c (.elemDrop n) rest = [] :=
+theorem successorsOfInstr_table_empty (c : Subset.Config) (rest : List Instr) (n m : Nat) :
+    Subset.successorsOfInstr c (.tableGet n) rest = [] ∧
+    Subset.successorsOfInstr c (.tableSet n) rest = [] ∧
+    Subset.successorsOfInstr c (.tableSize n) rest = [] ∧
+    Subset.successorsOfInstr c (.tableGrow n) rest = [] ∧
+    Subset.successorsOfInstr c (.tableFill n) rest = [] ∧
+    Subset.successorsOfInstr c (.tableCopy n m) rest = [] ∧
+    Subset.successorsOfInstr c (.tableInit n m) rest = [] ∧
+    Subset.successorsOfInstr c (.elemDrop n) rest = [] :=
   ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
 
 end WasmGemmGnaf.Wasm

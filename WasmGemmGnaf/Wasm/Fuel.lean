@@ -49,7 +49,7 @@ import WasmGemmGnaf.Wasm.Run
 
 set_option autoImplicit false
 
-namespace WasmGemmGnaf.Wasm
+namespace WasmGemmGnaf.Wasm.Subset
 
 open WasmGemmGnaf.Foundation
 
@@ -495,4 +495,4 @@ theorem exploreModule_invalid {bound : Nat} {m : Subset.Module} {raw : RawInvoca
     exploreModule bound m raw = .error .invalidModule :=
   exploreModule_error_iff.mpr (initialConfig_invalid h)
 
-end WasmGemmGnaf.Wasm
+end WasmGemmGnaf.Wasm.Subset

@@ -15,7 +15,7 @@
   subset under `Wasm.Subset`.
 -/
 import WasmGemmGnaf.Wasm.Core.EventExecution
-import WasmGemmGnaf.Wasm.Core.Instantiation
+import WasmGemmGnaf.Wasm.Core.InstantiationAmended
 
 set_option autoImplicit false
 set_option maxHeartbeats 2000000
@@ -31,6 +31,10 @@ def idx0 : MemIdx := ⟨0, two_pow_pos 32⟩
 /-- Core pages required to contain a byte extent. -/
 def requiredPages (bytes : Nat) : Nat :=
   (bytes + (64 * Ki) - 1) / (64 * Ki)
+
+/-- The allocated page count represented by a Core memory instance. -/
+def memoryPages (memory : MemInst) : Nat :=
+  memory.bytes.length / (64 * Ki)
 
 /-- The release-facing data needed for one fresh raw invocation.  Export names
 remain data at this internal layer; the released profile binds them to the
@@ -59,6 +63,102 @@ instance : Inhabited Request where
       rawAddressBound := by decide
       rawPageBound := by decide }
 
+/-- The least whole-page target that contains the complete raw ABI window. -/
+def rawTargetPages (request : Request) : Nat :=
+  requiredPages (request.rawPtr.val + request.rawLen.val)
+
+/-- The exact deterministic Harness growth delta.  Natural subtraction makes
+the delta zero when a start function already left enough allocated memory. -/
+def rawGrowthPages (request : Request) (memory : MemInst) : Nat :=
+  rawTargetPages request - memoryPages memory
+
+/-- Ceiling page division really covers the requested byte extent. -/
+theorem requiredPages_covers (bytes : Nat) :
+    bytes ≤ requiredPages bytes * (64 * Ki) := by
+  have hpos : 0 < 64 * Ki := by decide
+  have hdiv := Nat.div_add_mod (bytes + (64 * Ki) - 1) (64 * Ki)
+  have hmod := Nat.mod_lt (bytes + (64 * Ki) - 1) hpos
+  unfold requiredPages
+  rw [Nat.mul_comm]
+  omega
+
+/-- Core growth appends exactly the requested number of whole pages. -/
+theorem growMem_bytes_length {memory grown : MemInst} {pages : Nat}
+    (hgrow : growMem memory pages = some grown) :
+    grown.bytes.length = memory.bytes.length + pages * (64 * Ki) := by
+  cases hmax : memory.type.lim.max with
+  | none =>
+      unfold growMem at hgrow
+      simp only [hmax] at hgrow
+      split at hgrow
+      · cases hgrow
+        simp
+      · contradiction
+  | some maximum =>
+      unfold growMem at hgrow
+      simp only [hmax] at hgrow
+      split at hgrow
+      · split at hgrow
+        · cases hgrow
+          simp
+        · contradiction
+      · contradiction
+
+/-- A successful exact Harness growth makes the entire subsequent Core splice
+available.  The theorem is about the real `spliceAt?`, not a separate bound
+fixture, and is the kernel rejector used by M31. -/
+theorem growMemoryForRaw_splice_available (request : Request)
+    {memory grown : MemInst}
+    (hgrow : growMem memory (rawGrowthPages request memory) = some grown) :
+    ∃ installed,
+      spliceAt? grown.bytes request.rawPtr.val request.rawLen.val
+        request.rawBytes = some installed := by
+  have hlen := growMem_bytes_length hgrow
+  have hcover : request.rawPtr.val + request.rawLen.val ≤
+      rawTargetPages request * (64 * Ki) := by
+    change request.rawPtr.val + request.rawLen.val ≤
+      requiredPages (request.rawPtr.val + request.rawLen.val) * (64 * Ki)
+    exact requiredPages_covers _
+  have hfloor : memoryPages memory * (64 * Ki) ≤ memory.bytes.length := by
+    exact Nat.div_mul_le_self memory.bytes.length (64 * Ki)
+  have hwindow : request.rawPtr.val + request.rawLen.val ≤ grown.bytes.length := by
+    by_cases hpages : memoryPages memory ≤ rawTargetPages request
+    · have hdelta :
+          rawGrowthPages request memory + memoryPages memory =
+            rawTargetPages request := by
+        exact Nat.sub_add_cancel hpages
+      calc
+        request.rawPtr.val + request.rawLen.val ≤
+            rawTargetPages request * (64 * Ki) := hcover
+        _ = (rawGrowthPages request memory + memoryPages memory) *
+              (64 * Ki) := by rw [hdelta]
+        _ = rawGrowthPages request memory * (64 * Ki) +
+              memoryPages memory * (64 * Ki) := by rw [Nat.add_mul]
+        _ ≤ rawGrowthPages request memory * (64 * Ki) +
+              memory.bytes.length := Nat.add_le_add_left hfloor _
+        _ = memory.bytes.length +
+              rawGrowthPages request memory * (64 * Ki) := Nat.add_comm _ _
+        _ = grown.bytes.length := hlen.symm
+    · have htarget : rawTargetPages request ≤ memoryPages memory := by omega
+      calc
+        request.rawPtr.val + request.rawLen.val ≤
+            rawTargetPages request * (64 * Ki) := hcover
+        _ ≤ memoryPages memory * (64 * Ki) :=
+          Nat.mul_le_mul_right (64 * Ki) htarget
+        _ ≤ memory.bytes.length := hfloor
+        _ ≤ memory.bytes.length +
+              rawGrowthPages request memory * (64 * Ki) := Nat.le_add_right _ _
+        _ = grown.bytes.length := hlen.symm
+  unfold spliceAt?
+  rw [if_pos hwindow]
+  exact ⟨_, rfl⟩
+
+/-- The superseded no-growth protocol already fails on a one-byte raw window
+starting at the second page of an empty memory. -/
+theorem raw_install_without_growth_unavailable :
+    spliceAt? ([] : List Byte) (64 * Ki) 1 [⟨0, by decide⟩] = none := by
+  simp [spliceAt?]
+
 /-- Export addresses resolved in the freshly instantiated module instance. -/
 structure Harness where
   request : Request
@@ -80,6 +180,40 @@ def ResolvesExports (mm : ModuleInst) (h : Harness) : Prop :=
 /-- The released ABI arguments `(rawPtr, rawLen)` as Core values. -/
 def Harness.args (h : Harness) : List Val :=
   [.num ⟨.i32, h.request.rawPtr⟩, .num ⟨.i32, h.request.rawLen⟩]
+
+/-- The resolved entry function has the exact released GEMM ABI in the
+instantiated store.  This is a decidable runtime lookup/expansion equation,
+not a progress or termination proposition. -/
+def GemmFunctionReady (h : Harness) (store : Store) : Prop :=
+  (store.funcs[h.gemmAddr]?).bind (fun function => expandDt function.type) =
+    some (.func
+      (ValTypes.ofList [.num .i32, .num .i32])
+      (ValTypes.ofList [.num .i32]))
+
+instance GemmFunctionReady.decidable (h : Harness) (store : Store) :
+    Decidable (GemmFunctionReady h store) := by
+  unfold GemmFunctionReady
+  infer_instance
+
+/-- A positive ABI check contains an actual function-instance lookup; it is
+not a stored semantic conclusion. -/
+theorem GemmFunctionReady.exists_function {h : Harness} {store : Store}
+    (ready : GemmFunctionReady h store) :
+    ∃ function, store.funcs[h.gemmAddr]? = some function := by
+  unfold GemmFunctionReady at ready
+  rw [Option.bind_eq_some_iff] at ready
+  obtain ⟨function, hfunction, _⟩ := ready
+  exact ⟨function, hfunction⟩
+
+/-- A missing selected function is a concrete counterexample to ABI
+readiness. -/
+theorem not_gemmFunctionReady_of_missing {h : Harness} {store : Store}
+    (hmissing : store.funcs[h.gemmAddr]? = none) :
+    ¬ GemmFunctionReady h store := by
+  intro ready
+  obtain ⟨_, hfunction⟩ := ready.exists_function
+  rw [hmissing] at hfunction
+  cases hfunction
 
 /-- One phase-safe released-machine configuration. -/
 inductive Config where
@@ -124,6 +258,46 @@ def Config.request : Config → Request
 
 /-- The exact source module of every harness configuration. -/
 def Config.module (config : Config) : Module := config.request.module
+
+/-! ## Canonical fresh initialization
+
+The raw relational evaluator also regards an indexed `ref.null` as an
+administrative value, even though `Step_read/ref.null-idx` can still close it.
+AMD-019 binds the public Harness edge to the ordinary executable initializer,
+which performs that closing step and deterministically resolves both exports. -/
+
+/-- Find the first required memory export, skipping unrelated and same-named
+wrong-kind entries. -/
+@[simp] def initialMemoryExportAddress? (name : Name) :
+    List ExportInst → Option MemAddr
+  | [] => none
+  | entry :: entries =>
+      if entry.name = name then
+        match entry.addr with
+        | .mem address => some address
+        | _ => initialMemoryExportAddress? name entries
+      else initialMemoryExportAddress? name entries
+
+/-- Find the first required function export. -/
+@[simp] def initialFunctionExportAddress? (name : Name) :
+    List ExportInst → Option FuncAddr
+  | [] => none
+  | entry :: entries =>
+      if entry.name = name then
+        match entry.addr with
+        | .func address => some address
+        | _ => initialFunctionExportAddress? name entries
+      else initialFunctionExportAddress? name entries
+
+/-- The sole executable target of a fresh public Harness initialization. -/
+def initializationCandidate? (request : Request) : Option Config := do
+  let core ← Exec.instantiateA? ({} : Store) request.module []
+  let memory ← initialMemoryExportAddress? request.memoryExportName
+    core.1.frame.mod.exports
+  let gemm ← initialFunctionExportAddress? request.gemmExportName
+    core.1.frame.mod.exports
+  pure (.beforeEntry
+    { request := request, memoryAddr := memory, gemmAddr := gemm } core)
 
 /-- Coarse phase tags carried by every event. -/
 inductive Phase where
@@ -191,7 +365,7 @@ identity; harness events retain every operand used by cost charging. -/
 inductive Event where
   | initialize (events : List InitializationEvent)
   | coreBeforeEntry (event : Exec.Event)
-  | installRaw (memory : MemAddr) (offset bytes : Nat)
+  | installRaw (memory : MemAddr) (offset bytes previousPages grownPages : Nat)
   | enterGemm (func : FuncAddr)
   | coreAfterEntry (event : Exec.Event)
   | returnAfterEntry
@@ -201,7 +375,7 @@ inductive Event where
 
 /-- The phase of an emitted event. -/
 def Event.phase : Event → Phase
-  | .initialize _ | .coreBeforeEntry _ | .installRaw _ _ _ |
+  | .initialize _ | .coreBeforeEntry _ | .installRaw _ _ _ _ _ |
       .throwBeforeEntry _ => .beforeEntry
   | .enterGemm _ => .entryBoundary
   | .coreAfterEntry _ | .returnAfterEntry | .throwAfterEntry _ => .afterEntry
@@ -231,7 +405,8 @@ def readIntrinsicTrap : ReadRule → Bool
 def coreTrapCause? : Exec.Event → Option Exec.Event
   | e@(.pure pe _) => if pureIntrinsicTrap pe.rule then some e else none
   | e@(.read rule _) => if readIntrinsicTrap rule then some e else none
-  | .ctxtInstrs _ _ inner | .ctxtLabel _ inner | .ctxtFrame _ inner =>
+  | .ctxtInstrs _ _ inner | .ctxtLabel _ inner | .ctxtFrame _ inner |
+      .ctxtHandler _ inner =>
       coreTrapCause? inner
   | e@(.tableSetOob _) | e@(.storeNumOob _ _) | e@(.storePackOob _ _)
   | e@(.vstoreOob _ _) | e@(.vstoreLaneOob _ _) | e@(.structSetNull _ _)
@@ -298,6 +473,56 @@ def liftTrappingAfterCore (h : Harness) (entry : Store) (trap : Trap)
   if isRawTrap c'.2 then .trappedAfterEntry h entry trap c'.1
   else .trappingAfterEntry h entry trap c'
 
+/-- Deterministically grow exported memory zero to the least page target and
+then install the raw request.  `growMem` checks the declared maximum; the
+request's `rawPageBound` independently checks the release-profile maximum. -/
+def installRaw? (h : Harness) (state : State) :
+    Option (Nat × Nat × State) := do
+  let memoryAddress ← state.frame.mod.mems[0]?
+  if memoryAddress = h.memoryAddr then
+    let memory ← state.store.mems[h.memoryAddr]?
+    let previousPages := memoryPages memory
+    let grownPages := rawGrowthPages h.request memory
+    let grownMemory ← growMem memory grownPages
+    let grownState ← state.withMemInst idx0 grownMemory
+    let installedState ← grownState.withMem idx0 h.request.rawPtr.val
+      h.request.rawLen.val h.request.rawBytes
+    pure (previousPages, grownPages, installedState)
+  else
+    none
+
+/-- The deterministic raw ABI preparation computes at this state.  This is a
+checked memory-zero/export/capacity fact, not a semantic progress or
+termination proposition. -/
+def RawInstallReady (h : Harness) (state : State) : Prop :=
+  (installRaw? h state).isSome = true
+
+instance RawInstallReady.decidable (h : Harness) (state : State) :
+    Decidable (RawInstallReady h state) := by
+  unfold RawInstallReady
+  infer_instance
+
+/-- A positive raw-install readiness check exposes the exact computed target. -/
+theorem RawInstallReady.exists_result {h : Harness} {state : State}
+    (ready : RawInstallReady h state) :
+    ∃ previousPages grownPages next,
+      installRaw? h state = some (previousPages, grownPages, next) := by
+  unfold RawInstallReady at ready
+  cases hresult : installRaw? h state with
+  | none => simp [hresult] at ready
+  | some result =>
+      rcases result with ⟨previousPages, grownPages, next⟩
+      exact ⟨previousPages, grownPages, next, rfl⟩
+
+/-- A state without memory zero cannot perform the released raw installation,
+regardless of any unrelated exported memory. -/
+theorem not_rawInstallReady_of_memory_zero_missing {h : Harness}
+    {state : State} (hmissing : state.frame.mod.mems[0]? = none) :
+    ¬ RawInstallReady h state := by
+  intro ready
+  obtain ⟨previousPages, grownPages, next, hresult⟩ := ready.exists_result
+  simp [installRaw?, hmissing] at hresult
+
 /-- Fresh instantiation reaches the pre-start phase.  Empty imports are fixed
 by the released profile; no host environment remains as a parameter. -/
 inductive InitializesA (request : Request) : Config → Prop where
@@ -305,9 +530,22 @@ inductive InitializesA (request : Request) : Config → Prop where
       InstantiateA ({} : Store) request.module [] core →
       ResolvesExports core.1.frame.mod
         { request := request, memoryAddr := memory, gemmAddr := gemm } →
+      initializationCandidate? request =
+        some (.beforeEntry
+          { request := request, memoryAddr := memory, gemmAddr := gemm } core) →
       InitializesA request
         (.beforeEntry
           { request := request, memoryAddr := memory, gemmAddr := gemm } core)
+
+/-- AMD-019: a fixed request has exactly one fresh Harness target. -/
+theorem InitializesA.target_functional {request : Request} {left right : Config}
+    (hl : InitializesA request left) (hr : InitializesA request right) :
+    left = right := by
+  cases hl with
+  | mk _ _ hleft =>
+      cases hr with
+      | mk _ _ hright =>
+          exact Option.some.inj (hleft.symm.trans hright)
 
 /-- One released harness/Core transition.  This relation is independent of an
 executable successor list. -/
@@ -343,11 +581,11 @@ inductive StepA : Config → Event → Config → Prop where
       Exec.StepA c event (z, [.trap]) →
       StepA (.trappingBeforeEntry h trap c) (.coreBeforeEntry event)
         (.trappedBeforeEntry h trap z)
-  | installRaw {h : Harness} {z z' : State} :
-      z.frame.mod.mems[0]? = some h.memoryAddr →
-      z.withMem idx0 h.request.rawPtr.val h.request.rawLen.val h.request.rawBytes = some z' →
+  | installRaw {h : Harness} {z z' : State} {previousPages grownPages : Nat} :
+      installRaw? h z = some (previousPages, grownPages, z') →
       StepA (.beforeEntry h (z, []))
-        (.installRaw h.memoryAddr h.request.rawPtr.val h.request.rawLen.val)
+        (.installRaw h.memoryAddr h.request.rawPtr.val h.request.rawLen.val
+          previousPages grownPages)
         (.readyToEnter h z')
   | enterGemm {h : Harness} {z : State} {core : Exec.Config} :
       InvokeA z.store h.gemmAddr h.args core →

@@ -76,6 +76,21 @@
       "releaseApplicable": true
     },
     {
+      "id": "CO-007",
+      "level": "formalProof",
+      "statement": "For the exact public amended-Core aggregate predicate of SPEC 9.1, the static moduleBytes coordinate equals the size of the same byte array that decodes to the aggregate's module.",
+      "leanDeclaration": "WasmGemmGnaf.Cost.module_bytes_exact",
+      "sourceModule": "WasmGemmGnaf/Cost/Aggregate.lean",
+      "axioms": [
+        "propext",
+        "Quot.sound"
+      ],
+      "specSection": "9.1",
+      "status": "discharged",
+      "releaseApplicable": true,
+      "note": "The predicate now binds one public Wasm.Profile, ByteArray, and representable amended-Core Wasm.Module and computes decode, validation, and instantiated-static coordinates from those same objects. M23 changes only its moduleBytes conjunct to an unrelated constant and requires the real projection proof to stop elaborating."
+    },
+    {
       "id": "LF-001",
       "level": "authority",
       "statement": "Lean toolchain is leanprover/lean4:v4.30.0 at commit d024af099ca4bf2c86f649261ebf59565dc8c622.",
@@ -268,7 +283,7 @@
       "id": "CM-002",
       "level": "formalProof",
       "statement": "The legacy subset DecodeFault and InstantiateFault constructors are disjoint.",
-      "leanDeclaration": "WasmGemmGnaf.Wasm.Fault.decoding_ne_instantiation",
+      "leanDeclaration": "WasmGemmGnaf.Wasm.Subset.Fault.decoding_ne_instantiation",
       "sourceModule": "WasmGemmGnaf/Wasm/Fault.lean",
       "axioms": [],
       "specSection": "7.1",
@@ -306,14 +321,20 @@
     },
     {
       "id": "BI-001",
-      "level": "open",
+      "level": "formalProof",
       "statement": "GNAF.compile emits a public representable Wasm.Module that passes the combined amended Core 3.0 validator for every CheckedPlan.",
-      "leanDeclaration": null,
+      "leanDeclaration": "WasmGemmGnaf.GNAF.compile_validates",
+      "sourceModule": "WasmGemmGnaf/GNAF/CompileCorrectPublic.lean",
+      "axioms": [
+        "propext",
+        "Classical.choice",
+        "Quot.sound"
+      ],
       "specSection": "11.4",
-      "status": "outstanding",
+      "status": "discharged",
       "obligation": "O-6",
       "releaseApplicable": true,
-      "note": "The former compile_validates theorem targets only Wasm.Subset.Module and its legacy validator. It does not establish validation of the released public Core carrier, so it cannot discharge this claim."
+      "note": "The direct compiler consumes the profile/problem-indexed CheckedPlan carrier and constructs the public representable Wasm.Module. The theorem proves that every emitted module passes the executable combined amended-Core validator; M27 mutates the real public lowering and requires its kernel-checked equation to fail. This row does not claim execution refinement or exact dynamic cost, which remain under BI-010 and BI-011 respectively."
     },
     {
       "id": "BI-002",
@@ -324,8 +345,8 @@
       "status": "outstanding",
       "obligation": "O-6",
       "releaseApplicable": true,
-      "scopeLimitation": "The current compiler still targets Wasm.Subset.Module and an unbounded-Nat plan machine whose address, word, floating-point, and exact-dyadic behavior is not the released Core execution relation. It has no exact CheckedPlan proof package for the required < 2^32 layout, local/index, literal, dynamic-address, and resource bounds; unsupported arithmetic modes still compile to unreachable.",
-      "note": "Closure requires a direct Core compiler for every SPEC 8.2 arithmetic contract, with no clamp, wraparound, or unreachable fallback; a public representability witness; and kernel-checked validation, execution refinement, resource, and exact charged-cost theorems."
+      "scopeLimitation": "The public compiler now emits direct amended-Core modules, but the executable CheckedPlan admission predicate accepts only the proved scalar/status fragment. It rejects classification, memory, dynamic control, reduction, and vector nodes, so no CheckedPlan for the full four-mode released GEMM problem currently exists. The source arithmetic language also lacks the bit-exact strict-float/exact-dyadic operations, NaN handling, alpha/beta scaling, transpose/stride/batch addressing, alias-safe writes, and failure-detail behavior required by SPEC 8.2.",
+      "note": "Closure requires extending the source plan semantics and direct Core lowering for every SPEC 8.2 arithmetic contract, then constructing a concrete full-GEMM CheckedPlan and carrying the already-separated validation, refinement, resource, and exact charged-cost theorems to that admitted plan. The scalar/status compiler theorems alone do not establish existence of the released artifact."
     },
     {
       "id": "BI-003",
@@ -359,7 +380,7 @@
     {
       "id": "AT-004",
       "level": "formalProof",
-      "statement": "For a coherent Atlas state body whose scope is unscoped, incremental accumulation equals full rebuild.",
+      "statement": "For every coherent Atlas state body, incremental accumulation equals full rebuild in that state's own scope.",
       "leanDeclaration": "WasmGemmGnaf.Atlas.incremental_eq_full_rebuild",
       "sourceModule": "WasmGemmGnaf/Atlas/Rebuild.lean",
       "axioms": [
@@ -369,9 +390,9 @@
       ],
       "specSection": "12.5",
       "status": "discharged",
-      "releaseApplicable": false,
-      "note": "Budget conservation is a proof field discharged at every construction site, never assumed.",
-      "scopeLimitation": "The theorem requires both Atlas.Coherent state.body and state.body.scope = Atlas.Scope.unscoped. SPEC's amended scoped required-name proposition remains outstanding and is not credited by this row."
+      "releaseApplicable": true,
+      "note": "This is the exact AMD-003/SPEC 12.5 scoped proposition. Budget conservation is a proof field discharged at every construction site, never assumed.",
+      "scopeLimitation": "The theorem requires Atlas.Coherent state.body; rebuild and incremental update separately prove that invariant for states they produce. It does not assume an unscoped state."
     },
     {
       "id": "CM-003",
@@ -429,7 +450,7 @@
         "BI-002",
         "WS-001"
       ],
-      "note": "The antecedent of GO-004. This is SPEC 13 Phase B and is blocked by the direct public-Core compiler/refinement work (BI-002/BI-010) and the exact public execution/cost harness (WS-001/CO-006). The former legacy subset witness/evaluation cones were deleted: no current byte literal is simultaneously public-Core profile valid, semantically correct, resource feasible, and equipped with the released SystemEvaluation."
+      "note": "The antecedent of GO-004. This is SPEC 13 Phase B and is blocked by the full-GEMM compiler/refinement/cost work (BI-002/BI-010/BI-011) and the exact public execution/cost harness (WS-001/CO-006). The former legacy subset witness/evaluation cones were deleted: no current byte literal is simultaneously public-Core profile valid, semantically correct, resource feasible, and equipped with the released SystemEvaluation."
     },
     {
       "id": "GO-007",
@@ -498,18 +519,37 @@
     },
     {
       "id": "UV-003",
-      "level": "open",
-      "statement": "The concrete release Decider satisfies DeciderAnswersAdmissible: it returns a completed evaluation on every admissible byte sequence that has one. This is SPEC 10.1's system_evaluation_rel_complete.",
-      "leanDeclaration": null,
-      "sourceModule": "WasmGemmGnaf/Artifact/Release.lean",
+      "level": "formalProof",
+      "statement": "Universal.system_evaluation_rel_complete proves that public profile validity, semantic correctness, and semantic resource conformance force the sole canonical finite evaluator to return a complete SystemEvaluation.",
+      "leanDeclaration": "WasmGemmGnaf.Universal.system_evaluation_rel_complete",
+      "sourceModule": "WasmGemmGnaf/Universal/Evaluate.lean",
       "specSection": "10.1",
-      "status": "outstanding",
+      "status": "discharged",
       "obligation": "O-6",
       "releaseApplicable": true,
       "dependsOn": [
-        "WS-001"
+        "WS-001",
+        "WS-009",
+        "UV-004"
       ],
-      "note": "REOPENED after external audit. It was promoted on Release.decider, which is `noncomputable` and built from Release.evaluateClassically: that function ASSUMES Nonempty (SystemEvaluation ...) and then extracts a witness with Classical.choice. It decodes, validates, enumerates and executes nothing. SPEC 19 excludes noncomputable definitions from the product/proof path and SPEC 6.3 requires executable proof-producing functions to be computable, so this is not a conforming discharge. Correspondingly the completeness theorem takes an existing evaluation as an argument rather than proving one exists. `just releasepath` now fails on that shape. RESOLUTION: Release.decider, Release.evaluateClassically, Release.systemEvaluationRel_{sound,functional,complete}, Release.deciderAnswersAdmissible(_rel), Release.exists_globalOptimal_of_{nonempty,admissible_evaluation}, Release.nonemptiness_iff_admissible_evaluation, Release.seam_decider_complete_on_witness, Release.globalOptimal_of_witness_semantics, Artifact.exists_globalOptimal_of_baseline_semantics and the ten Theorems.release_* results indexed by the decider are DELETED, not relabelled and not retained behind a checker. No replacement evaluator over the witness semantics was substituted. Closing UV-003 requires implementing SPEC 10.1's finite decoder, validator, input enumerator and all-branch explorer as a Universal.Decider and proving DeciderAnswersAdmissible of it.",
+      "note": "The proof uses the public amended-Core decoder/profile checker, fresh public initializer, complete constructive raw-input enumeration, and canonical proof-carrying Wasm.exploreAllCosted. Universal.CostedMachine and Universal.Decider are empty tokens: neither can replace the initializer, successor relation, explorer, costing, or evaluator. M30 disconnects the canonical explorer call and requires the real per-input and whole-system completeness proofs to fail.",
+      "axioms": [
+        "propext",
+        "Classical.choice",
+        "Quot.sound"
+      ]
+    },
+    {
+      "id": "UV-007",
+      "level": "formalProof",
+      "statement": "Universal.system_evaluation_rel_sound reflects a completed result of the sole executable public amended-Core evaluator to exactly SemanticCorrect and SemanticWithinResources.",
+      "leanDeclaration": "WasmGemmGnaf.Universal.system_evaluation_rel_sound",
+      "sourceModule": "WasmGemmGnaf/Universal/Evaluate.lean",
+      "specSection": "10.1",
+      "status": "discharged",
+      "obligation": "O-6",
+      "releaseApplicable": true,
+      "note": "The public relation calls the sole canonical finite evaluator, not a caller-supplied callback. Every completed result comes through public amended-Core decoding, validation, and the proof-carrying input evaluations assembled by that evaluator. M28 replaces the canonical evaluator equation by a reflexive forged-completion equation and the real reflection proof then fails.",
       "axioms": [
         "propext",
         "Classical.choice",
@@ -602,14 +642,14 @@
     {
       "id": "BI-008",
       "level": "formalProof",
-      "statement": "The GNAF plan language expresses an INPUT-DEPENDENT GEMM: one CheckedPlan, GNAF.gemmKernel, loads m, n and k out of the raw ABI header into registers and runs an i/j/k nest whose every trip count is one of those registers, and after evaluation the declared C region holds the modular-u32 product (A*B)[i,j] for arbitrary m, n, k -- not for one shape fixed by the plan text.",
+      "statement": "The GNAF plan language expresses an INPUT-DEPENDENT GEMM: one TypedPlan, GNAF.gemmKernel, loads m, n and k out of the raw ABI header into registers and runs an i/j/k nest whose every trip count is one of those registers, and after evaluation the declared C region holds the modular-u32 product (A*B)[i,j] for arbitrary m, n, k -- not for one shape fixed by the plan text.",
       "leanDeclaration": "WasmGemmGnaf.GNAF.gemmKernel_writes_C",
       "sourceModule": "WasmGemmGnaf/GNAF/CompileCorrect.lean",
       "specSection": "3",
       "status": "discharged",
       "obligation": "O-6",
       "releaseApplicable": true,
-      "note": "DISCHARGED. gemmKernel classifies the raw header (classifyRaw), dispatches on the layout class (dispatchLayout), LOADS the SPEC 8.3 extents at cells 16..23, 24..31 and 32..39 into registers 3, 4, 5 with Plan.loadReg (gemmKernel_loads_extents), runs three nested Plan.loopReg loops bounded by exactly those registers (gemmKernelNest_trips: the outer trip count IS the header word), accumulates one multiply-accumulate per k iteration, deposits each result into C with Plan.storeReg as a four-cell little-endian u32, sets the success status (gemmKernel_eval_status) and publishes C (gemmKernel_eval_out). Proved: gemmKernel_inReleasedSubset, gemmKernel_usesVector = false, gemmKernel_typed (CheckedPlan gemmKernelSig gemmKernelOutSig), gemmKernel_compiles (Wasm.validate of the compiled module), gemmKernel_no_unreachable, gemmKernel_loads_extents, gemmKernel_writes_C (the claim), gemmKernelCore_frame (nothing outside C is written), gemmKernel_C_is_contract_fold (what lands in C is exactly the fold of ArithmeticContract.step for the modular-u32 contract gemmKernelContract, so the reduction is performed UNDER THE DECLARED CONTRACT of SPEC 8.2), gemmKernel_eval_conforms. The same CheckedPlan is then proved correct on three different descriptors: gemmKernel_writes_C_1x1x1, gemmKernel_writes_C_2x2x2 (all four entries) and gemmKernel_writes_C_1x3x2 (a rectangular shape with k != n, all three entries). Only the descriptor differs between them, which is the evidence that the fixed-extent limitation of BI-003/BI-005 is gone. Because a GNAF IndexMap has plan-text-constant coefficients, no map can address A[i,t] = 256 + 4*(i*k + t) when k is loaded; the kernel therefore computes every element address into register 0 with Plan.scalarOp and reads it through IndexMap.idB, whose storeAddr is base + reg 0. Address arithmetic is data in this plan, exactly as the extents are.",
+      "note": "DISCHARGED. gemmKernel classifies the raw header (classifyRaw), dispatches on the layout class (dispatchLayout), LOADS the SPEC 8.3 extents at cells 16..23, 24..31 and 32..39 into registers 3, 4, 5 with Plan.loadReg (gemmKernel_loads_extents), runs three nested Plan.loopReg loops bounded by exactly those registers (gemmKernelNest_trips: the outer trip count IS the header word), accumulates one multiply-accumulate per k iteration, deposits each result into C with Plan.storeReg as a four-cell little-endian u32, sets the success status (gemmKernel_eval_status) and publishes C (gemmKernel_eval_out). Proved: gemmKernel_inReleasedSubset, gemmKernel_usesVector = false, gemmKernel_typed (TypedPlan gemmKernelSig gemmKernelOutSig), gemmKernel_loads_extents, gemmKernel_writes_C (the claim), gemmKernelCore_frame (nothing outside C is written), gemmKernel_C_is_contract_fold (what lands in C is exactly the fold of ArithmeticContract.step for the modular-u32 contract gemmKernelContract, so the reduction is performed UNDER THE DECLARED CONTRACT of SPEC 8.2), gemmKernel_eval_conforms. The same TypedPlan is then proved correct on three different descriptors: gemmKernel_writes_C_1x1x1, gemmKernel_writes_C_2x2x2 (all four entries) and gemmKernel_writes_C_1x3x2 (a rectangular shape with k != n, all three entries). Only the descriptor differs between them, which is the evidence that the fixed-extent limitation of BI-003/BI-005 is gone. Because a GNAF IndexMap has plan-text-constant coefficients, no map can address A[i,t] = 256 + 4*(i*k + t) when k is loaded; the kernel therefore computes every element address into register 0 with Plan.scalarOp and reads it through IndexMap.idB, whose storeAddr is base + reg 0. Address arithmetic is data in this plan, exactly as the extents are.",
       "axioms": [
         "propext",
         "Quot.sound"
@@ -658,13 +698,16 @@
     },
     {
       "id": "WS-004",
-      "level": "open",
+      "level": "formalProof",
       "statement": "Wasm.profile_matches_pinned_revision binds every enabled vendored Core 3.0 rule exactly once to the released amended decoder, validator, runtime, execution, and harness declarations.",
-      "leanDeclaration": null,
+      "leanDeclaration": "WasmGemmGnaf.Wasm.profile_matches_pinned_revision",
+      "sourceModule": "WasmGemmGnaf/Wasm/Adequacy.lean",
       "specSection": "7.1",
-      "status": "outstanding",
+      "status": "discharged",
       "releaseApplicable": true,
-      "note": "The existing Adequacy enumeration explicitly maps nearly every row to the legacy subset and covers only a hand-written subset of vendored rules. Its totality theorem therefore does not discharge the public Core adequacy obligation."
+      "axioms": ["propext", "Classical.choice", "Quot.sound"],
+      "axiomNote": "Classical.choice enters only through the finite-list infrastructure used to enumerate the generated finite index; the exhaustive source rows and their declaration aliases are explicit generated data checked by `just core`.",
+      "note": "The public map is generated from all 1,291 pinned SpecTec obligations: 166 syntax productions, 546 opcode productions, 256 validation rules, 239 execution rules, and 84 numeric definitions. Each enabled source row maps to its own compiled alias; explicitly rejected relaxed-SIMD rows remain absent from the public map. M13 checks vendored content and M14 checks extraction, markers, counts, and compiled declaration attachment."
     },
     {
       "id": "CM-006",
@@ -691,15 +734,19 @@
     },
     {
       "id": "UV-004",
-      "level": "open",
+      "level": "formalProof",
       "statement": "Provide a constructive duplicate-free enumeration of every lawful raw invocation, a global choice-free Fintype instance, the classifier-driven valid-input enumeration, and an executable input enumerator with completeness.",
-      "leanDeclaration": null,
+      "leanDeclaration": "WasmGemmGnaf.Universal.input_enumerator_complete",
       "sourceModule": "WasmGemmGnaf/Universal/EnumerateInputs.lean",
+      "axioms": [
+        "propext",
+        "Quot.sound"
+      ],
       "specSection": "15",
-      "status": "outstanding",
+      "status": "discharged",
       "obligation": "O-3",
       "releaseApplicable": true,
-      "note": "Declarations named Gemm.raw_input_finite, Gemm.valid_input_finite, and Universal.input_enumerator_complete exist, but the compiled axiom audit reaches Classical.choice. SPEC §4 forbids choice from producing these executable enumeration witnesses, so all three exact-bound required names remain uncredited and this claim is not discharged. Closure requires removing that dependency and re-auditing the compiled declarations."
+      "note": "The constructive declarations Gemm.raw_input_finite, Gemm.valid_input_finite, and Universal.input_enumerator_complete are exact-bound required names. The compiled axiom audit for all three is [propext, Quot.sound], with no Classical.choice dependency."
     },
     {
       "id": "WS-005",
@@ -751,9 +798,77 @@
       "note": "This closes only the public amended-Core encoder round trip. It proves no byte uniqueness, selected-artifact identity, validation iff, execution theorem, GEMM compiler refinement, or SystemEvaluation. M22 mutates the public encoder and the artifact emitter independently and requires both real round-trip proofs to fail."
     },
     {
+      "id": "WS-008",
+      "level": "formalProof",
+      "statement": "Cost labels over the public typed amended-Core harness erase exactly to the plain public run, with the amended machine-produced-labelling conjunct.",
+      "leanDeclaration": "WasmGemmGnaf.Wasm.costed_erase_iff_plain_run",
+      "sourceModule": "WasmGemmGnaf/Wasm/CoreErasure.lean",
+      "specSection": "7.5",
+      "status": "discharged",
+      "obligation": "O-6",
+      "releaseApplicable": true,
+      "axioms": [
+        "propext",
+        "Classical.choice",
+        "Quot.sound"
+      ],
+      "note": "The theorem is over the public representable Wasm.Module, profile-indexed Invocation, typed reachable Config, and exact amended-Core Harness Event. CostedEvent stores no caller-supplied numeric cost: its charge is computed by Wasm.eventCost. M26 mutates the public costed reduction so its charged event no longer erases to the authority step event and requires the real erasure proof to stop elaborating."
+    },
+    {
+      "id": "WS-009",
+      "level": "formalProof",
+      "statement": "The public amended-Core read relation restores the source grammar's implicit well-formedness side condition on each float literal solved from bytes, and the executable typed whole-machine successor list is exactly the resulting event-labelled step relation.",
+      "leanDeclaration": "WasmGemmGnaf.Wasm.mem_successors_iff_step",
+      "sourceModule": "WasmGemmGnaf/Wasm/PublicSuccessors.lean",
+      "specSection": "7.1",
+      "status": "discharged",
+      "obligation": "O-6",
+      "releaseApplicable": true,
+      "dependsOn": [
+        "WS-001"
+      ],
+      "axioms": [
+        "propext",
+        "Classical.choice",
+        "Quot.sound"
+      ],
+      "note": "The raw Lean float carrier contains constructor terms excluded by the pinned syntax sort fN(N). DEV-016/AMD-016 restores that implicit sort condition exactly at the three byte-solved literal rules, and the public typed whole-machine successor list is now kernel proved equivalent to the amended event-labelled step relation. M29 removes the operative well-formedness premise and requires the proof chain to fail; M33 removes the executable initialization-canonicality premise consumed by the same exact successor theorem."
+    },
+    {
+      "id": "WS-010",
+      "level": "open",
+      "statement": "For every representable public amended-Core module, the public executable validation Boolean is true exactly when the independent fragment-free amended declarative Module_okA judgment is inhabited.",
+      "leanDeclaration": null,
+      "sourceModule": "WasmGemmGnaf/Wasm/CoreValidation.lean",
+      "specSection": "7.3",
+      "status": "outstanding",
+      "obligation": "O-6",
+      "releaseApplicable": true,
+      "dependsOn": [
+        "WS-001"
+      ],
+      "note": "This row is registered open before the exact public theorem. M35 removes the operative local value-type validity premise and M36 removes the operative recursive-shape subtyping constructor; each must break the real full-validator soundness/completeness chain. The row is promoted only after the unconditional public `Wasm.validate_bool_iff` signature and permitted axiom closure are kernel checked."
+    },
+    {
+      "id": "WS-011",
+      "level": "open",
+      "statement": "Every representable, declaratively valid public amended-Core module configuration that instantiates that module and carries the ordinary validation/reachability invariant is a return, trap, uncaught throw, or has a nonempty exact executable successor list.",
+      "leanDeclaration": null,
+      "sourceModule": "WasmGemmGnaf/Wasm/Soundness.lean",
+      "specSection": "7.3 and 15",
+      "status": "outstanding",
+      "obligation": "O-6",
+      "releaseApplicable": true,
+      "dependsOn": [
+        "WS-001",
+        "WS-009"
+      ],
+      "note": "This exact public `Wasm.validation_progress` row is registered open before the theorem. `Wasm.handler_validation_progress_counterexample` kernel-checks a full-amended-valid, reachable, well-typed, nonterminal handler configuration whose successor list is empty under the pre-AMD-023 semantics. DEV-023/AMD-023 repairs only genuine handler-body evaluation and handler trap propagation. M39 removes the operative handler context rule from a copy of that repaired semantics and requires the real public progress proof to stop elaborating. The row is promoted only after the exact SPEC proposition and permitted axiom closure are kernel checked."
+    },
+    {
       "id": "BI-009",
       "level": "formalProof",
-      "statement": "GNAF.compile emits an i32 literal the pinned Core 3.0 syntax cannot hold, so no total map from the release path's instructions to the pinned ones preserves i32 constants: migrating the compiler to Wasm.Core.Module is a change to the COMPILER, not a translation of its output.",
+      "statement": "No total map from the legacy release path's instructions to the pinned Core 3.0 instructions preserves i32 constants: the legacy i32 literal is an unbounded integer while the pinned literal is a u32, so migrating the compiler to Wasm.Core.Module required a change to the COMPILER, not a translation of its output.",
       "leanDeclaration": "WasmGemmGnaf.GNAF.no_i32const_preserving_map",
       "sourceModule": "WasmGemmGnaf/GNAF/CoreGap.lean",
       "axioms": [
@@ -763,14 +878,14 @@
       "specSection": "11.4",
       "status": "discharged",
       "releaseApplicable": true,
-      "note": "A negative result, priced so the next migration step does not discover it by finding a proof that stops closing. GNAF.constI n = Wasm.Instr.i32Const (Int.ofNat n) and Wasm.Instr.i32Const : Int -> Instr, so the release path's i32 literal is UNBOUNDED; 2-syntax.values.spectec fixes syntax iN(N) = uN(N), so a Core 3.0 i32 literal is a u32 (GNAF.no_core_i32_lit_two_pow_32). The gap is reachable from the compiler and not merely present in the type: GNAF.bodyCode appends loadAt e.statusAddr to EVERY compiled body (GNAF.compile_body_mem_statusAddr), CompileEnv.pages is clamped to the hard page limit but the ADDRESSES are not, and GNAF.gapChecked -- the plan `nop`, typed by HasType.nop at an interface declaring 2^30 memory cells -- compiles to a body containing i32.const (2^32) (GNAF.compile_gapChecked_emits_two_pow_32). This is the instruction-level counterpart of Wasm/CoreGap.lean's module-level no_typeidx_preserving_map and no_name_preserving_map, stated about the compiler's own output."
+      "note": "A negative result, priced so the migration arrived as a compiler change rather than being discovered by a proof that stops closing. Wasm.Instr.i32Const : Int -> Instr, so the legacy release path's i32 literal is UNBOUNDED; 2-syntax.values.spectec fixes syntax iN(N) = uN(N), so a Core 3.0 i32 literal is a u32 (GNAF.no_core_i32_lit_two_pow_32), and Wasm.Instr.i32Const (2^32) has no constant-preserving image (GNAF.no_i32const_preserving_map). Earlier revisions also proved the gap REACHABLE from the legacy subset compiler (compile_body_mem_statusAddr, compile_gapChecked_emits_two_pow_32); the direct public-Core rewrite of GNAF/Compile.lean -- the exact change this result priced, with every source Nat reaching a Core literal only through CheckedPlan.coreRepresentable -- removed that compiler, so the reachability witnesses retired with their subject. This remains the instruction-level counterpart of Wasm/CoreGap.lean's module-level no_typeidx_preserving_map and no_name_preserving_map."
     },
     {
       "id": "BI-010",
       "level": "open",
-      "statement": "GNAF.compile emits the public representable Wasm.Module: CheckedPlan supplies the exact < 2^32 layout facts, CompileEnv carries them without wrapping or clamping addresses, and every address, refinement, resource, and cost theorem is re-proved over the combined amended Core 3.0 validation and execution semantics.",
+      "statement": "Every finite public Wasm.Run of GNAF.compile on a CheckedPlan and lawful raw invocation is accepted by the independent GNAF source semantics, including the returned status and complete source-visible memory image.",
       "leanDeclaration": null,
-      "sourceModule": "WasmGemmGnaf/GNAF/Compile.lean",
+      "sourceModule": "WasmGemmGnaf/GNAF/CompileRefines.lean",
       "specSection": "11.4",
       "status": "outstanding",
       "obligation": "O-6",
@@ -779,7 +894,23 @@
         "BI-009",
         "WS-001"
       ],
-      "note": "The obligation BI-009 prices. Sig.mem, Sig.scratch and Sig.tables are unbounded Nats and CompileEnv.statusAddr scales them, so `envOf` cannot manufacture a bound from typing alone. The compile-ready `CheckedPlan` carrier must therefore decide and retain the exact layout inequalities, and normalization and every concrete checked plan must preserve them. Clamping or modulo wrapping is forbidden: a wrapped address can land inside declared memory and succeed at the wrong location. The compiler must then construct Core instructions directly, prove the combined amended validator accepts every emitted combinator, obtain a BmoduleA witness through the canonical encoder, and re-prove execution refinement and exact resource/cost results over the same concrete Core machine. The existing subset compiler and its `unreachable` fallbacks are not a release solution and must not survive as a second semantic path."
+      "note": "This row is deliberately separate from exact cost reflection. M37 removes the operative setStatus lowering from a complete copy of the production scalar runtime bridge while retaining the source-status simulation theorem, so the kernel must reject the mutant. The quantified theorem concerns every value admitted by the current executable CheckedPlan checker; it does not by itself discharge BI-002, because that checker does not yet admit a full four-mode released GEMM plan."
+    },
+    {
+      "id": "BI-011",
+      "level": "open",
+      "statement": "For every cost-labelled public execution of GNAF.compile, the sequentially composed initialization and execution charge equals the independent raw-invocation-indexed CheckedPlan.certifiedCost formula coordinate by coordinate.",
+      "leanDeclaration": null,
+      "sourceModule": "WasmGemmGnaf/GNAF/CompileCost.lean",
+      "specSection": "11.4",
+      "status": "outstanding",
+      "obligation": "O-6",
+      "releaseApplicable": true,
+      "dependsOn": [
+        "BI-010",
+        "CO-006"
+      ],
+      "note": "The certified-cost formula is computed only from the checked source plan, lawful raw invocation, and released profile table. It contains no evaluator output or proof witness. M38 perturbs the production execution dispatch coordinate while retaining the kernel-checked formula-composition theorem, requiring the mutant to fail before this row may be promoted. Like BI-010, this theorem is exact for the admitted CheckedPlan carrier but is not a full-GEMM existence claim."
     }
   ],
   "refutedFramings": [

@@ -62,7 +62,9 @@ pub fn report() -> Result<std::result::Result<String, String>> {
 
     for path in lean_files(CLAUSE, Path::new("WasmGemmGnaf"))? {
         let display = slash(&path);
-        let Some(rel) = display.strip_prefix("WasmGemmGnaf/") else { continue };
+        let Some(rel) = display.strip_prefix("WasmGemmGnaf/") else {
+            continue;
+        };
         if !PROTECTED.iter().any(|p| rel == *p || rel.starts_with(p)) {
             continue;
         }
@@ -70,7 +72,9 @@ pub fn report() -> Result<std::result::Result<String, String>> {
 
         let text = read_lossy(CLAUSE, &path)?;
         for (index, line) in splitlines(&text).iter().enumerate() {
-            let Some(module) = import_target(line) else { continue };
+            let Some(module) = import_target(line) else {
+                continue;
+            };
             if FORBIDDEN
                 .iter()
                 .any(|bad| module == *bad || module.starts_with(&format!("{bad}.")))

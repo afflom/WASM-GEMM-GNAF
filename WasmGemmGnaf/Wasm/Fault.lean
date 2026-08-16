@@ -21,7 +21,7 @@ import WasmGemmGnaf.Wasm.Config
 
 set_option autoImplicit false
 
-namespace WasmGemmGnaf.Wasm
+namespace WasmGemmGnaf.Wasm.Subset
 
 /-- A legacy subset-machine fault: either subset bytes failed to decode or a
 subset module failed to instantiate. -/
@@ -60,4 +60,4 @@ def isDecoding : Fault → Bool
 
 end Fault
 
-end WasmGemmGnaf.Wasm
+end WasmGemmGnaf.Wasm.Subset

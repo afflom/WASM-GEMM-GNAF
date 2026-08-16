@@ -13,11 +13,7 @@
   | `Cost.transition_accounting_positive`| `Theorems.transition_accounting_positive` |
   | `Cost.objective_sublevel_finite`     | `Theorems.objective_sublevel_finite`   |
 
-  `Theorems.module_bytes_exact` is a proved projection from the repository's
-  parameterized `Cost.ExactAggregateCost`.  SPEC §9.1 instead binds the public
-  profile, bytes, and `Wasm.Module`, and derives decoding, validation, and static
-  charges from those objects.  No bridge from that public-Core predicate is
-  proved, so the required `Cost.module_bytes_exact` remains outstanding.
+  | `Cost.module_bytes_exact`             | `Theorems.module_bytes_exact`          |
 
   ## Additional proved results indexed here (not on the §15 list)
 
@@ -37,28 +33,15 @@
   * `sublevelEnumeration_length` — the sublevel enumeration is exactly the
     finite product of the 36 coordinate ranges `{0, …, u}`.
   * `exact_aggregate_unique`, `raw_charge_le_dynamicSum`,
-    `raw_charge_le_dynamicMax` — accounting facts for the repository's
-    parameterized aggregate predicate that sit beside `module_bytes_exact`:
-    the exact aggregate determines the whole
+    `raw_charge_le_dynamicMax` — accounting facts for the public amended-Core
+    aggregate predicate that sit beside `module_bytes_exact`: the exact aggregate determines the whole
     cost vector, and no raw invocation's charge escapes either aggregate.
   * `transition_accounting_strict` — the strict form of positive accounting.
 
-  ## Scope of `module_bytes_exact` (anti-vacuity note)
-
-  `Cost.ExactAggregateCost` takes `decodes : Prop`, `decodeSteps`,
-  `validationSteps` and `staticDataBytes` as *parameters* rather than computing
-  them from a mechanized Core 3.0 decoder and validator (see the doc comment on
-  the definition in `Cost/Aggregate.lean`).  So `module_bytes_exact` says: **if**
-  a cost vector is exact for given bytes under that predicate, **then** its
-  `moduleBytes` coordinate is literally `bytes.size`.  It does not by itself
-  establish that any particular released artifact's cost vector is exact — that
-  needs a baseline, and is `O-4`/`O-6`.
-
-  ## SPEC §15 Cost declaration outstanding
-
-  `Cost.module_bytes_exact` remains outstanding at the public-Core proposition.
-  The exact released artifact and competitor application are also open under
-  `O-3`, `O-4`, and `O-5`, as recorded in `Theorems/Status.lean`.
+  `module_bytes_exact` is the literal projection from SPEC §9.1's public
+  profile/bytes/module predicate.  It does not by itself establish that any
+  particular released artifact has an exact aggregate; that separate existence
+  and identification work remains on the release spine.
 -/
 import WasmGemmGnaf.Cost.Vector
 import WasmGemmGnaf.Cost.Event
@@ -128,23 +111,16 @@ theorem transition_accounting_strict (v : DynamicVector) (e : Event) :
     v.total < (sequentialCompose v e.charge).total :=
   Cost.transition_accounting_strict v e
 
-/-! ## The repository's parameterized aggregate
+/-! ## The exact public amended-Core aggregate -/
 
-`ExactAggregateCost bytes decodes decodeSteps validationSteps staticDataBytes
-repetitions dynamicFor cost` takes decodability and the three static quantities
-as parameters.  It is weaker than SPEC §9.1's public-Core predicate, which binds
-them to a profile and module.  The results below are conditional statements
-about this repository predicate and do not bridge that gap. -/
-
-/-- A projection from the repository's parameterized aggregate predicate: a
-cost vector exact under its supplied parameters records `bytes.size`.  This is
-not the public-Core SPEC §15 discharge. -/
+/-- **SPEC §15, `Cost.module_bytes_exact`.**  A public-Core aggregate exact for
+some profile, bytes, and module records the literal byte-array size. -/
 theorem module_bytes_exact {Raw : Type} [Foundation.Fintype Raw]
-    {bytes : ByteArray} {decodes : Prop}
-    {decodeSteps validationSteps staticDataBytes repetitions : Nat}
+    {P : WasmGemmGnaf.Wasm.Profile} {bytes : ByteArray}
+    {module : WasmGemmGnaf.Wasm.Module}
+    {repetitions : Nat}
     {dynamicFor : Raw → DynamicVector} {cost : CompleteSystemCost}
-    (h : ExactAggregateCost bytes decodes decodeSteps validationSteps
-      staticDataBytes repetitions dynamicFor cost) :
+    (h : ExactAggregateCost P bytes module repetitions dynamicFor cost) :
     cost.static.moduleBytes = bytes.size :=
   Cost.module_bytes_exact h
 
@@ -153,35 +129,34 @@ two vectors exact for the same data are equal.  This is what stops
 `module_bytes_exact` from being satisfiable by a vector that is honest about
 size and free everywhere else. -/
 theorem exact_aggregate_unique {Raw : Type} [Foundation.Fintype Raw]
-    {bytes : ByteArray} {decodes : Prop}
-    {decodeSteps validationSteps staticDataBytes repetitions : Nat}
+    {P : WasmGemmGnaf.Wasm.Profile} {bytes : ByteArray}
+    {module : WasmGemmGnaf.Wasm.Module}
+    {repetitions : Nat}
     {dynamicFor : Raw → DynamicVector} {cost cost' : CompleteSystemCost}
-    (h : ExactAggregateCost bytes decodes decodeSteps validationSteps
-      staticDataBytes repetitions dynamicFor cost)
-    (h' : ExactAggregateCost bytes decodes decodeSteps validationSteps
-      staticDataBytes repetitions dynamicFor cost') :
+    (h : ExactAggregateCost P bytes module repetitions dynamicFor cost)
+    (h' : ExactAggregateCost P bytes module repetitions dynamicFor cost') :
     cost = cost' :=
   Cost.exact_unique h h'
 
 /-- Full-domain accounting: every raw invocation's charge appears in the
 aggregated dynamic sum, so no input is charged off the books. -/
 theorem raw_charge_le_dynamicSum {Raw : Type} [Foundation.Fintype Raw]
-    {bytes : ByteArray} {decodes : Prop}
-    {decodeSteps validationSteps staticDataBytes repetitions : Nat}
+    {P : WasmGemmGnaf.Wasm.Profile} {bytes : ByteArray}
+    {module : WasmGemmGnaf.Wasm.Module}
+    {repetitions : Nat}
     {dynamicFor : Raw → DynamicVector} {cost : CompleteSystemCost}
-    (h : ExactAggregateCost bytes decodes decodeSteps validationSteps
-      staticDataBytes repetitions dynamicFor cost) (a : Raw) :
+    (h : ExactAggregateCost P bytes module repetitions dynamicFor cost) (a : Raw) :
     DynamicVector.ComponentwiseLE (dynamicFor a) cost.dynamicSum :=
   Cost.raw_charge_le_dynamicSum h a
 
 /-- Full-domain accounting for the peak coordinates: every raw invocation's
 charge is under the aggregated dynamic maximum. -/
 theorem raw_charge_le_dynamicMax {Raw : Type} [Foundation.Fintype Raw]
-    {bytes : ByteArray} {decodes : Prop}
-    {decodeSteps validationSteps staticDataBytes repetitions : Nat}
+    {P : WasmGemmGnaf.Wasm.Profile} {bytes : ByteArray}
+    {module : WasmGemmGnaf.Wasm.Module}
+    {repetitions : Nat}
     {dynamicFor : Raw → DynamicVector} {cost : CompleteSystemCost}
-    (h : ExactAggregateCost bytes decodes decodeSteps validationSteps
-      staticDataBytes repetitions dynamicFor cost) (a : Raw) :
+    (h : ExactAggregateCost P bytes module repetitions dynamicFor cost) (a : Raw) :
     DynamicVector.ComponentwiseLE (dynamicFor a) cost.dynamicMax :=
   Cost.raw_charge_le_dynamicMax h a
 

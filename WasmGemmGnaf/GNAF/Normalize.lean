@@ -547,23 +547,23 @@ theorem normalize_hasType : ∀ {p : Plan} {s t : Sig}, HasType s p t →
   | opaqueProcess sp body ih => intro s t h; exact h
 
 /-- Normalization of a checked plan (SPEC §11.3's `normalize` on
-`CheckedPlan`). -/
-def CheckedPlan.normalize {s t : Sig} (c : CheckedPlan s t) : CheckedPlan s t where
+`TypedPlan`). -/
+def TypedPlan.normalize {s t : Sig} (c : TypedPlan s t) : TypedPlan s t where
   plan := WasmGemmGnaf.GNAF.normalize c.plan
   typed := normalize_hasType c.typed
 
 /-- SPEC §11.3 on checked plans: semantics preserved. -/
-theorem CheckedPlan.normalize_semantics {s t : Sig} (c : CheckedPlan s t) :
+theorem TypedPlan.normalize_semantics {s t : Sig} (c : TypedPlan s t) :
     c.normalize.eval = c.eval :=
   WasmGemmGnaf.GNAF.normalize_semantics c.plan
 
 /-- SPEC §11.3 on checked plans: cost nonincreasing. -/
-theorem CheckedPlan.normalize_cost_le {s t : Sig} (c : CheckedPlan s t) :
+theorem TypedPlan.normalize_cost_le {s t : Sig} (c : TypedPlan s t) :
     c.normalize.certifiedCost ≤ c.certifiedCost :=
   WasmGemmGnaf.GNAF.normalize_cost_le c.plan
 
 /-- SPEC §11.3 on checked plans: idempotent. -/
-theorem CheckedPlan.normalize_idempotent {s t : Sig} (c : CheckedPlan s t) :
+theorem TypedPlan.normalize_idempotent {s t : Sig} (c : TypedPlan s t) :
     c.normalize.normalize.plan = c.normalize.plan :=
   WasmGemmGnaf.GNAF.normalize_idempotent c.plan
 

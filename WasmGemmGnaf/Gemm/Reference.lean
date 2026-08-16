@@ -755,11 +755,55 @@ theorem toList_length (b : ByteArray) : b.toList.length = b.size := by
 
 /-! ## From an execution observation to a GEMM semantic observation -/
 
+/-- Embed an ABI byte into the amended-Core byte carrier. -/
+def coreByteOfUInt8 (b : UInt8) : Wasm.Core.Byte :=
+  ⟨b.toNat, b.toNat_lt⟩
+
+/-- Project an amended-Core byte to the ABI byte carrier.  This is lossless
+because a Core byte is already bounded by 256. -/
+def uint8OfCoreByte (b : Wasm.Core.Byte) : UInt8 :=
+  UInt8.ofNat b.val
+
+@[simp] theorem uint8OfCoreByte_coreByteOfUInt8 (b : UInt8) :
+    uint8OfCoreByte (coreByteOfUInt8 b) = b := by
+  simp [uint8OfCoreByte, coreByteOfUInt8]
+
+/-- Embed a complete ABI-visible byte list into a public Core observation. -/
+def observableStoreOfUInt8s (bytes : List UInt8) : Wasm.ObservableStore :=
+  { bytes := bytes.map coreByteOfUInt8 }
+
+@[simp] theorem getD_map_coreByteOfUInt8 (bytes : List UInt8) (i : Nat) :
+    (bytes.map coreByteOfUInt8).getD i default =
+      coreByteOfUInt8 (bytes.getD i 0) := by
+  simp only [List.getD_eq_getElem?_getD, List.getElem?_map]
+  cases h : bytes[i]? with
+  | none =>
+      simp only [Option.map_none, Option.getD_none]
+      apply Subtype.ext
+      rfl
+  | some byte => simp
+
 /-- The ABI-visible store an execution observation exposes, as a function of the
 byte offset relative to `ptr`, restricted to the invocation extent. -/
 def storeOfObservable {P : Wasm.Profile} (raw : RawInvocationBody P)
     (os : Wasm.ObservableStore) : Store :=
-  fun i => if i < raw.len.toNat then os.bytes.getD (raw.ptr.toNat + i) 0 else 0
+  fun i => if i < raw.len.toNat then
+    uint8OfCoreByte (os.bytes.getD (raw.ptr.toNat + i) default)
+  else 0
+
+/-- The only public Core return value accepted by the GEMM ABI is an `i32`.
+Every other typed Core value is classified as a faulty GEMM outcome. -/
+def returnedStatus? : Wasm.Value → Option UInt32
+  | .num ⟨.i32, value⟩ => some (UInt32.ofNat value.val)
+  | _ => none
+
+/-- Embed a GEMM status into the public Core `i32` value carrier. -/
+def coreValueOfStatus (status : UInt32) : Wasm.Value :=
+  .num ⟨.i32, ⟨status.toNat, by simpa using status.toNat_lt⟩⟩
+
+@[simp] theorem returnedStatus?_coreValueOfStatus (status : UInt32) :
+    returnedStatus? (coreValueOfStatus status) = some status := by
+  simp [returnedStatus?, coreValueOfStatus]
 
 /-- SPEC §8.3's masking: scratch is masked out of the semantic observation, and
 only after complete descriptor validation. -/
@@ -782,8 +826,13 @@ def semanticFor {P : Wasm.Profile} (_problem : Problem P) (raw : Gemm.RawInvocat
     (o : Wasm.ExecutionObservation) : SemanticOutcome :=
   match o with
   | .returned _ entry v final _ =>
-      .returned v (storeOfObservable raw.body entry)
-        (maskFor raw.body (storeOfObservable raw.body final))
+      match returnedStatus? v with
+      | some status =>
+          .returned status (storeOfObservable raw.body entry)
+            (maskFor raw.body (storeOfObservable raw.body final))
+      | none =>
+          .faulted (storeOfObservable raw.body entry)
+            (maskFor raw.body (storeOfObservable raw.body final))
   | .trappedBeforeEntry _ _ _ _ => .beforeEntry
   | .thrownBeforeEntry _ _ _ _ => .beforeEntry
   | .trappedAfterEntry _ entry _ final _ =>
@@ -852,33 +901,13 @@ open WasmGemmGnaf
 > requires every candidate-call write event and every changed ABI-visible byte
 > to lie in `regions`; it is false for `trappedBeforeEntry`.
 
-**Scope of the write-event half.**  The released `Wasm.Event` alphabet
-(`Wasm/Config.lean`) labels *reductions*, not byte writes: its seven
-constructors are `step`, `branch`, `growAttempt`, `enterGemm`, `trapEvent`,
-`throwEvent` and `returnEvent`, and `event_names_no_memory_address` below proves
-that this list is exhaustive.  No constructor names a memory address, so the
-"write event" conjunct of SPEC §8.4 has **no content in this model** and is not
-stated here as a separate conjunct; the whole obligation is carried by the
-bytewise-difference conjunct, which is stated over the complete memory, not
-only over the invocation window.  A future event alphabet that does name
-addresses would need this predicate extended — it would *not* be implied by
-what is proved here.
+The public amended-Core event trace retains exact rule identities and write
+widths.  Its current events do not expose effective byte addresses, so the
+predicate below states the independently observable half: every changed byte
+is confined to the sanctioned region and every byte outside the invocation
+window is unchanged.  Event-address confinement remains a separate open Core
+instrumentation obligation and is not claimed by this definition.
 -/
-
-/-- The released event alphabet, exhaustively.  No constructor carries a memory
-address. -/
-theorem event_names_no_memory_address (e : Event) :
-    e = .step ∨ e = .branch ∨ (∃ o, e = .growAttempt o) ∨ e = .enterGemm ∨
-      (∃ t, e = .trapEvent t) ∨ (∃ v, e = .throwEvent v) ∨ (∃ v, e = .returnEvent v) := by
-  cases e with
-  | step => exact Or.inl rfl
-  | branch => exact Or.inr (Or.inl rfl)
-  | growAttempt o => exact Or.inr (Or.inr (Or.inl ⟨o, rfl⟩))
-  | enterGemm => exact Or.inr (Or.inr (Or.inr (Or.inl rfl)))
-  | trapEvent t => exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨t, rfl⟩))))
-  | throwEvent v => exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inl ⟨v, rfl⟩)))))
-  | returnEvent v =>
-      exact Or.inr (Or.inr (Or.inr (Or.inr (Or.inr (Or.inr ⟨v, rfl⟩)))))
 
 /-- **SPEC §8.4.**  Every ABI-visible byte the candidate call changed lies in
 `regions`, and no byte outside the invocation window changed at all.  The
@@ -889,11 +918,11 @@ def CandidateCallMemoryWritesWithin (o : ExecutionObservation)
   ∃ entry : ObservableStore,
     o.gemmEntryObservableStore? = some entry ∧
     (∀ i : Nat, i < window.len →
-      entry.bytes.getD (window.ptr + i) 0 ≠
-        o.finalObservableStore.bytes.getD (window.ptr + i) 0 →
+      entry.bytes.getD (window.ptr + i) default ≠
+        o.finalObservableStore.bytes.getD (window.ptr + i) default →
       Gemm.InRegions regions i) ∧
     (∀ j : Nat, (j < window.ptr ∨ window.ptr + window.len ≤ j) →
-      entry.bytes.getD j 0 = o.finalObservableStore.bytes.getD j 0)
+      entry.bytes.getD j default = o.finalObservableStore.bytes.getD j default)
 
 /-- **SPEC §8.4**: the predicate is false for `trappedBeforeEntry`. -/
 theorem not_candidateCallMemoryWritesWithin_trappedBeforeEntry
@@ -964,8 +993,10 @@ def prescribedFinalBytes {P : Wasm.Profile} (raw : RawInvocationBody P) : List U
 /-- **The observation the reference prescribes.** -/
 def referenceObservation {P : Wasm.Profile} (raw : Gemm.RawInvocation P) :
     Wasm.ExecutionObservation :=
-  .returned [Wasm.Event.enterGemm] ⟨prescribedEntryBytes raw.body⟩
-    (referenceStatus raw.body) ⟨prescribedFinalBytes raw.body⟩ Wasm.ObservableEffects.none'
+  .returned [] (observableStoreOfUInt8s (prescribedEntryBytes raw.body))
+    (coreValueOfStatus (referenceStatus raw.body))
+    (observableStoreOfUInt8s (prescribedFinalBytes raw.body))
+    Wasm.ObservableEffects.none
 
 section Prescribed
 
@@ -982,24 +1013,33 @@ theorem prescribedFinalBytes_length :
   simp [prescribedFinalBytes]
 
 theorem prescribed_entry_store (i : Nat) :
-    storeOfObservable raw.body ⟨prescribedEntryBytes raw.body⟩ i =
+    storeOfObservable raw.body
+        (observableStoreOfUInt8s (prescribedEntryBytes raw.body)) i =
       entryObservable raw.body i := by
-  simp only [storeOfObservable, entryObservable, prescribedEntryBytes, entryStore]
+  simp only [storeOfObservable, observableStoreOfUInt8s, entryObservable,
+    prescribedEntryBytes, entryStore]
   by_cases h : i < raw.body.len.toNat
-  · rw [if_pos h, if_pos h, getD_replicate_append]
+  · rw [if_pos h, if_pos h]
+    simp only [getD_map_coreByteOfUInt8, uint8OfCoreByte_coreByteOfUInt8]
+    rw [getD_replicate_append]
   · rw [if_neg h, if_neg h]
 
 theorem prescribed_final_store (i : Nat) :
-    storeOfObservable raw.body ⟨prescribedFinalBytes raw.body⟩ i =
+    storeOfObservable raw.body
+        (observableStoreOfUInt8s (prescribedFinalBytes raw.body)) i =
       referenceObservableStore raw.body i := by
-  simp only [storeOfObservable, prescribedFinalBytes]
+  simp only [storeOfObservable, observableStoreOfUInt8s, prescribedFinalBytes]
   by_cases h : i < raw.body.len.toNat
-  · rw [if_pos h, getD_replicate_append, getD_map_range h]
+  · rw [if_pos h]
+    simp only [getD_map_coreByteOfUInt8, uint8OfCoreByte_coreByteOfUInt8]
+    rw [getD_replicate_append, getD_map_range h]
   · rw [if_neg h]
     simp only [referenceObservableStore, if_neg h]
 
 theorem prescribed_masked_final (i : Nat) :
-    maskFor raw.body (storeOfObservable raw.body ⟨prescribedFinalBytes raw.body⟩) i =
+    maskFor raw.body
+        (storeOfObservable raw.body
+          (observableStoreOfUInt8s (prescribedFinalBytes raw.body))) i =
       referenceObservableStore raw.body i := by
   simp only [maskFor]
   by_cases hv : refValid raw.body = true
@@ -1019,9 +1059,12 @@ theorem prescribed_masked_final (i : Nat) :
 theorem semanticFor_referenceObservation (problem : Problem P) :
     semanticFor problem raw (referenceObservation raw) =
       .returned (referenceStatus raw.body)
-        (storeOfObservable raw.body ⟨prescribedEntryBytes raw.body⟩)
-        (maskFor raw.body (storeOfObservable raw.body ⟨prescribedFinalBytes raw.body⟩)) :=
-  rfl
+        (storeOfObservable raw.body
+          (observableStoreOfUInt8s (prescribedEntryBytes raw.body)))
+        (maskFor raw.body
+          (storeOfObservable raw.body
+            (observableStoreOfUInt8s (prescribedFinalBytes raw.body)))) := by
+  simp [semanticFor, referenceObservation]
 
 end Prescribed
 
@@ -1039,26 +1082,31 @@ theorem reference_total {P : Wasm.Profile} (problem : Problem P)
     (raw : Gemm.RawInvocation P) :
     ∃ observation, Reference.Accepts problem raw observation := by
   refine ⟨referenceObservation raw, ?_, ?_⟩
-  · refine ⟨_, _, rfl, ?_, ?_⟩
+  · refine ⟨_, _, semanticFor_referenceObservation raw problem, ?_, ?_⟩
     · exact prescribed_entry_store raw
     · exact prescribed_masked_final raw
-  · refine ⟨⟨prescribedEntryBytes raw.body⟩, rfl, ?_, ?_⟩
+  · refine ⟨observableStoreOfUInt8s (prescribedEntryBytes raw.body), rfl, ?_, ?_⟩
     · intro i hi hne
       have hi' : i < raw.body.len.toNat := hi
       have hentry : (prescribedEntryBytes raw.body).getD (raw.body.ptr.toNat + i) 0
           = entryObservable raw.body i := by
         have h := prescribed_entry_store raw i
         simp only [storeOfObservable, if_pos hi'] at h
-        exact h
+        simpa only [observableStoreOfUInt8s, getD_map_coreByteOfUInt8,
+          uint8OfCoreByte_coreByteOfUInt8] using h
       have hfinal : (prescribedFinalBytes raw.body).getD (raw.body.ptr.toNat + i) 0
           = referenceObservableStore raw.body i := by
         have h := prescribed_final_store raw i
         simp only [storeOfObservable, if_pos hi'] at h
-        exact h
+        simpa only [observableStoreOfUInt8s, getD_map_coreByteOfUInt8,
+          uint8OfCoreByte_coreByteOfUInt8] using h
       have hne' : (prescribedEntryBytes raw.body).getD (raw.body.ptr.toNat + i) 0 ≠
           (prescribedFinalBytes raw.body).getD (raw.body.ptr.toNat + i) 0 := by
+        intro heq
+        apply hne
         simpa only [referenceObservation,
-          Wasm.ExecutionObservation.finalObservableStore, windowOf] using hne
+          Wasm.ExecutionObservation.finalObservableStore, windowOf,
+          observableStoreOfUInt8s, getD_map_coreByteOfUInt8, heq]
       have hdiff : entryObservable raw.body i ≠ referenceObservableStore raw.body i := by
         rw [← hentry, ← hfinal]; exact hne'
       have hin := reference_writes_within raw.body i hdiff
@@ -1068,7 +1116,7 @@ theorem reference_total {P : Wasm.Profile} (problem : Problem P)
       exact hin
     · intro j hj
       simp only [referenceObservation, Wasm.ExecutionObservation.finalObservableStore,
-        windowOf] at hj ⊢
+        windowOf, observableStoreOfUInt8s, getD_map_coreByteOfUInt8] at hj ⊢
       rcases hj with hlt | hge
       · simp only [prescribedEntryBytes, prescribedFinalBytes]
         rw [getD_replicate_append_lt _ _ _ hlt, getD_replicate_append_lt _ _ _ hlt]
@@ -1146,8 +1194,8 @@ theorem reference_rejects_thrownAfterEntry {P : Wasm.Profile} (problem : Problem
 /-- The released profile admits no externally visible non-memory effect at all,
 so "the absence of every forbidden effect" is a theorem, not a side condition. -/
 theorem reference_effects_absent (o : Wasm.ExecutionObservation) :
-    o.effects = Wasm.ObservableEffects.none' :=
-  Wasm.ObservableEffects.eq_none' _
+    o.effects = Wasm.ObservableEffects.none :=
+  Wasm.ObservableEffects.eq_none _
 
 /-! ## Anti-vacuity, part 1: list and header helpers -/
 

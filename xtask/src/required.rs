@@ -23,8 +23,8 @@ const PROBE: &str = ".required_probe.lean";
 /// presence alone is not discharge; an external audit correctly refused to
 /// credit one declaration that a name-only check had passed.
 const EXECUTABLE_WITNESS: [&str; 4] = [
-    "_finite",         // Foundation.Fintype instances
-    "enumerator",      // input/byte enumerators
+    "_finite",    // Foundation.Fintype instances
+    "enumerator", // input/byte enumerators
     "_enumerate",
     "decode_complete", // executable decoder completeness carries the decoder
 ];
@@ -139,7 +139,11 @@ pub fn registry_violations(path: &Path) -> Result<Vec<String>> {
         .ok_or_else(|| SpecError::new("17.1", "the claim registry has no `claims` array"))?;
 
     let field = |claim: &crate::json::Value, key: &str| -> String {
-        claim.get(key).and_then(crate::json::Value::as_str).unwrap_or("").to_string()
+        claim
+            .get(key)
+            .and_then(crate::json::Value::as_str)
+            .unwrap_or("")
+            .to_string()
     };
 
     let mut findings = Vec::new();
@@ -167,7 +171,11 @@ pub fn registry_violations(path: &Path) -> Result<Vec<String>> {
 
     // SPEC 20.2 condition 2: no `dependsOn` names a claim that is not present.
     for claim in claims {
-        for dep in claim.get("dependsOn").and_then(crate::json::Value::as_array).unwrap_or(&[]) {
+        for dep in claim
+            .get("dependsOn")
+            .and_then(crate::json::Value::as_array)
+            .unwrap_or(&[])
+        {
             if let Some(dep) = dep.as_str() {
                 if !ids.iter().any(|id| id == dep) {
                     findings.push(format!(
@@ -224,7 +232,12 @@ pub fn list_registry() -> Result<Outcome> {
                 .unwrap_or("")
                 .to_string()
         };
-        println!("  {:<8} {:<13} {}", field("id"), field("level"), field("status"));
+        println!(
+            "  {:<8} {:<13} {}",
+            field("id"),
+            field("level"),
+            field("status")
+        );
     }
 
     let findings = registry_violations(path)?;
@@ -242,7 +255,11 @@ pub fn list_registry() -> Result<Outcome> {
 pub fn run(root: &Path, list: bool, check: bool) -> Result<Outcome> {
     let report = report(root)?;
     println!("{}", report.render(list));
-    Ok(if check && !report.missing.is_empty() { Outcome::Fail } else { Outcome::Pass })
+    Ok(if check && !report.missing.is_empty() {
+        Outcome::Fail
+    } else {
+        Outcome::Pass
+    })
 }
 
 /// The SPEC section 15 inventory: the compiled environment's answer, then the
@@ -276,7 +293,8 @@ pub fn report(root: &Path) -> Result<Report> {
     report.in_house = bindings
         .iter()
         .filter(|b| {
-            !report.missing.contains(&b.name) && crate::signature::spec_block(&spec, &b.name).is_none()
+            !report.missing.contains(&b.name)
+                && crate::signature::spec_block(&spec, &b.name).is_none()
         })
         .count();
     Ok(report)
@@ -347,7 +365,10 @@ fn candidates(names: &[&str]) -> Vec<Vec<String>> {
         .iter()
         .map(|n| {
             let leaf = n.rsplit('.').next().unwrap_or(n);
-            vec![format!("WasmGemmGnaf.{n}"), format!("WasmGemmGnaf.Theorems.{leaf}")]
+            vec![
+                format!("WasmGemmGnaf.{n}"),
+                format!("WasmGemmGnaf.Theorems.{leaf}"),
+            ]
         })
         .collect()
 }
@@ -388,7 +409,16 @@ pub fn classify(names: &[&str], flat: &str) -> Report {
         }
     }
 
-    Report { total: names.len(), discharged, missing, tainted, credited, unsigned: Vec::new(), circular: Vec::new(), in_house: 0 }
+    Report {
+        total: names.len(),
+        discharged,
+        missing,
+        tainted,
+        credited,
+        unsigned: Vec::new(),
+        circular: Vec::new(),
+        in_house: 0,
+    }
 }
 
 /// The declaration list fenced in SPEC section 15.
@@ -411,7 +441,10 @@ pub fn required_names(spec: &str) -> Result<Vec<&str>> {
 
     const FENCE: &str = "```lean\n";
     let open = section.find(FENCE).ok_or_else(|| {
-        SpecError::new(CLAUSE, "SPEC section 15 has no ```lean block listing the required declarations")
+        SpecError::new(
+            CLAUSE,
+            "SPEC section 15 has no ```lean block listing the required declarations",
+        )
     })?;
     let body = &section[open + FENCE.len()..];
     let close = body
@@ -424,7 +457,10 @@ pub fn required_names(spec: &str) -> Result<Vec<&str>> {
         .filter(|l| !l.is_empty())
         .collect();
     if names.is_empty() {
-        return Err(SpecError::new(CLAUSE, "SPEC section 15 lists no required declarations"));
+        return Err(SpecError::new(
+            CLAUSE,
+            "SPEC section 15 lists no required declarations",
+        ));
     }
     Ok(names)
 }
@@ -497,7 +533,10 @@ mod tests {
     #[test]
     fn reads_the_spec_block() {
         let spec = "## 15. Required Lean declarations\n\nblah\n\n```lean\nA.one\n\nB.two\n```\n\n## 16. Next\n";
-        assert_eq!(required_names(spec).expect("parsed"), vec!["A.one", "B.two"]);
+        assert_eq!(
+            required_names(spec).expect("parsed"),
+            vec!["A.one", "B.two"]
+        );
     }
 
     #[test]

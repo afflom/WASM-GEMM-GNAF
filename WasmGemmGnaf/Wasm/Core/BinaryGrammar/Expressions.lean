@@ -54,7 +54,7 @@ inductive Binstr : Bytes → Instr → Prop where
       Bblocktype bbt bt → Binstrs bin ins →
       Binstr (tb 0x03 :: (bbt ++ bin ++ [tb 0x0B])) (.loop bt (InstrSeq.ofList ins))
   /-- `| 0x04 bt:Bblocktype (in:Binstr)* 0x0B => IF bt in* ELSE eps`. -/
-  -- core-opcode: 0x04 IF
+  -- core-opcode: 0x04 IF/empty-else
   | ifThen (bbt bin : Bytes) (bt : BlockType) (ins : List Instr) :
       Bblocktype bbt bt → Binstrs bin ins →
       Binstr (tb 0x04 :: (bbt ++ bin ++ [tb 0x0B]))
@@ -62,11 +62,9 @@ inductive Binstr : Bytes → Instr → Prop where
   /-- `| 0x04 bt:Bblocktype (in_1:Binstr)* 0x05 (in_2:Binstr)* 0x0B
         => IF bt in_1* ELSE in_2*`.
 
-  This alternative spans two lines in the pinned source, so `xtask core`'s
-  extractor -- which reads one production per line -- folds it into the same
-  checklist entry as the `ELSE eps` form.  It is a distinct production and is
-  transcribed as one. -/
-  -- core-opcode: 0x04 IF
+  This alternative spans two lines in the pinned source. The coverage extractor
+  joins them and records it separately from the `ELSE eps` form. -/
+  -- core-opcode: 0x04 IF/else
   | ifElse (bbt b₁ b₂ : Bytes) (bt : BlockType) (ins₁ ins₂ : List Instr) :
       Bblocktype bbt bt → Binstrs b₁ ins₁ → Binstrs b₂ ins₂ →
       Binstr (tb 0x04 :: (bbt ++ b₁ ++ [tb 0x05] ++ b₂ ++ [tb 0x0B]))

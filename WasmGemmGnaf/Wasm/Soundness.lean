@@ -84,6 +84,7 @@
   Every declaration in this file is proved.  Nothing is assumed.
 -/
 import WasmGemmGnaf.Wasm.Step
+import WasmGemmGnaf.Wasm.CoreValidation
 
 set_option autoImplicit false
 
@@ -105,7 +106,7 @@ theorem List.nonempty_of_mem {α : Type u} {l : List α} {x : α} (h : x ∈ l) 
 theorem List.nonempty_cons {α : Type u} (x : α) (l : List α) : (x :: l).Nonempty :=
   ⟨x, List.mem_cons_self⟩
 
-namespace WasmGemmGnaf.Wasm
+namespace WasmGemmGnaf.Wasm.Subset
 
 open WasmGemmGnaf.Foundation
 
@@ -275,7 +276,7 @@ def ConfigInstantiates (m : Subset.Module) (c : Config) : Prop :=
   c.store.globals.length = m.globals.length ∧
   c.harness.args.length = 2 ∧
   (∃ gi f, Subset.Module.gemmIndex? m = some gi ∧ m.funcs[gi]? = some f ∧
-    c.harness.gemmBody = Func.code f ∧ c.harness.gemmNumLocals = f.locals.length) ∧
+    c.harness.gemmBody = funcCode f ∧ c.harness.gemmNumLocals = f.locals.length) ∧
   (∃ final, ExprTyping (gemmEntryCtx m c.harness.gemmNumLocals) 0
     (Expr.ofList c.harness.gemmBody) final)
 
@@ -936,13 +937,13 @@ theorem initialConfig_full {m : Subset.Module} {raw : RawInvocation} {c : Config
       Store.alloc m = some store ∧ Subset.Module.gemmIndex? m = some gi ∧
       m.funcs[gi]? = some gemmFunc ∧
       c.store = store ∧
-      c.harness.gemmBody = Func.code gemmFunc ∧
+      c.harness.gemmBody = funcCode gemmFunc ∧
       c.harness.gemmNumLocals = gemmFunc.locals.length ∧
       c.harness.args = [UInt32.ofNat raw.ptr, UInt32.ofNat raw.bytes.length] ∧
       c.ctrl = [] ∧ c.stack = [] ∧
       ((c.code = [] ∧ c.locals = []) ∨
         (∃ si startFunc, m.start = some si ∧ m.funcs[si]? = some startFunc ∧
-          c.code = Func.code startFunc ∧
+          c.code = funcCode startFunc ∧
           c.locals = List.replicate startFunc.locals.length 0)) := by
   unfold initialConfig at h
   split at h
@@ -988,7 +989,7 @@ theorem initialConfig_instantiates {m : Subset.Module} {raw : RawInvocation} {c 
   · rw [hstore, Store.alloc_globals_length halloc]
   · rw [hargs]; rfl
   · rw [hnl, hbody]
-    simpa [Func.code] using hty
+    simpa [funcCode] using hty
 
 /-- **The invariant is reachable.**  The configuration the machine starts in is
 well typed.  Note the hypothesis is `StartFrameLocal`, not validity of the whole
@@ -1011,7 +1012,7 @@ theorem initialConfig_configWellTyped {m : Subset.Module} {raw : RawInvocation} 
     exact ⟨m.globals.map (fun g => g.type), m.tags.length, hglen, 0, 0, fin,
       by rw [hctrl]; exact CtrlOk.nil,
       by rw [hstk]; rfl,
-      by rw [hcode, hctrl, hloc]; simpa [Func.code] using hty,
+      by rw [hcode, hctrl, hloc]; simpa [funcCode] using hty,
       by rw [hctrl]; exact fun hne => absurd rfl hne⟩
 
 /-- A module with no start function starts in a well-typed configuration with no
@@ -1020,5 +1021,37 @@ theorem initialConfig_configWellTyped_of_start_none {m : Subset.Module} {raw : R
     {c : Config} (h : initialConfig m raw = .ok c) (hs : m.start = none) :
     ConfigWellTyped c :=
   initialConfig_configWellTyped h (startFrameLocal_of_start_none hs)
+
+end WasmGemmGnaf.Wasm.Subset
+
+namespace WasmGemmGnaf.Wasm
+
+/-! ## Public amended-Core preservation
+
+The public configuration carrier already contains the validation/reachability
+invariant.  The definitions here only give that invariant and its originating
+module relation the exact SPEC names; neither stores a progress or termination
+conclusion. -/
+
+/-- The ordinary validation/reachability invariant carried by every public
+amended-Core configuration. -/
+def ConfigWellTyped (config : Config) : Prop := config.1.WellTyped
+
+/-- A public configuration instantiates a module when its reachability witness
+starts from a validated request for exactly that module. -/
+def ConfigInstantiates (module : Module) (config : Config) : Prop :=
+  ∃ (request : Core.Harness.Request) (trace : List Event),
+    request.module = module.core ∧ request.Valid ∧
+      Core.Harness.StepsA (.initializing request) trace config.1
+
+/-- **SPEC section 7.3.**  Every public amended-Core step preserves the
+proof-carrying validation invariant. -/
+theorem validation_preservation {module : Module} {config : Config}
+    {event : Event} {next : Config}
+    (hvalid : DeclarativelyValid module)
+    (hstep : Step config event next)
+    (hconfig : ConfigInstantiates module config) :
+    ConfigWellTyped next := by
+  exact hstep.preserveWellTyped config.2
 
 end WasmGemmGnaf.Wasm

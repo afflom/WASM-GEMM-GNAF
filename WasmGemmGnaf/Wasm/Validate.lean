@@ -975,7 +975,7 @@ globals (`valid/modules.rst` "Globals"); the tags ("Tags"); the functions
 ("Functions"); the two export conjuncts the profile pins; the start function
 ("Start Function"); the type section ("Types"); and the uniqueness of export
 names (`syntax/modules.rst` "Exports"). -/
-def validate (m : Subset.Module) : Bool :=
+def Subset.validate (m : Subset.Module) : Bool :=
   Subset.Module.checkClosed m &&
   Subset.Module.checkMems m &&
   m.globals.all Subset.Module.checkGlobal &&
@@ -991,7 +991,7 @@ def validate (m : Subset.Module) : Bool :=
 of the closedness, memory, global, tag, function, export, start, type-section
 and export-name conditions of SPEC section 7.2, with every function body
 carrying a derivation of the declarative typing judgment. -/
-def DeclarativelyValid (m : Subset.Module) : Prop :=
+def Subset.DeclarativelyValid (m : Subset.Module) : Prop :=
   Subset.Module.checkClosed m = true ∧
   Subset.Module.checkMems m = true ∧
   (∀ g ∈ m.globals, Subset.Module.checkGlobal g = true) ∧
@@ -1038,9 +1038,9 @@ theorem checkFunc_eq_true_iff (m : Subset.Module) (f : Func) :
 
 /-- The legacy subset executable validator decides its matching legacy
 declarative validity judgment.  This is not the public SPEC §7.3 theorem. -/
-theorem validate_bool_iff (m : Subset.Module) :
-    validate m = true ↔ DeclarativelyValid m := by
-  unfold validate DeclarativelyValid
+theorem Subset.validate_bool_iff (m : Subset.Module) :
+    Subset.validate m = true ↔ Subset.DeclarativelyValid m := by
+  unfold Subset.validate Subset.DeclarativelyValid
   simp only [Bool.and_eq_true, List.all_eq_true]
   constructor
   · rintro ⟨⟨⟨⟨⟨⟨⟨⟨⟨hclosed, hmems⟩, hglob⟩, htags⟩, hfuncs⟩, hexp⟩, hgemm⟩, hstart⟩,
@@ -1053,15 +1053,15 @@ theorem validate_bool_iff (m : Subset.Module) :
       fun f hf => (checkFunc_eq_true_iff m f).mpr (hfuncs f hf)⟩, hexp⟩, hgemm⟩, hstart⟩,
       htypes⟩, hnames⟩
 
-instance instDecidableDeclarativelyValid (m : Subset.Module) :
-    Decidable (DeclarativelyValid m) :=
-  decidable_of_iff _ (validate_bool_iff m)
+instance Subset.instDecidableDeclarativelyValid (m : Subset.Module) :
+    Decidable (Subset.DeclarativelyValid m) :=
+  decidable_of_iff _ (Subset.validate_bool_iff m)
 
 /-- Validity is a decidable property, so the validator is total: it either
 accepts or rejects, and never diverges. -/
-theorem validate_eq_false_iff (m : Subset.Module) :
-    validate m = false ↔ ¬ DeclarativelyValid m := by
-  rw [← validate_bool_iff]
-  cases validate m <;> simp
+theorem Subset.validate_eq_false_iff (m : Subset.Module) :
+    Subset.validate m = false ↔ ¬ Subset.DeclarativelyValid m := by
+  rw [← Subset.validate_bool_iff]
+  cases Subset.validate m <;> simp
 
 end WasmGemmGnaf.Wasm

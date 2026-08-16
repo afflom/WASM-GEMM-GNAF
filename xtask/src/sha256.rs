@@ -43,7 +43,12 @@ impl Default for Sha256 {
 
 impl Sha256 {
     pub fn new() -> Self {
-        Sha256 { state: INIT, block: [0; 64], filled: 0, length: 0 }
+        Sha256 {
+            state: INIT,
+            block: [0; 64],
+            filled: 0,
+            length: 0,
+        }
     }
 
     pub fn update(&mut self, mut data: &[u8]) {

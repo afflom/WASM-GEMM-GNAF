@@ -1325,9 +1325,9 @@ Thus the theorem establishes only the internal equivalence between the legacy
 subset checker and the legacy predicate defined in this file.  It is not an
 equivalence with the amended Core declarative module judgment and does not
 close the release validation obligation. -/
-theorem validate_iff_declarative (module : Subset.Module) :
-    validate module = true ↔ DeclarativelyValid module :=
-  validate_bool_iff module
+theorem Subset.validate_iff_declarative (module : Subset.Module) :
+    Subset.validate module = true ↔ Subset.DeclarativelyValid module :=
+  Subset.validate_bool_iff module
 
 /-! ## Non-vacuity and the canonicality narrowing, checked
 

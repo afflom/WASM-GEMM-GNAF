@@ -29,7 +29,7 @@ import WasmGemmGnaf.Wasm.Step
 
 set_option autoImplicit false
 
-namespace WasmGemmGnaf.Wasm
+namespace WasmGemmGnaf.Wasm.Subset
 
 open WasmGemmGnaf.Foundation
 
@@ -446,5 +446,101 @@ theorem observation_returned_of_status {tr : List Event} {initial final : Config
     refine ⟨entry, ?_⟩
     unfold observationOfConfig
     rw [hfin, he]
+
+end WasmGemmGnaf.Wasm.Subset
+
+namespace WasmGemmGnaf.Wasm
+
+/-! ## Public amended-Core executions
+
+These names expose the phase-safe Core harness directly.  The legacy run
+objects above remain available only as `Wasm.Subset.*`. -/
+
+/-- A finite public Core reduction trace. -/
+def Reduces (initial : Config) (trace : List Event) (final : Config) : Prop :=
+  Core.Harness.StepsA initial.1 trace final.1
+
+/-- The exact public execution observation of SPEC section 7.4. -/
+abbrev ExecutionObservation : Type := Core.Harness.ExecutionObservation
+
+/-- ABI-visible exported-memory bytes of the public Core harness. -/
+abbrev ObservableStore : Type := Core.Harness.ObservableStore
+
+/-- Externally visible non-memory effects of the closed public profile. -/
+abbrev ObservableEffects : Type := Core.Harness.ObservableEffects
+
+namespace ObservableEffects
+
+/-- The closed public profile has no host-visible non-memory effect. -/
+def none : ObservableEffects := Core.Harness.ObservableEffects.none
+
+/-- Closed-profile effect observations are propositionally unique. -/
+theorem eq_none (effects : ObservableEffects) : effects = none :=
+  Core.Harness.ObservableEffects.subsingleton effects none
+
+end ObservableEffects
+
+namespace ExecutionObservation
+
+/-- The complete phase-tagged event trace. -/
+def trace : ExecutionObservation → List Event
+  | .returned trace _ _ _ _ | .trappedBeforeEntry trace _ _ _ |
+      .trappedAfterEntry trace _ _ _ _ | .thrownBeforeEntry trace _ _ _ |
+      .thrownAfterEntry trace _ _ _ _ => trace
+
+/-- The final ABI-visible exported-memory snapshot. -/
+def finalObservableStore : ExecutionObservation → Core.Harness.ObservableStore
+  | .returned _ _ _ store _ | .trappedBeforeEntry _ _ store _ |
+      .trappedAfterEntry _ _ _ store _ | .thrownBeforeEntry _ _ store _ |
+      .thrownAfterEntry _ _ _ store _ => store
+
+/-- The entry-boundary snapshot, absent exactly on a before-entry terminal
+branch. -/
+def gemmEntryObservableStore? :
+    ExecutionObservation → Option Core.Harness.ObservableStore
+  | .returned _ entry _ _ _ | .trappedAfterEntry _ entry _ _ _ |
+      .thrownAfterEntry _ entry _ _ _ => some entry
+  | .trappedBeforeEntry _ _ _ _ | .thrownBeforeEntry _ _ _ _ => none
+
+/-- The exact externally visible non-memory effects. -/
+def effects : ExecutionObservation → ObservableEffects
+  | .returned _ _ _ _ effects | .trappedBeforeEntry _ _ _ effects |
+      .trappedAfterEntry _ _ _ _ effects | .thrownBeforeEntry _ _ _ effects |
+      .thrownAfterEntry _ _ _ _ effects => effects
+
+end ExecutionObservation
+
+/-- A finite public Core execution from one harness configuration. -/
+def FiniteExecution (initial : Config) (observation : ExecutionObservation) : Prop :=
+  Core.Harness.FiniteExecution initial.1 observation
+
+/-- An observation is terminal when an exact harness terminal configuration
+observes it.  This proposition refers only to the independent relational
+semantics; it is not an explorer result. -/
+def IsTerminalObservation (observation : ExecutionObservation) : Prop :=
+  ∃ (trace : List Event) (terminal : Config),
+    Core.Harness.Observes trace terminal.1 observation
+
+/-- Every relational finite execution ends in an exact terminal observation. -/
+theorem FiniteExecution.isTerminalObservation {initial : Config}
+    {observation : ExecutionObservation}
+    (run : FiniteExecution initial observation) :
+    IsTerminalObservation observation := by
+  unfold FiniteExecution at run
+  cases run with
+  | @mk trace terminal _ steps observes =>
+      let typedTerminal : Config :=
+        ⟨terminal, steps.preserveWellTyped initial.2⟩
+      exact ⟨trace, typedTerminal, observes⟩
+
+/-- Every maximal permitted execution is either a finite terminal branch or an
+infinite stream of public Core steps. -/
+inductive MaximalExecution (initial : Config) where
+  | finite (observation : ExecutionObservation)
+      (run : FiniteExecution initial observation)
+      (maximal : IsTerminalObservation observation)
+  | diverges (events : Nat → Event) (configs : Nat → Config)
+      (starts : configs 0 = initial)
+      (step : ∀ i, Step (configs i) (events i) (configs (i + 1)))
 
 end WasmGemmGnaf.Wasm

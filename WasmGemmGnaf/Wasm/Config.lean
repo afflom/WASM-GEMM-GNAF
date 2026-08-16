@@ -22,7 +22,7 @@ import WasmGemmGnaf.Wasm.Store
 
 set_option autoImplicit false
 
-namespace WasmGemmGnaf.Wasm
+namespace WasmGemmGnaf.Wasm.Subset
 
 open WasmGemmGnaf.Foundation
 
@@ -279,8 +279,8 @@ structure RawInvocation where
   bytes : List UInt8
   deriving DecidableEq, Repr, Inhabited
 
-/-- The body of a defined function as an instruction list. -/
-def Func.code (f : Func) : List Instr := f.body.toList
+/-- The body of a legacy-subset defined function as an instruction list. -/
+def funcCode (f : WasmGemmGnaf.Wasm.Func) : List Instr := f.body.toList
 
 /-- The pre-start harness configuration of SPEC section 7.5: allocation and
 static initialization are complete, the harness control frame is built, and the
@@ -299,7 +299,7 @@ def initialConfig (m : Subset.Module) (raw : RawInvocation) : Except Instantiati
             | none => .error .missingGemmExport
             | some gemmFunc =>
                 let harness : Harness :=
-                  { gemmBody := gemmFunc.code
+                  { gemmBody := funcCode gemmFunc
                     gemmNumLocals := gemmFunc.locals.length
                     rawPtr := raw.ptr
                     rawBytes := raw.bytes
@@ -316,7 +316,7 @@ def initialConfig (m : Subset.Module) (raw : RawInvocation) : Except Instantiati
                     | some startFunc =>
                         .ok { store, harness
                               locals := List.replicate startFunc.locals.length 0
-                              stack := [], code := startFunc.code
+                              stack := [], code := funcCode startFunc
                               ctrl := [], phase := .beforeEntry, entry? := none
                               status := .running }
 
@@ -348,4 +348,4 @@ theorem initialConfig_invalid {m : Subset.Module} {raw : RawInvocation}
     (h : validate m = false) : initialConfig m raw = .error .invalidModule := by
   simp [initialConfig, h]
 
-end WasmGemmGnaf.Wasm
+end WasmGemmGnaf.Wasm.Subset

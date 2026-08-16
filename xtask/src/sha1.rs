@@ -19,10 +19,6 @@
 //! any claim on a cryptographic collision assumption. A colliding blob would
 //! also have to satisfy `SHA256SUMS`, which this does not replace.
 
-
-
-
-
 const INIT: [u32; 5] = [0x67452301, 0xefcdab89, 0x98badcfe, 0x10325476, 0xc3d2e1f0];
 
 /// A streaming SHA-1 state. FIPS 180-4, no options.
@@ -35,7 +31,12 @@ pub struct Sha1 {
 
 impl Sha1 {
     pub fn new() -> Self {
-        Sha1 { state: INIT, buffer: [0; 64], buffered: 0, length: 0 }
+        Sha1 {
+            state: INIT,
+            buffer: [0; 64],
+            buffered: 0,
+            length: 0,
+        }
     }
 
     pub fn update(&mut self, mut data: &[u8]) {
@@ -156,7 +157,6 @@ pub fn blob_hex(content: &[u8]) -> String {
     to_hex(&hasher.finish())
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -165,14 +165,23 @@ mod tests {
     fn matches_fips_vectors() {
         let mut h = Sha1::new();
         h.update(b"abc");
-        assert_eq!(to_hex(&h.finish()), "a9993e364706816aba3e25717850c26c9cd0d89d");
+        assert_eq!(
+            to_hex(&h.finish()),
+            "a9993e364706816aba3e25717850c26c9cd0d89d"
+        );
 
         let h = Sha1::new();
-        assert_eq!(to_hex(&h.finish()), "da39a3ee5e6b4b0d3255bfef95601890afd80709");
+        assert_eq!(
+            to_hex(&h.finish()),
+            "da39a3ee5e6b4b0d3255bfef95601890afd80709"
+        );
 
         let mut h = Sha1::new();
         h.update(b"abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq");
-        assert_eq!(to_hex(&h.finish()), "84983e441c3bd26ebaae4aa1f95129e5e54670f1");
+        assert_eq!(
+            to_hex(&h.finish()),
+            "84983e441c3bd26ebaae4aa1f95129e5e54670f1"
+        );
     }
 
     #[test]
@@ -185,7 +194,10 @@ mod tests {
             h.update(&chunk);
         }
         h.update(b"a");
-        assert_eq!(to_hex(&h.finish()), "34aa973cd4c4daa4f61eeb2bdbad27316534016f");
+        assert_eq!(
+            to_hex(&h.finish()),
+            "34aa973cd4c4daa4f61eeb2bdbad27316534016f"
+        );
     }
 
     #[test]
@@ -193,6 +205,9 @@ mod tests {
         // `printf '' | git hash-object --stdin`
         assert_eq!(blob_hex(b""), "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391");
         // `printf 'hello\n' | git hash-object --stdin`
-        assert_eq!(blob_hex(b"hello\n"), "ce013625030ba8dba906f756967f9e9ca394464a");
+        assert_eq!(
+            blob_hex(b"hello\n"),
+            "ce013625030ba8dba906f756967f9e9ca394464a"
+        );
     }
 }

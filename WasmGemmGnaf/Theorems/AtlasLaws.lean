@@ -9,15 +9,11 @@
   ## Exact SPEC §15 declaration indexed here
 
   * `Atlas.semantic_closure_least`
+  * `Atlas.incremental_eq_full_rebuild`
 
-  `Theorems.incremental_eq_full_rebuild` is a proved legacy literal form with
-  the additional hypothesis `state.body.scope = Scope.unscoped`; it is weaker
-  than the proposition required after `AMD-003`.  The amended proposition is
-  proved by `Theorems.incremental_eq_full_rebuild_scoped`, and the stronger
-  pre-canonicalisation equation by
-  `Theorems.incremental_eq_full_rebuild_exact`, but neither has the required
-  declaration name.  Therefore `Atlas.incremental_eq_full_rebuild` remains
-  outstanding in the compiled signature ledger.
+  The latter is the exact proposition required after `AMD-003`: it rebuilds in
+  the state's own scope and therefore needs no unscoped-state hypothesis. The
+  stronger pre-canonicalisation equation is indexed separately below.
 
   ## Additional proved results indexed here (not on the §15 list)
 
@@ -45,9 +41,6 @@
 
   ## SPEC §15 Atlas declarations that remain OUTSTANDING
 
-  * `Atlas.incremental_eq_full_rebuild` — the amended proposition is proved
-    under `Atlas.incremental_eq_full_rebuild_scoped`, but the required name
-    still carries the weaker unscoped form.
   * `Atlas.attention_no_optimum_relevant_false_negative` — `Atlas/Attention.lean`
     proves determinism, monotonicity, index-determination and blindness to
     optimizer state, but no theorem says attention never misses an
@@ -125,17 +118,19 @@ theorem closure_merge_law {J : Type}
 
 /-! ## SPEC §12.5: incremental update equals full rebuild -/
 
-/-- The legacy literal form named `Atlas.incremental_eq_full_rebuild`.
-
-On a coherent, unscoped state, a completed incremental update produces exactly
-the canonical form of the full rebuild from the accumulated declaration base.
-
-The `hscope` hypothesis is required for truth, not for convenience:
-`semanticRebuildBody` receives only the declaration base and therefore cannot
-reproduce a scope the declarations do not name.  Because the amended SPEC
-proposition instead rebuilds through `semanticRebuildBodyWith` at the state's
-scope, this theorem does not discharge the required name. -/
+/-- **SPEC §12.5, exact amended form.** A completed incremental update of a
+coherent state equals a full rebuild in that state's own scope. -/
 theorem incremental_eq_full_rebuild {budget : BuildBudget}
+    {state : UnsealedState} {delta : Delta} {successor : UnsealedState}
+    (hcoherent : Coherent state.body)
+    (hupdate : (accumulate budget state delta).result = .complete successor) :
+    canonicalize successor.body =
+      canonicalize (semanticRebuildBodyWith state.body.scope
+        (state.body.declarationBase ∪ delta.declarations)) :=
+  Atlas.incremental_eq_full_rebuild hcoherent hupdate
+
+/-- The superseded literal form, recovered for coherent unscoped states. -/
+theorem incremental_eq_full_rebuild_unscoped {budget : BuildBudget}
     {state : UnsealedState} {delta : Delta} {successor : UnsealedState}
     (hcoherent : Coherent state.body)
     (hscope : state.body.scope = Scope.unscoped)
@@ -143,18 +138,7 @@ theorem incremental_eq_full_rebuild {budget : BuildBudget}
     canonicalize successor.body =
       canonicalize (semanticRebuildBody
         (state.body.declarationBase ∪ delta.declarations)) :=
-  Atlas.incremental_eq_full_rebuild hcoherent hscope hupdate
-
-/-- The same equation with no scope hypothesis, rebuilding in the state's own
-scope.  This is the unrestricted content SPEC §12.5 intends. -/
-theorem incremental_eq_full_rebuild_scoped {budget : BuildBudget}
-    {state : UnsealedState} {delta : Delta} {successor : UnsealedState}
-    (hcoherent : Coherent state.body)
-    (hupdate : (accumulate budget state delta).result = .complete successor) :
-    canonicalize successor.body =
-      canonicalize (semanticRebuildBodyWith state.body.scope
-        (state.body.declarationBase ∪ delta.declarations)) :=
-  Atlas.incremental_eq_full_rebuild_scoped hcoherent hupdate
+  Atlas.incremental_eq_full_rebuild_unscoped hcoherent hscope hupdate
 
 /-- The equation before canonicalisation, which is strictly stronger: the
 incremental successor *is* the rebuild, not merely canonically equal to it. -/

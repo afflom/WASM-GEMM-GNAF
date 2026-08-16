@@ -33,7 +33,10 @@ pub fn run(root: &Path) -> Result<Outcome> {
     let mut proved = Vec::new();
     for claim in claims {
         if claim.get("level").and_then(Value::as_str) == Some("formalProof") {
-            let id = claim.get("id").and_then(Value::as_str).unwrap_or("<unidentified claim>");
+            let id = claim
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or("<unidentified claim>");
             proved.push(
                 claim
                     .required_str("17", "leanDeclaration", &format!("claim {id}"))?
@@ -53,11 +56,26 @@ pub fn run(root: &Path) -> Result<Outcome> {
     let result = probe_axioms(CLAUSE, root, PROBE, &proved)?;
 
     let stdout = result.stdout.trim();
-    println!("{}", if stdout.is_empty() { result.stderr.trim() } else { stdout });
+    println!(
+        "{}",
+        if stdout.is_empty() {
+            result.stderr.trim()
+        } else {
+            stdout
+        }
+    );
 
-    let hits: Vec<&str> = FORBIDDEN.iter().copied().filter(|b| result.stdout.contains(b)).collect();
+    let hits: Vec<&str> = FORBIDDEN
+        .iter()
+        .copied()
+        .filter(|b| result.stdout.contains(b))
+        .collect();
     if !hits.is_empty() || !result.success {
-        let listed = hits.iter().map(|h| format!("'{h}'")).collect::<Vec<_>>().join(", ");
+        let listed = hits
+            .iter()
+            .map(|h| format!("'{h}'"))
+            .collect::<Vec<_>>()
+            .join(", ");
         println!();
         println!("FORBIDDEN AXIOM: [{listed}]");
         return Ok(Outcome::Fail);

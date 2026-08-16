@@ -21,11 +21,13 @@ const LEAN_ROOT: &str = "WasmGemmGnaf";
 const VENDOR_ROOT: &str = "vendor/wasm-spec/";
 const AUTHORITY_SOURCE_ROOT: &str = "vendor/wasm-spec/specification/wasm-3.0/";
 const DEVIATIONS: &str = "model/spec-deviations.json";
-const EXPECTED_AMENDMENTS: [&str; 8] = [
+const EXPECTED_AMENDMENTS: [&str; 14] = [
     "AMD-005", "AMD-007", "AMD-008", "AMD-009", "AMD-010", "AMD-011", "AMD-012", "AMD-013",
+    "AMD-014", "AMD-015", "AMD-016", "AMD-021", "AMD-022", "AMD-023",
 ];
-const EXPECTED_DEVIATIONS: [&str; 8] = [
+const EXPECTED_DEVIATIONS: [&str; 14] = [
     "DEV-006", "DEV-007", "DEV-008", "DEV-009", "DEV-010", "DEV-011", "DEV-012", "DEV-013",
+    "DEV-014", "DEV-015", "DEV-016", "DEV-021", "DEV-022", "DEV-023",
 ];
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -230,10 +232,11 @@ pub fn binding(root: &Path) -> Result<Binding> {
                 amendment.lean_name, amendment.pinned_commit
             ));
         }
-        if amendment.spec_section != "4 and 7.3" {
+        let expected_section = expected_spec_section(&amendment.amendment_id);
+        if amendment.spec_section != expected_section {
             findings.push(format!(
-                "{} records specSection `{}`, expected `4 and 7.3`",
-                amendment.amendment_id, amendment.spec_section
+                "{} records specSection `{}`, expected `{expected_section}`",
+                amendment.amendment_id, amendment.spec_section,
             ));
         }
         if amendment.patches.is_empty() {
@@ -464,6 +467,16 @@ fn normalize_spectec(text: &str) -> String {
         .filter(|line| !line.is_empty())
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+/// The SPEC section(s) each authority amendment must record. Every amendment
+/// touches §4 (the pin) and the section its repaired rule governs.
+fn expected_spec_section(amendment_id: &str) -> &'static str {
+    match amendment_id {
+        "AMD-016" => "4 and 7.1",
+        "AMD-023" => "4, 7.1, 7.3, and 15",
+        _ => "4 and 7.3",
+    }
 }
 
 fn check_registry(
@@ -1029,8 +1042,8 @@ fn parse_patch(p: &mut Parser<'_>, source_prefix: &str) -> Result<PatchRecord> {
                     }
                     other => {
                         return Err(p.error(format!(
-                            "sourcePath must be a literal or authoritySource literal, found {other:?}"
-                        )))
+                        "sourcePath must be a literal or authoritySource literal, found {other:?}"
+                    )))
                     }
                 })
             }
@@ -1113,11 +1126,14 @@ mod tests {
 
             let def_name = format!("amendment{i}");
             names.push(def_name.clone());
+            // The production check expects the per-amendment SPEC sections;
+            // the fixture must record the same ones or the clean tree fails.
+            let spec_section = expected_spec_section(amendment);
             authority.push_str(&format!(
                 "def {def_name} : AuthorityAmendmentBody :=\n  \
                  {{ deviationId := \"{deviation}\"\n    \
                  amendmentId := \"{amendment}\"\n    \
-                 specSection := \"4 and 7.3\"\n    \
+                 specSection := \"{spec_section}\"\n    \
                  pinnedCommit := core3RevisionCommit\n    \
                  patches := [{{ sourcePath := authoritySource \"{leaf}\"\n      \
                  sourceSha256 := \"{digest}\"\n      \

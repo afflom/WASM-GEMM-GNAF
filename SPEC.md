@@ -146,9 +146,9 @@ The following identities SHALL be recorded in `authority/manifest.json`, checked
 Changing an authority creates a new profile and invalidates dependent certificates. No floating tags, mutable action revisions, unpinned package revisions, or network-fetched proof inputs are allowed in release verification.
 
 The pinned WebAssembly Core revision carries the authority defects recorded by
-`DEV-006` through `DEV-013` and repaired by the canonical amendment set
+`DEV-006` through `DEV-015` and repaired by the canonical amendment set
 `AMD-005`, `AMD-007`, `AMD-008`, `AMD-009`, `AMD-010`, `AMD-011`, `AMD-012`, and
-`AMD-013`
+`AMD-013`, `AMD-014`, `AMD-015`, `AMD-016`, `AMD-017`, `AMD-018`
 under §7.3.
 The pin SHALL NOT be advanced on account of them. The vendored source remains
 byte-identical to that pin, while the release semantics identity binds both the
@@ -642,6 +642,20 @@ theorem terminal_iff_halt_trap_or_throw (config : M.Config) :
 
 `successors` enumerates every permitted nondeterministic successor. A single evaluator path is not a replacement for this list.
 
+**Amended by `AMD-016` (§24).** The pinned execution source binds numeric
+results by the side-conditioned syntax sorts `num_(nt)` and `lit_(zt)`. Where
+the Lean carrier exposes the raw constructors used to represent those sorts,
+the public amended read relation SHALL state that implicit sort condition
+explicitly at the three rules that solve result literals from byte equations:
+`Step_read/load-num-val`, `Step_read/array.new_data-num`, and
+`Step_read/array.init_data-num`. The pinned selector remains the byte-identical
+authority reading. The amended selector requires `Num_.wf` for the full-width
+numeric load result and the corresponding storage-literal well-formedness for
+each array-data result. Integer, packed, and vector literals satisfy the latter
+definitionally; only raw malformed float constructor terms outside the pinned
+syntax sort are excluded. Set-valued pure numeric results are unchanged and
+remain separated by their recorded `PureEvent.choice` index.
+
 `Wasm/Revision.lean` through `Wasm/Run.lean` SHALL construct the concrete pinned Core 3.0 model. Every enabled instruction, validation rule, store component, trap, and nondeterministic numeric result in the released profile SHALL have a Lean rule and a conformance-map entry.
 
 Ownership is exhaustive: `Syntax` owns types, functions, globals, tables, memories, elements, data, imports, exports, and administrative instructions; `Validate` owns all context and declaration judgments; `Store` owns allocation and runtime instances; `Config` owns frames, labels, stacks, threads of control, instantiation, start invocation, and export calls; `Numeric` and `Vector` own set-valued numeric relations; `Step` owns every reduction rule; and `Run` owns observable terminal stores and maximal executions. `Adequacy` proves correspondence between these declarations and the vendored rule identifiers in the conformance map.
@@ -692,8 +706,10 @@ The first release SHALL use this concrete profile, with no implementation choice
 - initial configuration: deterministic allocation, global/table/memory/data
   initialization, and construction of a harness control frame before executing
   a module start function; the costed harness then explores every permitted
-  start-function branch, copies the raw invocation bytes only after a normal
-  start return, and invokes `gemm`;
+  start-function branch, grows exported memory zero by exactly
+  `requiredPages(ptr+len) - currentPages` immediately after a normal start
+  return (subject to its declared maximum and the profile maximum), copies the
+  raw invocation bytes, and invokes `gemm`;
 - permitted numeric nondeterminism: exactly the relation in the pinned semantics, with correctness and cost quantified over every permitted result and trace;
 - host identity, engine tier, cache warmth, ISA, and wall-clock time: absent from the profile.
 
@@ -790,8 +806,9 @@ Therefore, normatively:
   never over the pinned relation, and it remains **outstanding**: nothing in this
   amendment discharges it.
 
-The same pinned tree has seven further source defects, recorded exactly by
-`AMD-007` through `AMD-013`. Their repairs are part of the release semantics, not
+The same pinned tree has nine further source defects, recorded exactly by
+`AMD-007` through `AMD-015`, plus one explicit syntax-sort representation repair
+recorded by `AMD-016`. Their repairs are part of the release semantics, not
 changes to the vendored transcription:
 
 | Amendment | Pinned defect | Required release interpretation |
@@ -803,6 +820,9 @@ changes to the vendored transcription:
 | `AMD-011` / `DEV-011` | Four heap-subtyping rules omit `heaptype ≠ BOT`, collapsing unrelated families | The four premises SHALL be restored in the declarative and executable hierarchies and propagated through all type, instruction, and module judgments used by release validation. |
 | `AMD-012` / `DEV-012` | Opcode `275` constructs `VEXTTERNOP (I32 X 4) (I16 X 8) RELAXED_DOT_ADD S`, violating the family premise `4 * lsize(input) = lsize(result) = 32` | Opcode `275` SHALL derive, decode, and encode exactly `VEXTTERNOP (I32 X 4) (I8 X 16) RELAXED_DOT_ADD S`; the malformed pinned `I16 X 8` form SHALL be excluded. The pinned transcription and default remain byte-identical. |
 | `AMD-013` / `DEV-013` | `Subtype_ok2` omits validity of each generalized declared supertype, allowing an invalid proof-internal type use to create false cross-family subtyping through transitivity | Every generalized supertype in `Subtype_ok2` SHALL satisfy `Typeuse_ok`; no other subtyping rule changes. The strengthened premise SHALL propagate through the sole release validation hierarchy and executable checker. |
+| `AMD-014` / `DEV-014` | Instantiation evaluates every validated table and element constant expression from and back to the same state, and each global expression back to its source state, although the constant grammar admits `struct.new` and `array.new*`, whose reductions append managed-heap instances | The public amended initializer SHALL thread the post-expression state through global, table, and element initializers in source order, preserve the resulting structure and array heaps when replacing temporary globals with the module's allocated globals, and then construct the module instance. The byte-identical pinned relation remains available only as the authority reference. |
+| `AMD-015` / `DEV-015` | `Rectype_ok/cons` may recurse into a suffix proved by `_rec2`, which resets relative `REC` indices to the suffix even though semantic `deftype` closure later interprets them against the full original group | The amended ordinary-cons rule SHALL require that its remaining suffix contain no `REC` use in declared-supertype position. Root `_rec2` validation remains available, grammar type uses remain unaffected because they are `_IDX`, and the sole checker SHALL test the same structural condition. |
+| `AMD-016` / `DEV-016` | The Lean representation exposes raw out-of-range `FN` constructors where pinned byte-solved execution metavariables range over side-conditioned `num_`/`lit_` syntax sorts | The amended read relation SHALL explicitly require literal well-formedness only for `load-num-val`, `array.new_data-num`, and `array.init_data-num`. The pinned selector and every source-language branch remain unchanged; malformed raw float targets are excluded. |
 
 Each repair SHALL be represented by exact source digest, anchors, removed text,
 inserted text, affected authority symbols, and amended Lean declarations inside
@@ -1431,8 +1451,14 @@ def Gemm.toWasmInvocation
     raw.lawful.toWasmInvocationLawful
 ```
 
-The harness places exactly `raw.body.bytes` at `raw.body.ptr`, passes
-`(ptr,len)` to `gemm`, and does not synthesize any other descriptor data. All
+The harness first grows exported memory zero by exactly
+`requiredPages(raw.body.ptr + raw.body.len) - currentPages` pages, with the
+declared memory maximum enforced by Core `growMem` and the profile maximum
+enforced by `RawInvocationLawful`; it then places exactly `raw.body.bytes` at
+`raw.body.ptr`, passes `(ptr,len)` to `gemm`, and does not synthesize any other
+descriptor data. The single raw-install event retains and charges the prior
+page count, exact grown-page delta, resulting peak, preparation, and written
+byte count. All
 byte strings of every representable length participate, including malformed
 headers. `RawInvocationBody` is proof-free in its canonical encoding.
 `RawInvocationLawful` is exactly `bytes.size = len.toNat ∧ ptr.toNat +
@@ -3510,6 +3536,16 @@ Three rules govern this log.
 | `AMD-011` | §4, §7.3 | Four pinned heap-subtyping rules omit `heaptype ≠ BOT` | All four premises restored and propagated through the release validation hierarchy | Narrowing away invalid cross-family derivations (`DEV-011`). Checker equivalence and validation metatheory remain outstanding. |
 | `AMD-012` | §4, §7.3 | Pinned opcode `275` constructs the internally ill-formed `VEXTTERNOP (I32 X 4) (I16 X 8) RELAXED_DOT_ADD S` | Opcode `275` uses the unique well-formed second shape `I8 X 16` and excludes the malformed pinned result | Replacement, neutral in intended Core reach (`DEV-012`). Amendment text alone discharges zero claims; the decoder, encoder, well-formedness bridge, and canonical public round trip are proved separately, but they select no release artifact. |
 | `AMD-013` | §4, §7.3 | Pinned `Subtype_ok2` omits validity of its generalized supertype type uses | `Subtype_ok2` requires every declared generalized supertype to satisfy `Typeuse_ok`; `Heaptype_sub/trans` and `Deftype_sub/super` remain unchanged | Narrowing away invalid proof-internal subtype derivations (`DEV-013`). This is the exact upstream repair from WebAssembly/spec#2141 and commit `44b03c21317f07500f66bc739553c83dcde445eb`; checker equivalence remains outstanding. |
+| `AMD-014` | §4, §7.3 | Pinned instantiation forces constant-expression evaluation to return to its source state, so validated GC-allocating initializers have no instantiation | The public initializer threads every post-expression state through global, table, and element initializers, carries the resulting structure/array heaps into final module allocation, and retains the pinned relation only as an authority reference | Widening to the validated Core constant-expression language (`DEV-014`). It restores executions validation already admits; it adds no instruction or validation rule. Evaluator soundness, completeness, and initialization functionality remain separate proof obligations. |
+| `AMD-015` | §4, §7.3 | Pinned `Rectype_ok/cons` can hand its suffix to `_rec2`, rebasing relative `REC` declared supertypes before semantic closure against the full group | The amended ordinary-cons rule requires its remaining suffix to have no relative `REC` use in declared-supertype position; root `_rec2` remains available and the checker enforces the same condition | Narrowing away proof-internal scope-rebasing derivations (`DEV-015`). Grammar type uses are `_IDX`, so no Core syntax is removed; validator equivalence remains a separate proof. |
+| `AMD-016` | §4, §7.1 | The Lean execution carrier admitted raw out-of-range float constructors at the three rules whose result is solved from bytes, despite the pinned metavariables ranging over side-conditioned syntax sorts | The amended selector explicitly requires `Num_.wf`/storage-literal well-formedness at `load-num-val`, `array.new_data-num`, and `array.init_data-num`; the pinned selector is unchanged | Neutral in authority reach and narrowing only outside the pinned syntax sort (`DEV-016`). The amendment itself earns zero credit; exact public successor enumeration remains a separate proof. |
+| `AMD-017` | §7.1, §7.5, §10.1, §14.1 | The harness promised to install every lawful raw invocation but attempted the partial Core splice against only the module's initial memory minimum | Immediately before the splice, grow exported memory zero by exactly `requiredPages(ptr+len) - currentPages`, enforcing the declared and profile maxima, and retain/charge the prior pages, exact delta, resulting peak, preparation, and installed bytes in the same event | Strengthening of the already unconditional invocation-domain promise (`DEV-017`). It avoids a false missing transition without forcing a 65,536-page minimum. The amendment earns zero ledger credit; compiler refinement and exact cost remain separate obligations. |
+| `AMD-018` | §4, §7.3 | The amended implicit-`select` checker required both inferred operands themselves to be numeric/vector types, so an unreachable polymorphic stack's `BOT` operand was rejected despite the declarative `BOT <: t'` rule | Test inferred operands with `ValType.nvb` (numeric, vector, or `BOT`), retaining the same subtype-comparability and principal-result checks | Widening of the executable checker to the already admitted declarative reach (`DEV-018`). No Core syntax or validation rule is added; the amendment itself earns zero ledger credit. |
+| `AMD-019` | §4, §7.1 | Fresh Harness initialization admitted every relational `InstantiateA` target, including a reflexively terminal indexed `ref.null` that the ordinary executable initializer reduces to a distinct closed value | Retain the complete amended instantiation and export-resolution premises and require the public initialization target to equal the deterministic executable candidate computed from the same request and empty store | Neutral in source-language authority reach; it removes only the noncanonical raw terminal representation (`DEV-019`). The amendment itself earns zero credit; exact public successor enumeration is proved separately. |
+| `AMD-020` | §7.1, §7.3, §7.5 | A proof-carrying Harness request required closed instantiation and name-matching exports but did not require the executable initializer's selected function and memory to support the remaining ABI phases | Record the exact deterministic selector equalities, the computed `(i32,i32)->i32` function lookup, and a successful exact raw growth/splice from the same instantiated state; the initializer repeats both checks and retains explicit failure | Narrowing only of malformed or ABI-unrunnable Harness requests (`DEV-020`). Core execution, module validation, public configuration, profile/release quantifiers, and the competitor universe are unchanged. The checked equalities store no progress or termination conclusion and earn zero ledger credit. |
+| `AMD-021` | §4, §7.3 | Pinned local validation tests only defaultability and admits a syntactic non-null reference local whose type index is out of range | Require `Valtype_okA` in both amended `Local_okA` constructors and perform the same check in the executable full local validator | Narrowing only of malformed local declarations (`DEV-021`). Every executable-valid Core module, public profile, and competitor remains in scope; the amendment earns zero ledger credit and full validator equivalence remains a separate proof. |
+| `AMD-022` | §4, §7.3 | Pinned recursive heap subtyping follows declared supertypes from `REC i` but does not preserve the exact STRUCT, ARRAY, or FUNC outer shape stored at `C.RECS[i]` | Add only exact-lookup `REC i <: STRUCT`, `REC i <: ARRAY`, and `REC i <: FUNC` rules to amended `Heaptype_subA` | Widening only of semantic REC-shape coherence (`DEV-022`) to match the existing executable source checker. No syntax, module, public profile, competitor, arbitrary REC expansion, or declared-super edge is added; the amendment earns zero ledger credit and full validator equivalence remains a separate proof. |
+| `AMD-023` | §4, §7.1, §7.3, §15 | Pinned execution constructs an administrative `HANDLER_` for `try_table` but neither steps its body nor releases a completed handler trap | Add only `Step/ctxt-handler` body closure and `Step_pure/trap-handler` propagation, with exact event-labelled and successor counterparts | Widening only of administrative execution already created by valid `try_table` (`DEV-023`). No syntax, validation reach, module, profile, competitor, or primitive result is added; the amendment earns zero ledger credit and exact public progress remains a separate proof. |
 
 **`AMD-002` once moved the syntactic ledger by itself, and that credit has been
 withdrawn.** It moved the reported count from 34 to 35 only because an existing
@@ -3533,7 +3569,8 @@ propagation of `AMD-007`, `AMD-008`, `AMD-010`, and `AMD-012` now closes
 `Wasm.decode_sound`, `Wasm.decode_complete`, and the canonical public
 encode/decode round trip. Those backend facts select no release bytes and build
 no system evaluation. `AMD-009` and `AMD-013` are consumed by the same open
-validator closure; and `AMD-006` concerns no required name.
+validator closure; `AMD-015` is consumed by that validator closure; `AMD-014` is consumed by the open public initializer and
+evaluator closure; and `AMD-006` concerns no required name.
 
 **Rule, added because this happened.** An amendment that makes an existing
 theorem bindable SHALL be recorded in `model/spec-deviations.json` with

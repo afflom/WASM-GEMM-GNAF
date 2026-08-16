@@ -26,7 +26,7 @@ import WasmGemmGnaf.Wasm.Validate
 
 set_option autoImplicit false
 
-namespace WasmGemmGnaf.Wasm
+namespace WasmGemmGnaf.Wasm.Subset
 
 open WasmGemmGnaf.Foundation
 
@@ -280,4 +280,4 @@ theorem alloc_zero {m : Subset.Module} {s : Store} {a : Nat}
   exact Memory.alloc_loadByte (by simpa [Memory.alloc_size] using ha)
 
 end Store
-end WasmGemmGnaf.Wasm
+end WasmGemmGnaf.Wasm.Subset

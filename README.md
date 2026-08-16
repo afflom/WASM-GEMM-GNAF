@@ -41,7 +41,7 @@ uncredited and outstanding, not counted as formal proof.
 | `Wasm.encode_decode_roundtrip` | canonical binary round-trip for every representable public amended-Core `Wasm.Module` |
 | `Wasm.costed_run_iff_plain_run` | legacy `Wasm.Subset` cost instrumentation is transparent |
 | `Atlas.semantic_closure_least` | least closure, and it equals the derivation closure |
-| `Atlas.incremental_eq_full_rebuild` | incremental accumulation = full rebuild for coherent unscoped state bodies |
+| `Atlas.incremental_eq_full_rebuild` | incremental accumulation = full rebuild for coherent state bodies in their own scope |
 | `Atlas.universalCoverCompleteCheck_scope_blind` | the seal cannot stand in for coverage |
 
 `coordinate_le_score` is load-bearing twice over: it makes every score sublevel

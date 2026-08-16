@@ -1,4 +1,5 @@
 import WasmGemmGnaf.Gemm.Observe
+import WasmGemmGnaf.Cost.Vector
 set_option autoImplicit false
 set_option exponentiation.threshold 400
 
@@ -26,6 +27,36 @@ Each projection theorem in the `## Projections` section below is closed by
 -/
 
 namespace WasmGemmGnaf.Gemm
+
+namespace ResourceContract
+
+/-- SPEC §10.1's costed-step projection. -/
+def maxSteps (resources : ResourceContract) : Nat :=
+  resources.maxCostedSteps
+
+/-- The complete per-invocation dynamic limit induced by SPEC §8.2's six
+resource constants.  Coordinates without a separately pinned maximum receive
+the uniform per-step ceiling used by the released cost table: one unit, four
+linear-memory bytes, or one 24-byte exception object per costed step. -/
+def limit (resources : ResourceContract) : Cost.DynamicVector where
+  instantiationSteps := resources.maxCostedSteps
+  dispatchSteps := resources.maxCostedSteps
+  preparationSteps := resources.maxCostedSteps
+  wasmRuleSteps := resources.maxCostedSteps
+  scalarOps := resources.maxCostedSteps
+  vectorLaneOps := resources.maxCostedSteps
+  bytesRead := 4 * resources.maxCostedSteps
+  bytesWritten := 4 * resources.maxCostedSteps
+  memoryGrowPages := resources.maxPages * resources.maxCostedSteps
+  tableElementsAllocated := resources.maxTableElements
+  gcObjectsAllocated := resources.maxCostedSteps
+  gcBytesInitialized := 24 * resources.maxCostedSteps
+  peakStackValues := resources.maxValueSlots
+  peakPages := resources.maxPages
+  peakGcLiveBytes := resources.maxHeapBytes
+  outputBytes := 4 * resources.maxCostedSteps
+
+end ResourceContract
 
 /-! ## The observation rule as a first-order table (SPEC §8.3) -/
 
@@ -359,6 +390,10 @@ theorem eq_of_body_eq {p q : Problem P} (h : p.body = q.body) : p = q := by
 before classification and cannot be narrowed by the problem implementation. -/
 def RawInvocation (_problem : Problem P) : Type := Gemm.RawInvocation P
 
+/-- **SPEC §10.1**, the problem's public resource contract.  It is a direct
+projection of the canonical first-order problem body, not artifact data. -/
+def resources (problem : Problem P) : ResourceContract := problem.body.resources
+
 /-- The regions a raw invocation declares.  A raw input whose header does not
 even decode declares nothing, so it sanctions nothing. -/
 def regionsOf (problem : Problem P) (raw : problem.RawInvocation) : Regions :=
@@ -367,7 +402,7 @@ def regionsOf (problem : Problem P) (raw : problem.RawInvocation) : Regions :=
   | none => ⟨⟨0, 0⟩, ⟨0, 0⟩, ⟨0, 0⟩, ⟨0, 0⟩, ⟨0, 0⟩, ⟨0, 0⟩⟩
 
 /-- The problem's own per-invocation costed step budget (SPEC §8.2). -/
-def maxSteps (problem : Problem P) : Nat := problem.body.resources.maxCostedSteps
+def maxSteps (problem : Problem P) : Nat := problem.resources.maxSteps
 
 /-- The problem's workload multiplicity (SPEC §9.2). -/
 def workloadRepetitions (problem : Problem P) : Nat :=

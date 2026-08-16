@@ -66,12 +66,17 @@ private theorem unrollDt_roll_entry (base : TypeIdx) (sts : SubTypes)
       simp [substTypeUses, TypeUses.toList,
         TypeUses.toList_substTypeUses sups tvs tus]
 
+private theorem comptypeSubA_absShape_eq {C : Context} {ct₁ ct₂ : CompType}
+    (h : Comptype_subA C ct₁ ct₂) : ct₁.absShape = ct₂.absShape := by
+  cases h <;> rfl
+
 private def SourceSupersBeforeA (C : Context) (limit : Nat) :
     SubType → Prop
-  | .sub _ sups _ =>
+  | .sub _ sups ct =>
       ∀ tu ∈ TypeUses.toList sups,
         ∃ (y : TypeIdx) (dt : DefType),
-          tu = .idx y ∧ y.val < limit ∧ C.types[y.val]? = some dt
+          tu = .idx y ∧ y.val < limit ∧ C.types[y.val]? = some dt ∧
+            dt.absShape = some ct.absShape
 
 private theorem Subtype_okA.sourceSupersBeforeA {C : Context}
     {st : SubType} {x : TypeIdx} (h : Subtype_okA C st x) :
@@ -87,8 +92,13 @@ private theorem Subtype_okA.sourceSupersBeforeA {C : Context}
         simpa [SeqLen₂] using (hlen₂ ▸ hjlt)
       let ct' := cts'[j]
       have hp := hall j y ct' hj (List.getElem?_eq_getElem hjctlt)
-      obtain ⟨hy, dt, _, _, hlookup, _⟩ := hp
-      exact ⟨y, dt, rfl, hy, hlookup⟩
+      obtain ⟨hy, dt, _, _, hlookup, hunroll⟩ := hp
+      have hctsub : Comptype_subA C ct ct' :=
+        hsub ct' (List.mem_of_getElem? (List.getElem?_eq_getElem hjctlt))
+      have hshape : dt.absShape = some ct.absShape := by
+        rw [DefType.absShape, expandDt, hunroll]
+        simp [comptypeSubA_absShape_eq hctsub]
+      exact ⟨y, dt, rfl, hy, hlookup, hshape⟩
 
 private theorem Subtype_ok2A.sourceSupersBeforeA {C : Context}
     {st : SubType} {x : TypeIdx} {i : Nat}
@@ -107,13 +117,24 @@ private theorem Subtype_ok2A.sourceSupersBeforeA {C : Context}
         simpa [SeqLen₂] using (hlen₂ ▸ hjlt)
       let ct' := cts'[j]
       have hp := hall j tu ct' hj (List.getElem?_eq_getElem hjctlt)
+      obtain ⟨hbef, fin', sups', hunrollHt⟩ := hp
       have hok := hvalid tu htu
+      have hctsub : Comptype_subA C ct ct' :=
+        hsub ct' (List.mem_of_getElem? (List.getElem?_eq_getElem hjctlt))
       cases tu with
       | defd _ | recu _ => simp [TypeUse.isSyn] at htuSyn
       | idx y =>
           cases hok with
           | typeidx hlookup =>
-              exact ⟨y, _, rfl, by simpa [before] using hp.1, hlookup⟩
+              let dt := C.types[y.val]'(List.getElem?_eq_some_iff.mp hlookup).1
+              have hdt : C.types[y.val]? = some dt :=
+                List.getElem?_eq_getElem _
+              have hunroll : unrollDt dt = some (.sub fin' sups' ct') := by
+                simpa [Context.unrollHt, hdt] using hunrollHt
+              have hshape : dt.absShape = some ct.absShape := by
+                rw [DefType.absShape, expandDt, hunroll]
+                simp [comptypeSubA_absShape_eq hctsub]
+              exact ⟨y, dt, rfl, by simpa [before] using hbef, hdt, hshape⟩
 
 private theorem Rectype_ok2A.sourceSupersBeforeAt {C : Context}
     {sts : SubTypes} {x : TypeIdx} {i : Nat}
@@ -173,7 +194,7 @@ private theorem Rectype_okA.sourceSupersBeforeAt {C : Context}
   | empty =>
       intro k st hget
       simp [SubTypes.toList] at hget
-  | @cons C' head tail x hst htail =>
+  | @cons C' head tail x hst _ htail =>
       rw [RecType.isSyn, SubTypes.toList, List.all_cons,
         Bool.and_eq_true] at hsyn
       intro k candidate hget
@@ -240,7 +261,7 @@ private theorem rolledSubtype_supersRankedA {C : Context}
       simp only [substSubType, TypeUses.toList_substTypeUses, List.map_map]
       intro candidate hcand
       obtain ⟨tu, htu, rfl⟩ := List.mem_map.mp hcand
-      obtain ⟨y, dt, rfl, hy, hlookup⟩ := hbefore tu htu
+      obtain ⟨y, dt, rfl, hy, hlookup, _⟩ := hbefore tu htu
       simp only [Function.comp_apply]
       rw [rollUnrollTypeUse_idx base y (rollRt base (.recr sts))
         (SubTypes.length sts) hrange]
@@ -317,9 +338,10 @@ private theorem Type_okA.groupStoredTypeSupersRankedA {C : Context}
               subst dt
               have hkList : k < (SubTypes.toList sts).length := by
                 simpa only [SubTypes.toList_length] using hk
-              let source := (SubTypes.toList sts)[k]'hkList
-              have hsource : (SubTypes.toList sts)[k]? = some source :=
-                List.getElem?_eq_getElem hkList
+              obtain ⟨source, hsource⟩ : ∃ source,
+                  (SubTypes.toList sts)[k]? = some source :=
+                ⟨(SubTypes.toList sts)[k]'hkList,
+                  List.getElem?_eq_getElem hkList⟩
               have hbefore := Rectype_okA.sourceSupersBeforeAt
                 hbound hsynQt hrect hsource
               have hu := unrollDt_roll_entry base sts k
@@ -408,5 +430,300 @@ theorem Types_okA.storedTypeSupersRankedA {tds : List TypeDef}
     (by simpa [Context.empty] using hlookup) (by simp [Context.empty])
     (by simpa [Context.empty] using hi) hunroll
   simpa [Context.empty] using hranked
+
+/-- Every declared-super edge of a checked source type section strictly lowers
+the alternating source-node rank used by the executable subtype walk. -/
+theorem Types_okA.sourceTypeGraphOkA {tds : List TypeDef}
+    {dts : List DefType} (hsyn : tds.all TypeDef.isSyn = true)
+    (h : Types_okA Context.empty tds dts) :
+    Context.SourceTypeGraphOkA
+      { Context.empty with types := dts } :=
+  Context.sourceTypeGraphOkA_of_declaredTypeSupersRankedA
+    (Context.declaredTypeSupersRankedA_of_storedTypeSupersRankedA
+      (h.storedTypeSupersRankedA hsyn))
+
+private theorem Type_okA.groupConcreteA {C : Context} {td : TypeDef}
+    {group : List DefType} (h : Type_okA C td group) :
+    ∀ (k : Nat) (dt : DefType), group[k]? = some dt →
+      ∃ a : AbsHeapType,
+        dt.absShape = some a ∧ Context.ConcreteAbsShapeA a := by
+  cases h with
+  | mk hrange hbase hgroup hrect =>
+      rename_i base
+      cases td with
+      | mk qt =>
+          cases qt with
+          | recr sts =>
+              subst group
+              intro k dt hdt
+              have hgroupLen : (rollDt base (.recr sts)).length =
+                  SubTypes.length sts := by
+                simp [rollDt, rollRt, SubTypes.length_substSubTypes]
+              have hk : k < SubTypes.length sts := by
+                have hk' := (List.getElem?_eq_some_iff.mp hdt).1
+                simpa only [hgroupLen] using hk'
+              have hcanonical : (rollDt base (.recr sts))[k]? = some
+                  (.defd (rollRt base (.recr sts)) k) := by
+                simp [rollDt, rollRt, SubTypes.length_substSubTypes, hk]
+              have hdtEq : dt = .defd (rollRt base (.recr sts)) k :=
+                Option.some.inj (hdt.symm.trans hcanonical)
+              subst dt
+              have hkList : k < (SubTypes.toList sts).length := by
+                simpa only [SubTypes.toList_length] using hk
+              obtain ⟨source, hsource⟩ : ∃ source,
+                  (SubTypes.toList sts)[k]? = some source :=
+                ⟨(SubTypes.toList sts)[k]'hkList,
+                  List.getElem?_eq_getElem hkList⟩
+              have hu := unrollDt_roll_entry base sts k
+              rw [hsource] at hu
+              simp only [Option.map_some] at hu
+              cases source with
+              | sub fin sups ct =>
+                  let ct' := substCompType
+                    (substCompType ct
+                      ((List.range (SubTypes.length sts)).map
+                        (fun j => TypeVar.idx
+                          (TypeIdx.ofNat (base.val + j))))
+                      ((List.range (SubTypes.length sts)).map TypeUse.recu))
+                    ((List.range (SubTypes.length sts)).map TypeVar.recv)
+                    ((List.range (SubTypes.length sts)).map (fun j =>
+                      TypeUse.defd (.defd (rollRt base (.recr sts)) j)))
+                  have huexp : unrollDt (.defd (rollRt base (.recr sts)) k) =
+                      some (.sub fin
+                        (substTypeUses
+                          (substTypeUses sups
+                            ((List.range (SubTypes.length sts)).map
+                              (fun j => TypeVar.idx
+                                (TypeIdx.ofNat (base.val + j))))
+                            ((List.range (SubTypes.length sts)).map TypeUse.recu))
+                          ((List.range (SubTypes.length sts)).map TypeVar.recv)
+                          ((List.range (SubTypes.length sts)).map (fun j =>
+                            TypeUse.defd (.defd (rollRt base (.recr sts)) j))))
+                        ct') := by
+                    simpa [substSubType, ct'] using hu
+                  refine ⟨ct'.absShape, ?_,
+                    Context.concreteAbsShapeA_of_compType ct'⟩
+                  simp [DefType.absShape, expandDt, huexp]
+
+private theorem Types_okA.sourceConcrete_interval {C : Context}
+    {tds : List TypeDef} {dts : List DefType}
+    (h : Types_okA C tds dts) :
+    ∀ (i : Nat) (dt : DefType), dts[i]? = some dt →
+      ∃ a : AbsHeapType,
+        dt.absShape = some a ∧ Context.ConcreteAbsShapeA a := by
+  induction h with
+  | empty =>
+      intro i dt hlookup
+      simp at hlookup
+  | @cons C td tds dts₁ dts htd htail ih =>
+      intro i dt hlookup
+      by_cases hhead : i < dts₁.length
+      · have hlookupHead : dts₁[i]? = some dt := by
+          rw [List.getElem?_append_left hhead] at hlookup
+          exact hlookup
+        exact htd.groupConcreteA i dt hlookupHead
+      · have hlookupTail : dts[i - dts₁.length]? = some dt := by
+          rw [List.getElem?_append_right (Nat.le_of_not_gt hhead)] at hlookup
+          exact hlookup
+        exact ih _ _ hlookupTail
+
+/-- Every source type produced by a checked type section has a concrete
+function, structure, or array expansion. -/
+theorem Types_okA.sourceTypesConcreteA {tds : List TypeDef}
+    {dts : List DefType} (h : Types_okA Context.empty tds dts) :
+    Context.SourceTypesConcreteA
+      { Context.empty with types := dts } := by
+  intro tu r hnode
+  cases hnode with
+  | idx hlookup =>
+      obtain ⟨a, ha, hc⟩ := h.sourceConcrete_interval _ _ hlookup
+      exact ⟨a, by simpa [Context.typeuseShape, hlookup] using ha, hc⟩
+  | defd hlookup =>
+      obtain ⟨a, ha, hc⟩ := h.sourceConcrete_interval _ _ hlookup
+      exact ⟨a, by simpa [Context.typeuseShape] using ha, hc⟩
+
+private theorem rolledTypeUse_shapeA {C : Context} {base y : TypeIdx}
+    {sts : SubTypes} {k : Nat} {dt : DefType} {a : AbsHeapType}
+    (hbase : base.val = C.types.length)
+    (hrange : base.val + SubTypes.length sts ≤ 2 ^ 32)
+    (hk : k < SubTypes.length sts)
+    (hy : y.val < base.val + k)
+    (hlookup : (Context.append C
+      { types := rollDt base (.recr sts) }).types[y.val]? = some dt)
+    (hshape : dt.absShape = some a) (tail : List DefType) :
+    let n := SubTypes.length sts
+    let tu := substTypeUse
+      (substTypeUse (.idx y)
+        ((List.range n).map
+          (fun j => TypeVar.idx (TypeIdx.ofNat (base.val + j))))
+        ((List.range n).map TypeUse.recu))
+      ((List.range n).map TypeVar.recv)
+      ((List.range n).map
+        (fun j => TypeUse.defd (.defd (rollRt base (.recr sts)) j)))
+    ({ C with types := C.types ++ rollDt base (.recr sts) ++ tail } :
+      Context).typeuseShape tu = some a := by
+  dsimp only
+  rw [rollUnrollTypeUse_idx base y (rollRt base (.recr sts))
+    (SubTypes.length sts) hrange]
+  split
+  · rename_i hinside
+    have hoff : y.val - base.val < SubTypes.length sts := by omega
+    have hgroup : (rollDt base (.recr sts))[y.val - base.val]? =
+        some dt := by
+      have hfull : (C.types ++ rollDt base (.recr sts))[y.val]? = some dt := by
+        simpa only [Context.append] using hlookup
+      rw [List.getElem?_append_right (by omega)] at hfull
+      simpa only [hbase] using hfull
+    have hcanonical : (rollDt base (.recr sts))[y.val - base.val]? =
+        some (.defd (rollRt base (.recr sts)) (y.val - base.val)) := by
+      simp [rollDt, rollRt, SubTypes.length_substSubTypes, hoff]
+    have hdt : dt =
+        .defd (rollRt base (.recr sts)) (y.val - base.val) :=
+      Option.some.inj (hgroup.symm.trans hcanonical)
+    subst dt
+    simpa [Context.typeuseShape] using hshape
+  · rename_i houtside
+    have hyPrefix : y.val < C.types.length := by
+      rw [← hbase]
+      omega
+    have hprefix : C.types[y.val]? = some dt := by
+      have hfull : (C.types ++ rollDt base (.recr sts))[y.val]? = some dt := by
+        simpa only [Context.append] using hlookup
+      rw [List.getElem?_append_left hyPrefix] at hfull
+      exact hfull
+    have hfinal : (C.types ++ rollDt base (.recr sts) ++ tail)[y.val]? =
+        some dt := by
+      rw [List.getElem?_append_left]
+      · rw [List.getElem?_append_left hyPrefix]
+        exact hprefix
+      · simp only [List.length_append]
+        omega
+    have hfinal' : (C.types ++ (rollDt base (.recr sts) ++ tail))[y.val]? =
+        some dt := by simpa only [List.append_assoc] using hfinal
+    simp [Context.typeuseShape, hfinal', hshape]
+
+private theorem Type_okA.groupShapesOkA {C : Context} {td : TypeDef}
+    {group : List DefType} (hsyn : td.isSyn = true)
+    (h : Type_okA C td group) (tail : List DefType) :
+    ∀ (k : Nat) (dt : DefType), group[k]? = some dt →
+      ∀ (a : AbsHeapType), dt.absShape = some a →
+        ∀ g ∈ ({ C with types := C.types ++ group ++ tail } :
+          Context).heapSupers (.use (.defd dt)),
+          ∃ tu' : TypeUse, g = .use tu' ∧
+            ({ C with types := C.types ++ group ++ tail } :
+              Context).typeuseShape tu' = some a := by
+  cases h with
+  | mk hrange hbase hgroup hrect =>
+      rename_i base
+      cases td with
+      | mk qt =>
+          cases qt with
+          | recr sts =>
+              subst group
+              have hsynQt : (RecType.recr sts).isSyn = true := by
+                simpa [TypeDef.isSyn] using hsyn
+              have hbound : base.val + SubTypes.length sts ≤ 2 ^ 32 := by
+                unfold TypeGroupRangeOk at hrange
+                simpa [RecType.count, hbase] using hrange.2
+              intro k dt hdt a hdtShape g hg
+              have hk : k < SubTypes.length sts := by
+                have hk' := (List.getElem?_eq_some_iff.mp hdt).1
+                simpa [rollDt, rollRt, SubTypes.length_substSubTypes] using hk'
+              have hcanonical : (rollDt base (.recr sts))[k]? = some
+                  (.defd (rollRt base (.recr sts)) k) := by
+                simp [rollDt, rollRt, SubTypes.length_substSubTypes, hk]
+              have hdtEq : dt = .defd (rollRt base (.recr sts)) k :=
+                Option.some.inj (hdt.symm.trans hcanonical)
+              subst dt
+              have hkList : k < (SubTypes.toList sts).length := by
+                simpa only [SubTypes.toList_length] using hk
+              obtain ⟨source, hsource⟩ : ∃ source,
+                  (SubTypes.toList sts)[k]? = some source :=
+                ⟨(SubTypes.toList sts)[k]'hkList,
+                  List.getElem?_eq_getElem hkList⟩
+              have hbefore := Rectype_okA.sourceSupersBeforeAt
+                hbound hsynQt hrect hsource
+              have hu := unrollDt_roll_entry base sts k
+              rw [hsource] at hu
+              simp only [Option.map_some] at hu
+              cases source with
+              | sub fin sups ct =>
+                  simp only [Context.heapSupers, hu, substSubType,
+                    TypeUses.toList_substTypeUses, List.map_map] at hg
+                  obtain ⟨tu, htu, hgeq⟩ := List.mem_map.mp hg
+                  subst g
+                  obtain ⟨y, target, rfl, hy, hlookup, htargetShape⟩ :=
+                    hbefore tu htu
+                  have hu' := hu
+                  simp only [substSubType] at hu'
+                  have hparentShape :
+                      (DefType.defd (rollRt base (.recr sts)) k).absShape =
+                        some ct.absShape := by
+                    rw [DefType.absShape]
+                    unfold expandDt
+                    rw [hu']
+                    simp
+                  have ha : a = ct.absShape :=
+                    Option.some.inj (hdtShape.symm.trans hparentShape)
+                  subst a
+                  refine ⟨_, rfl, ?_⟩
+                  exact rolledTypeUse_shapeA hbase hbound hk hy hlookup
+                    htargetShape tail
+
+private theorem Types_okA.sourceShapes_interval {C : Context}
+    {tds : List TypeDef} {dts : List DefType}
+    (hsyn : tds.all TypeDef.isSyn = true) (h : Types_okA C tds dts)
+    (tail : List DefType) :
+    ∀ (i : Nat) (dt : DefType), dts[i]? = some dt →
+      ∀ (a : AbsHeapType), dt.absShape = some a →
+        ∀ g ∈ ({ C with types := C.types ++ dts ++ tail } :
+          Context).heapSupers (.use (.defd dt)),
+          ∃ tu' : TypeUse, g = .use tu' ∧
+            ({ C with types := C.types ++ dts ++ tail } :
+              Context).typeuseShape tu' = some a := by
+  induction h generalizing tail with
+  | empty =>
+      intro i dt hlookup
+      simp at hlookup
+  | @cons C td tds dts₁ dts htd htail ih =>
+      have hsynParts : td.isSyn = true ∧ tds.all TypeDef.isSyn = true := by
+        simpa only [List.all_cons, Bool.and_eq_true] using hsyn
+      intro i dt hlookup a hshape g hg
+      by_cases hhead : i < dts₁.length
+      · have hlookupHead : dts₁[i]? = some dt := by
+          rw [List.getElem?_append_left hhead] at hlookup
+          exact hlookup
+        have hh := htd.groupShapesOkA hsynParts.1 (dts ++ tail)
+          i dt hlookupHead a hshape g
+        simpa only [List.append_assoc] using
+          hh (by simpa only [List.append_assoc] using hg)
+      · have hlookupTail : dts[i - dts₁.length]? = some dt := by
+          rw [List.getElem?_append_right (Nat.le_of_not_gt hhead)] at hlookup
+          exact hlookup
+        have hh := ih hsynParts.2 tail (i - dts₁.length) dt
+          hlookupTail a hshape g
+        simpa only [Context.append, List.append_assoc] using
+          hh (by simpa only [Context.append, List.append_assoc] using hg)
+
+/-- Every declared-super edge of a checked source type section preserves the
+source entry's concrete composite family. -/
+theorem Types_okA.sourceTypeShapesOkA {tds : List TypeDef}
+    {dts : List DefType} (hsyn : tds.all TypeDef.isSyn = true)
+    (h : Types_okA Context.empty tds dts) :
+    Context.SourceTypeShapesOkA
+      { Context.empty with types := dts } := by
+  intro tu r a hnode hshape g hg
+  cases hnode with
+  | idx hlookup =>
+      simp only [Context.heapSupers, hlookup, List.mem_singleton] at hg
+      subst g
+      exact ⟨_, rfl, by
+        simpa [Context.typeuseShape, hlookup] using hshape⟩
+  | defd hlookup =>
+      rename_i i dt
+      have hi : i < dts.length := (List.getElem?_eq_some_iff.mp hlookup).1
+      have hh := h.sourceShapes_interval hsyn [] i dt hlookup a
+        (by simpa [Context.typeuseShape] using hshape) g
+      simpa [Context.empty] using hh (by simpa [Context.empty] using hg)
 
 end WasmGemmGnaf.Wasm.Core

@@ -84,18 +84,20 @@ pub fn report(check: bool) -> Result<std::result::Result<String, String>> {
 
     if check {
         let current = if path.exists() {
-            fs::read_to_string(&path)
-                .map_err(|e| SpecError::io(CLAUSE, "cannot read", &path, e))?
+            fs::read_to_string(&path).map_err(|e| SpecError::io(CLAUSE, "cannot read", &path, e))?
         } else {
             String::new()
         };
         if current != text {
-            return Ok(Err("WasmGemmGnaf.lean is STALE — run `just root`".to_string()));
+            return Ok(Err(
+                "WasmGemmGnaf.lean is STALE — run `just root`".to_string()
+            ));
         }
-        Ok(Ok(format!("root imports current: {total} modules, no unowned files")))
+        Ok(Ok(format!(
+            "root imports current: {total} modules, no unowned files"
+        )))
     } else {
-        fs::write(&path, &text)
-            .map_err(|e| SpecError::io(CLAUSE, "cannot write", &path, e))?;
+        fs::write(&path, &text).map_err(|e| SpecError::io(CLAUSE, "cannot write", &path, e))?;
         Ok(Ok(format!("root regenerated: {total} modules")))
     }
 }

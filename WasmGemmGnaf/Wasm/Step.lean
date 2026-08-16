@@ -23,10 +23,11 @@
   Every declaration in this file is proved.  Nothing is assumed.
 -/
 import WasmGemmGnaf.Wasm.Config
+import WasmGemmGnaf.Wasm.Core.TypedHarness
 
 set_option autoImplicit false
 
-namespace WasmGemmGnaf.Wasm
+namespace WasmGemmGnaf.Wasm.Subset
 
 open WasmGemmGnaf.Foundation
 
@@ -783,5 +784,62 @@ theorem memoryGrow_nondeterministic {c : Config} {rest : List Instr}
     ∃ e₁ c₁ e₂ c₂, Step c e₁ c₁ ∧ Step c e₂ c₂ ∧ (e₁, c₁) ≠ (e₂, c₂) :=
   ⟨_, _, _, _, Step.memoryGrowSucceed hs hc hst hg,
     Step.memoryGrowRefuse hs hc hst, by simp⟩
+
+end WasmGemmGnaf.Wasm.Subset
+
+namespace WasmGemmGnaf.Wasm
+
+/-! ## Public amended-Core machine surface
+
+The legacy executable machine above now lives only under `Wasm.Subset`.  These
+root names expose the single released Core harness relation.  They are aliases,
+not a bridge: no legacy configuration or event can inhabit these carriers. -/
+
+/-- The raw phase-safe Core harness configuration.  It remains exposed for
+authority correspondence, but is not the public execution carrier because raw
+stores include the malformed counterexamples excluded by validation. -/
+abbrev RawConfig : Type := Core.Harness.Config
+
+/-- The proof-carrying validated/reachable public Core configuration. -/
+abbrev Config : Type := Core.Harness.TypedConfig
+
+/-- Exact phase-tagged public Core event. -/
+abbrev Event : Type := Core.Harness.Event
+
+/-- The public amended-Core one-step relation, restricted only by the typed
+carrier; its erased relation is exactly the authority Harness relation. -/
+abbrev Step : Config → Event → Config → Prop := Core.Harness.TypedStep
+
+/-- A public Core return value. -/
+abbrev Value : Type := Core.Exec.Val
+
+/-- A typed public Core trap retaining its originating rule event. -/
+abbrev Trap : Type := Core.Harness.Trap
+
+/-- A public Core exception instance. -/
+abbrev ExceptionValue : Type := Core.Exec.ExnInst
+
+/-- Public Core normal termination. -/
+def Halt (config : Config) (value : Value) : Prop :=
+  Core.Harness.Halt config.1 value
+
+/-- Public Core trapped termination. -/
+def Trapped (config : Config) (trap : Trap) : Prop :=
+  Core.Harness.Trapped config.1 trap
+
+/-- Public Core uncaught-exception termination. -/
+def Thrown (config : Config) (exceptionValue : ExceptionValue) : Prop :=
+  Core.Harness.Thrown config.1 exceptionValue
+
+/-- Exact terminality for the public Core harness. -/
+def IsTerminal (config : Config) : Prop := Core.Harness.IsTerminal config.1
+
+/-- The terminal alternatives are exactly return, trap, or uncaught throw. -/
+theorem terminal_iff_halt_trap_or_throw (config : Config) :
+    IsTerminal config ↔
+      (∃ outcome, Halt config outcome) ∨
+      (∃ trap, Trapped config trap) ∨
+      (∃ exceptionValue, Thrown config exceptionValue) :=
+  Core.Harness.terminal_iff_halt_trap_or_throw config.1
 
 end WasmGemmGnaf.Wasm

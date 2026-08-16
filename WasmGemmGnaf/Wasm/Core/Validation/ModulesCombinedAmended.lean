@@ -63,13 +63,58 @@ inductive Table_okA : Context → Table → TableType → Prop where
 
 /-- `relation Local_okA: context |- local : localtype`. -/
 inductive Local_okA : Context → Local → LocalType → Prop where
-  /-- `rule Local_okA/set: C |- LOCAL t : SET t -- Defaultable: |- t DEFAULTABLE`. -/
+  /-- AMD-021 `rule Local_okA/set: C |- LOCAL t : SET t
+      -- Valtype_okA: C |- t : OK -- Defaultable: |- t DEFAULTABLE`. -/
   | set {C : Context} {l : Local} :
+      Valtype_okA C l.valtype →
       Defaultable l.valtype → Local_okA C l ⟨.set, l.valtype⟩
-  /-- `rule Local_okA/unset: C |- LOCAL t : UNSET t
-      -- Nondefaultable: |- t NONDEFAULTABLE`. -/
+  /-- AMD-021 `rule Local_okA/unset: C |- LOCAL t : UNSET t
+      -- Valtype_okA: C |- t : OK -- Nondefaultable: |- t NONDEFAULTABLE`. -/
   | unset {C : Context} {l : Local} :
+      Valtype_okA C l.valtype →
       Nondefaultable l.valtype → Local_okA C l ⟨.unset, l.valtype⟩
+
+namespace Local_okA
+
+/-- AMD-021's operative invariant: every amended local judgment carries
+ordinary value-type validity in its enclosing context. -/
+theorem valtype_ok {C : Context} {l : Local} {lt : LocalType}
+    (h : Local_okA C l lt) : Valtype_okA C l.valtype := by
+  cases h <;> assumption
+
+end Local_okA
+
+/-! ### AMD-021 falsifier
+
+The pinned rules admit a syntactic non-null reference local at an absent type
+index because they inspect only defaultability.  The amended relation rejects
+the same local through its new value-type premise. -/
+
+def outOfRangeRefLocal : Local :=
+  { valtype := .ref (.ref none (.use (.idx (TypeIdx.ofNat 0)))) }
+
+theorem Local_ok.pinned_out_of_range_ref_local :
+    Local_ok Context.empty outOfRangeRefLocal
+      ⟨.unset, outOfRangeRefLocal.valtype⟩ := by
+  exact .unset (.mk rfl)
+
+theorem outOfRangeRefLocal_not_valtype_okA :
+    ¬ Valtype_okA Context.empty outOfRangeRefLocal.valtype := by
+  intro h
+  cases h with
+  | ref href =>
+      cases href with
+      | mk hheap =>
+          cases hheap with
+          | typeuse htu =>
+              cases htu with
+              | typeidx hlookup =>
+                  simp [outOfRangeRefLocal, Context.empty] at hlookup
+
+theorem Local_okA.rejects_out_of_range_ref_local :
+    ¬ ∃ lt : LocalType, Local_okA Context.empty outOfRangeRefLocal lt := by
+  rintro ⟨lt, h⟩
+  exact outOfRangeRefLocal_not_valtype_okA h.valtype_ok
 
 /-- `relation Func_okA: context |- func : deftype`. -/
 inductive Func_okA : Context → Func → DefType → Prop where

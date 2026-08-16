@@ -91,8 +91,14 @@ pub fn run(check: bool) -> Result<Outcome> {
             .map_err(|e| SpecError::io(CLAUSE, "cannot write", path, e))?;
         println!("{MANIFEST}: {} source files", built.source_files);
         println!("  sourceManifestCore      {}...", &built.source_core[..16]);
-        println!("  generatedProofInput     {}...", &built.generated_proof_input[..16]);
-        println!("  preFinalEnvironment     {}...", &built.pre_final_environment[..16]);
+        println!(
+            "  generatedProofInput     {}...",
+            &built.generated_proof_input[..16]
+        );
+        println!(
+            "  preFinalEnvironment     {}...",
+            &built.pre_final_environment[..16]
+        );
         Ok(Outcome::Pass)
     }
 }
@@ -150,7 +156,15 @@ pub fn build() -> Result<Built> {
                 s("artifacts/"),
             ]),
         ),
-        ("files", Out::Arr(source_files.iter().map(|p| file_entry(p, true)).collect::<Result<_>>()?)),
+        (
+            "files",
+            Out::Arr(
+                source_files
+                    .iter()
+                    .map(|p| file_entry(p, true))
+                    .collect::<Result<_>>()?,
+            ),
+        ),
     ]);
     let source_core_id = identity(&source_core);
 
@@ -179,9 +193,11 @@ pub fn build() -> Result<Built> {
         ),
         (
             "note",
-            s("Artifact/Bytes.lean is NOT present: no artifact has been emitted, \
+            s(
+                "Artifact/Bytes.lean is NOT present: no artifact has been emitted, \
                because emission requires WS-001 and BI-002. SPEC 13 Phase F step 4 \
-               is therefore not reached."),
+               is therefore not reached.",
+            ),
         ),
     ]);
     let generated_proof_input_id = identity(&generated_proof_input);
@@ -194,16 +210,21 @@ pub fn build() -> Result<Built> {
     let pre_final_environment = obj(vec![
         ("schemaVersion", Out::Int(1)),
         ("stage", s("PreFinalEnvironmentBody")),
-        ("generatedProofInputIdentity", s(generated_proof_input_id.clone())),
+        (
+            "generatedProofInputIdentity",
+            s(generated_proof_input_id.clone()),
+        ),
         ("leanToolchain", s(toolchain)),
         ("leanCommit", s("d024af099ca4bf2c86f649261ebf59565dc8c622")),
         ("dependencies", Out::Arr(Vec::new())),
         ("compiledEnvironmentDigest", Out::Null),
         (
             "note",
-            s("compiledEnvironmentDigest is null: SPEC 13 Phase F step 5 records the \
+            s(
+                "compiledEnvironmentDigest is null: SPEC 13 Phase F step 5 records the \
                checked final declaration-environment digest, which is only meaningful \
-               once the final theorem is on the path. GO-001 is outstanding."),
+               once the final theorem is on the path. GO-001 is outstanding.",
+            ),
         ),
     ]);
     let pre_final_environment_id = identity(&pre_final_environment);
@@ -214,19 +235,33 @@ pub fn build() -> Result<Built> {
         ("schemaVersion", Out::Int(1)),
         ("stage", s("OutputManifestBody")),
         ("sourceManifestCoreIdentity", s(source_core_id.clone())),
-        ("generatedProofInputIdentity", s(generated_proof_input_id.clone())),
-        ("preFinalEnvironmentIdentity", s(pre_final_environment_id.clone())),
+        (
+            "generatedProofInputIdentity",
+            s(generated_proof_input_id.clone()),
+        ),
+        (
+            "preFinalEnvironmentIdentity",
+            s(pre_final_environment_id.clone()),
+        ),
         ("excludes", Out::Arr(vec![s("MANIFEST.json itself")])),
         (
             "artifact",
-            Out::Arr(artifacts.iter().map(|p| file_entry(p, false)).collect::<Result<_>>()?),
+            Out::Arr(
+                artifacts
+                    .iter()
+                    .map(|p| file_entry(p, false))
+                    .collect::<Result<_>>()?,
+            ),
         ),
         ("atlasSeal", Out::Null),
         (
             "proofRegistry",
             obj(vec![
                 ("path", s("model/claims.json")),
-                ("sha256", s(sha256::file_hex(CLAUSE, Path::new("model/claims.json"))?)),
+                (
+                    "sha256",
+                    s(sha256::file_hex(CLAUSE, Path::new("model/claims.json"))?),
+                ),
             ]),
         ),
         (
@@ -234,7 +269,10 @@ pub fn build() -> Result<Built> {
             if Path::new("CONFORMANCE.md").exists() {
                 Out::Arr(vec![obj(vec![
                     ("path", s("CONFORMANCE.md")),
-                    ("sha256", s(sha256::file_hex(CLAUSE, Path::new("CONFORMANCE.md"))?)),
+                    (
+                        "sha256",
+                        s(sha256::file_hex(CLAUSE, Path::new("CONFORMANCE.md"))?),
+                    ),
                 ])])
             } else {
                 Out::Arr(Vec::new())
@@ -246,7 +284,10 @@ pub fn build() -> Result<Built> {
                 ("path", s("model/reproducibility-plan.json")),
                 (
                     "sha256",
-                    s(sha256::file_hex(CLAUSE, Path::new("model/reproducibility-plan.json"))?),
+                    s(sha256::file_hex(
+                        CLAUSE,
+                        Path::new("model/reproducibility-plan.json"),
+                    )?),
                 ),
             ]),
         ),
@@ -263,19 +304,30 @@ pub fn build() -> Result<Built> {
 
     let document = obj(vec![
         ("schemaVersion", Out::Int(1)),
-        ("description", s("Ordered acyclic identity stages. SPEC sections 4 and 5.")),
+        (
+            "description",
+            s("Ordered acyclic identity stages. SPEC sections 4 and 5."),
+        ),
         (
             "acyclicity",
-            s("Each stage binds only EARLIER stage identities. No stage contains \
+            s(
+                "Each stage binds only EARLIER stage identities. No stage contains \
                its own identity. MANIFEST.json is the canonical encoding of \
-               OutputManifestBody and its own digest is never in its own preimage."),
+               OutputManifestBody and its own digest is never in its own preimage.",
+            ),
         ),
         ("sourceManifestCore", source_core),
         ("sourceManifestCoreIdentity", s(source_core_id.clone())),
         ("generatedProofInputBody", generated_proof_input),
-        ("generatedProofInputIdentity", s(generated_proof_input_id.clone())),
+        (
+            "generatedProofInputIdentity",
+            s(generated_proof_input_id.clone()),
+        ),
         ("preFinalEnvironmentBody", pre_final_environment),
-        ("preFinalEnvironmentIdentity", s(pre_final_environment_id.clone())),
+        (
+            "preFinalEnvironmentIdentity",
+            s(pre_final_environment_id.clone()),
+        ),
         ("outputManifestBody", output_manifest),
         ("reproducibilityAttestation", Out::Null),
     ]);
@@ -383,7 +435,9 @@ fn normalize(path: &Path) -> String {
 
 /// Never hashed: build output, version-control internals, and anything derived.
 fn skipped(rel: &str) -> bool {
-    SKIP_DIRS.iter().any(|d| rel.starts_with(d) || rel == d.trim_end_matches('/'))
+    SKIP_DIRS
+        .iter()
+        .any(|d| rel.starts_with(d) || rel == d.trim_end_matches('/'))
         || rel.contains("__pycache__")
         || rel.ends_with(".pyc")
 }
@@ -440,7 +494,10 @@ mod tests {
     fn a_stage_never_contains_its_own_identity() {
         // SPEC 4 acyclicity. Checked on the shape the builder produces rather
         // than on one recorded run, so it holds for any tree.
-        let core = obj(vec![("stage", s("SourceManifestCore")), ("files", Out::Arr(vec![]))]);
+        let core = obj(vec![
+            ("stage", s("SourceManifestCore")),
+            ("files", Out::Arr(vec![])),
+        ]);
         let core_id = identity(&core);
         assert!(!core.canonical().contains(&core_id));
 
@@ -449,8 +506,17 @@ mod tests {
             ("sourceManifestCoreIdentity", s(core_id.clone())),
         ]);
         let later_id = identity(&later);
-        assert!(later.canonical().contains(&core_id), "must bind the EARLIER stage");
-        assert!(!later.canonical().contains(&later_id), "must not bind itself");
-        assert!(!core.canonical().contains(&later_id), "must not bind a LATER stage");
+        assert!(
+            later.canonical().contains(&core_id),
+            "must bind the EARLIER stage"
+        );
+        assert!(
+            !later.canonical().contains(&later_id),
+            "must not bind itself"
+        );
+        assert!(
+            !core.canonical().contains(&later_id),
+            "must not bind a LATER stage"
+        );
     }
 }

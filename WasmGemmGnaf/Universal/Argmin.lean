@@ -6,11 +6,11 @@
 
   WHAT THIS FILE DOES.
 
-  It proves a generic finite-argmin existence theorem for the current legacy
-  subset evaluation carrier: if that admissible set is nonempty and its decider
-  answers admissible bytes, then some byte sequence satisfies the current
-  `GlobalOptimal`. The construction is entirely classical; nothing is computed.
-  This is not the public amended-Core release predicate.
+  It proves a generic finite-argmin existence theorem over the public amended-
+  Core evaluation carrier: if that admissible set is nonempty and its decider
+  answers admissible bytes, then some byte sequence satisfies `GlobalOptimal`.
+  The selection theorem is existential and classical; it is not the executable
+  release selector and names no committed byte literal.
 
   The chain is:
 
@@ -26,7 +26,7 @@
     2. `correct_of_admissible` / `feasible_of_admissible` — the *extensional*
        predicates of SPEC §10.1 imply the *evaluator-side* predicates `Correct`
        and `Feasible` for any evaluation of the same bytes.  This works because
-       `Wasm.isTerminalObservation` makes every recorded finite execution a
+       `Wasm.FiniteExecution.isTerminalObservation` makes every recorded finite execution a
        maximal execution, so the extensional quantifiers reach every recorded
        branch.
     3. `exists_least_admissible_score` — the achievable scores form a nonempty
@@ -46,8 +46,7 @@
 
   It does NOT prove `Artifact.released_wasm_gemm_gnaf_global_optimal`, and it
   does not reduce the release theorem to only two obligations. It isolates two
-  additional obligations that would remain even after the public carrier,
-  evaluator, and universal lower-bound/coverage work were complete:
+  additional obligations that remain after the carrier migration:
 
     (a) NONEMPTINESS — exhibiting one concrete byte sequence together with
         proofs of `ProfileValid`, `SemanticCorrect` and `SemanticWithinResources`
@@ -58,10 +57,10 @@
         non-constructive: `exists_globalOptimal_of_nonempty` produces an
         existential, not a computable choice, so it names no literal.
 
-  Public amended-Core evaluation soundness/completeness, an admissible released
+  Public amended-Core evaluator soundness/completeness, an admissible released
   candidate, universal coverage or an attained lower bound, and exact byte
   identification all remain open. The value of this file is only the generic
-  finite-argmin construction under its explicit legacy-carrier hypotheses.
+  finite-argmin construction under its explicit decider hypotheses.
 
   ONE HYPOTHESIS IS ADDED, AND IT IS NOT DERIVABLE.  `GlobalOptimal` requires
   that the decider's answer on an admissible competitor *is* that competitor's
@@ -200,7 +199,7 @@ variable {P : Wasm.Profile}
 `initialEq` (costed initialization is a function), `initial` by
 `initialConfigEq`, `observations` by `treeComplete` (the explorer is a
 function), and `resourceVector` by `resourceExact`. -/
-theorem inputEvaluation_subsingleton {S : Setting P} {module : Wasm.Subset.Module}
+theorem inputEvaluation_subsingleton {S : Setting P} {module : Wasm.Module}
     {raw : Gemm.RawInvocation P} (a b : InputEvaluation S module raw) : a = b := by
   obtain ⟨ai, aini, aceq, aeq, aobs, atc, arv, arex⟩ := a
   obtain ⟨bi, bini, bceq, beq, bobs, btc, brv, brex⟩ := b
@@ -220,7 +219,7 @@ theorem inputEvaluation_subsingleton {S : Setting P} {module : Wasm.Subset.Modul
   subst hrv
   rfl
 
-instance instSubsingletonInputEvaluation {S : Setting P} {module : Wasm.Subset.Module}
+instance instSubsingletonInputEvaluation {S : Setting P} {module : Wasm.Module}
     {raw : Gemm.RawInvocation P} : Subsingleton (InputEvaluation S module raw) :=
   ⟨inputEvaluation_subsingleton⟩
 
@@ -229,7 +228,7 @@ variable [Foundation.Fintype (Gemm.RawInvocation P)]
 /--
   **Evaluation uniqueness.**  `SystemEvaluation S bytes` is a subsingleton.
 
-  `module` is pinned by `decodeEq` because `Wasm.Subset.decode` is a function;
+  `module` is pinned by `decodeEq` because `Wasm.decode` is a function;
   `perInput` is pinned pointwise by `inputEvaluation_subsingleton` and
   `funext`; `observationsComplete` and `costExact` are proofs, hence
   proof-irrelevant; and `cost` is pinned by `Cost.exact_unique` applied to the
@@ -316,7 +315,7 @@ theorem startsCostedInvocation_of_profileValid {S : Setting P} {bytes : ByteArra
   **Reflection, correctness half.**  An admissible byte sequence's evaluation is
   `Correct`.
 
-  The step that makes this work is `Wasm.isTerminalObservation`: *every*
+  The step that makes this work is `Wasm.FiniteExecution.isTerminalObservation`: *every*
   execution observation is maximal, so a recorded costed observation — which
   carries a `Wasm.FiniteExecution` proof — is a `Wasm.MaximalExecution`, and the
   extensional quantifier of `SemanticCorrectAt` therefore reaches it.
@@ -330,7 +329,7 @@ theorem correct_of_admissible {S : Setting P} {bytes : ByteArray}
   obtain ⟨obs, hobs, hacc⟩ :=
     (hadm.2.1 raw).2 (e.perInput raw).initialization (e.perInput raw).initial
       (Wasm.MaximalExecution.finite o.observation o.execution
-        (Wasm.isTerminalObservation _)) ⟨hstart, trivial⟩
+        o.execution.isTerminalObservation) ⟨hstart, trivial⟩
   have heq : o.observation = obs := hobs
   exact heq ▸ hacc
 
@@ -339,7 +338,8 @@ theorem correct_of_admissible {S : Setting P} {bytes : ByteArray}
   `Feasible`.
 
   Each recorded branch is charged inside the problem's limit by
-  `SemanticWithinResourcesAt` (again through `Wasm.isTerminalObservation`), the
+  `SemanticWithinResourcesAt` (again through
+  `Wasm.FiniteExecution.isTerminalObservation`), the
   branch cost matched by the extensional side is *equal* to the recorded one
   because both are pinned to the trace cost by `costExact`, and the
   componentwise maximum over the branches then stays inside the limit by
@@ -357,10 +357,20 @@ theorem feasible_of_admissible {S : Setting P} {bytes : ByteArray}
     obtain ⟨costed, hcosted, hle⟩ :=
       (hadm.2.2 raw).2 (e.perInput raw).initialization (e.perInput raw).initial
         (Wasm.MaximalExecution.finite o.observation o.execution
-          (Wasm.isTerminalObservation _)) ⟨hstart, trivial⟩
-    have hobs : o.observation = costed.observation := hcosted
+          o.execution.isTerminalObservation) ⟨hstart, trivial⟩
+    have hobs : o.observation = costed.observation := by
+      unfold CostedAs Wasm.MaximalExecution.CostedAs at hcosted
+      have hsome : some o.observation = some costed.observation :=
+        congrArg
+          (fun execution =>
+            match execution with
+            | .finite observation _ _ => some observation
+            | .diverges _ _ _ _ => none)
+          hcosted
+      exact Option.some.inj hsome
     have hcost : o.cost = costed.cost := by
-      rw [o.costExact, costed.costExact, hobs]
+      exact (o.functional_of_observation
+        Wasm.Core.Harness.StepA.target_functional costed hobs).2.2
     rw [hcost]
     exact hle
   have hhead : (e.perInput raw).observations.head ∈
@@ -486,7 +496,7 @@ theorem deciderAnswersAdmissible_rel (hdec : DeciderAnswersAdmissible S D)
   systemEvaluationRel_of_exists (hdec b hadm e) e
 
 /--
-  Generic finite-argmin existence for the current legacy evaluation carrier.
+  Generic finite-argmin existence for the public amended-Core evaluation carrier.
 
   If the admissible set is nonempty (one byte sequence that is profile valid,
   semantically correct, within resources, and evaluated by the decider), and the
@@ -496,10 +506,8 @@ theorem deciderAnswersAdmissible_rel (hdec : DeciderAnswersAdmissible S D)
   lower-bound clause over **all** of `ByteArray`, and the canonical tie-break
   clause.
 
-  `ProfileValid` and `SystemEvaluation` here still use `Wasm.Subset.Module`, so
-  this is not yet SPEC §13 Phase D over the public amended-Core carrier.  It does
-  not prove `Artifact.released_wasm_gemm_gnaf_global_optimal`.  Public-carrier
-  evaluation soundness/completeness, a nonempty correct released candidate,
+  This does not prove `Artifact.released_wasm_gemm_gnaf_global_optimal`.
+  Evaluator soundness/completeness, a nonempty correct released candidate,
   coverage or an attained lower bound, and identification of committed bytes all
   remain open.  The selection below is an existential produced by classical
   reasoning; it names no literal.
@@ -533,12 +541,11 @@ end Argmin
 
 `systemEvaluation_subsingleton` above carries `[Foundation.Fintype
 (Gemm.RawInvocation P)]`, SPEC §8.4's `problem_input_fintype`, because
-`Cost.exact_unique` sums over the raw-input carrier.  A global instance named
-`Gemm.raw_input_finite` exists in `Universal/EnumerateInputs.lean`, but its
-compiled axiom closure reaches `Classical.choice`.  SPEC §4 does not credit
-choice-tainted executable enumeration witnesses, so `UV-004` remains open.
-The section below can omit an explicit instance binder syntactically, but that
-does not turn the transitive dependency into a discharge. -/
+`Cost.exact_unique` sums over the raw-input carrier.  The global instance
+`Gemm.raw_input_finite` in `Universal/EnumerateInputs.lean` is the constructive
+duplicate-free `Gemm.rawInvocations` list; its executable enumeration witnesses
+have axiom closure `[propext, Quot.sound]`, with no `Classical.choice`.
+The section below therefore omits the already-synthesized instance binder. -/
 
 section Functional
 
@@ -550,9 +557,8 @@ variable {P : Wasm.Profile}
   Two evaluations that the decider relates to the same byte sequence are equal.
 
   Three things about the statement.  It carries no explicit
-  `Foundation.Fintype` binder, but the synthesized global instance is currently
-  choice-tainted and receives no SPEC §4 credit.  It is quantified over **every**
-  `Setting` and **every** `Decider`, so it does
+  `Foundation.Fintype` binder because the constructive global raw-input instance
+  is synthesized.  It is quantified over **every** `Setting` and **every** `Decider`, so it does
   not depend on which evaluator is installed; in particular it will still hold
   verbatim of SPEC §10.1's implemented `Universal.evaluate` once that exists.
   And it is proved from uniqueness of the *codomain*

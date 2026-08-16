@@ -102,7 +102,7 @@ theorem subsA_sameTypeEnv {C D : Context} (hCD : SameTypeEnv C D)
     simp only [Context.subtypeFuel, hCD.1, hCD.2]
   unfold subsA
   rw [hf]
-  exact decResulttypeSubN_eq_of_types_eq hCD.1 D.subtypeFuel ts us
+  exact decResulttypeSubN_eq_of_env_eq hCD.1 hCD.2 D.subtypeFuel ts us
 
 theorem subOfA_sameTypeEnv {C D : Context} (hCD : SameTypeEnv C D)
     (t u : ValType) : subOfA C t u = subOfA D t u := by
@@ -110,7 +110,7 @@ theorem subOfA_sameTypeEnv {C D : Context} (hCD : SameTypeEnv C D)
     simp only [Context.subtypeFuel, hCD.1, hCD.2]
   unfold subOfA
   rw [hf]
-  exact decValtypeSubN_eq_of_types_eq hCD.1 D.subtypeFuel t u
+  exact decValtypeSubN_eq_of_env_eq hCD.1 hCD.2 D.subtypeFuel t u
 
 theorem St.popEA_sameTypeEnv {C D : Context} (hCD : SameTypeEnv C D)
     (st : St) (t : ValType) : st.popEA C t = st.popEA D t := by
@@ -2441,6 +2441,17 @@ theorem subOfA_symm_of_numvec {C : Context} {t₁ t₂ : ValType}
     simp_all [ValType.isNumOrVec, subOfA, decValtypeSubN,
       decNumtypeSub, decVectypeSub]
 
+/-- Numeric/vector-or-bottom matching is symmetric whenever both operands are
+in that stack class.  AMD-018 needs the bottom cases for implicit select on an
+unreachable frame. -/
+theorem subOfA_symm_of_nvb {C : Context} {t₁ t₂ : ValType}
+    (h₁ : ValType.nvb t₁ = true) (h₂ : ValType.nvb t₂ = true)
+    (hnb : t₁ ≠ .bot)
+    (h : subOfA C t₁ t₂ = true) : subOfA C t₂ t₁ = true := by
+  cases t₁ <;> cases t₂ <;>
+    simp_all [ValType.nvb, subOfA, decValtypeSubN,
+      decNumtypeSub, decVectypeSub]
+
 theorem valValidA_ref_null {C : Context} {nul : Option Null} {ht : HeapType}
     (h : ValValidA C (.ref (.ref nul ht))) :
     ValValidA C (.ref (.ref (some .null) ht)) := by
@@ -2474,6 +2485,99 @@ theorem reftype_okA_of_valValid_ref {C : Context} {rt : RefType}
     (h : ValValidA C (.ref rt)) : Reftype_okA C rt := by
   cases h C (SameTypeEnv.refl C) with
   | ref hr => exact hr
+
+theorem validationTopA_sound {C : Context} {ht top : HeapType}
+    (h : validationTopA C ht = some top) : Heaptype_subA C ht top := by
+  cases ht with
+  | abs a =>
+      cases a with
+      | any => simp only [validationTopA, Option.some.injEq] at h; subst top; exact .refl
+      | eq => simp only [validationTopA, Option.some.injEq] at h; subst top; exact .eq_any
+      | i31 =>
+        simp only [validationTopA, Option.some.injEq] at h; subst top
+        exact .trans Heaptype_okA.abs .i31_eq .eq_any
+      | struct =>
+        simp only [validationTopA, Option.some.injEq] at h; subst top
+        exact .trans Heaptype_okA.abs .struct_eq .eq_any
+      | array =>
+        simp only [validationTopA, Option.some.injEq] at h; subst top
+        exact .trans Heaptype_okA.abs .array_eq .eq_any
+      | none =>
+        simp only [validationTopA, Option.some.injEq] at h; subst top
+        exact .none_ (by simp) .refl
+      | func => simp only [validationTopA, Option.some.injEq] at h; subst top; exact .refl
+      | nofunc =>
+        simp only [validationTopA, Option.some.injEq] at h; subst top
+        exact .nofunc (by simp) .refl
+      | exn => simp only [validationTopA, Option.some.injEq] at h; subst top; exact .refl
+      | noexn =>
+        simp only [validationTopA, Option.some.injEq] at h; subst top
+        exact .noexn (by simp) .refl
+      | extern => simp only [validationTopA, Option.some.injEq] at h; subst top; exact .refl
+      | noextern =>
+        simp only [validationTopA, Option.some.injEq] at h; subst top
+        exact .noextern (by simp) .refl
+      | bot => simp only [validationTopA] at h; cases h
+  | use tu =>
+      simp only [validationTopA] at h
+      cases hs : C.typeuseShape tu with
+      | none => simp only [hs] at h; contradiction
+      | some shape =>
+          cases shape with
+          | struct =>
+              simp only [hs, Option.some.injEq] at h; subst top
+              exact .trans Heaptype_okA.abs (typeuseShape_sound hs)
+                (.trans Heaptype_okA.abs .struct_eq .eq_any)
+          | array =>
+              simp only [hs, Option.some.injEq] at h; subst top
+              exact .trans Heaptype_okA.abs (typeuseShape_sound hs)
+                (.trans Heaptype_okA.abs .array_eq .eq_any)
+          | func =>
+              simp only [hs, Option.some.injEq] at h; subst top
+              exact typeuseShape_sound hs
+          | any | eq | i31 | none | nofunc | exn | noexn | extern | noextern | bot =>
+              simp only [hs] at h; cases h
+
+theorem validationTopA_abs {C : Context} {ht top : HeapType}
+    (h : validationTopA C ht = some top) : ∃ a, top = .abs a := by
+  cases ht with
+  | abs a =>
+      cases a <;> simp only [validationTopA, Option.some.injEq] at h
+      all_goals try { subst top; exact ⟨_, rfl⟩ }
+      all_goals cases h
+  | use tu =>
+      simp only [validationTopA] at h
+      cases hs : C.typeuseShape tu with
+      | none => simp only [hs] at h; contradiction
+      | some shape =>
+          cases shape <;> simp only [hs, Option.some.injEq] at h
+          all_goals try { subst top; exact ⟨_, rfl⟩ }
+          all_goals cases h
+
+theorem validationInputTopA_sound {C : Context} {rt input : RefType}
+    (h : validationInputTopA C rt = some input) : Reftype_subA C rt input := by
+  cases rt with
+  | ref nul ht =>
+      simp only [validationInputTopA] at h
+      cases hh : validationTopA C ht with
+      | none => simp only [hh, Option.map_none] at h; contradiction
+      | some top =>
+          simp only [hh, Option.map_some, Option.some.injEq] at h
+          subst input
+          exact .null (validationTopA_sound hh)
+
+theorem validationInputTopA_valid {C : Context} {rt input : RefType}
+    (h : validationInputTopA C rt = some input) : ValValidA C (.ref input) := by
+  cases rt with
+  | ref nul ht =>
+      simp only [validationInputTopA] at h
+      cases hh : validationTopA C ht with
+      | none => simp only [hh, Option.map_none] at h; contradiction
+      | some top =>
+          simp only [hh, Option.map_some, Option.some.injEq] at h
+          subst input
+          obtain ⟨a, rfl⟩ := validationTopA_abs hh
+          exact ValValidA.refAbs C (some .null) a
 
 /-! ## Soundness interface for the unrestricted pass -/
 
@@ -2799,27 +2903,51 @@ theorem instrSoundFullA_step (i : Instr)
                       split at hrun
                       · rename_i hc
                         simp only [Bool.and_eq_true, Bool.or_eq_true] at hc
-                        have hnb : (t₁ == ValType.bot) = false := by
-                          cases t₁ <;> simp_all [ValType.isNumOrVec]
-                        simp only [hnb, Bool.false_eq_true, if_false,
-                          Option.some.injEq, Prod.mk.injEq] at hrun
-                        obtain ⟨rfl, rfl⟩ := hrun
                         have hs₁ : St.ValidA C s₁ := St.ValidA.popEA hst hi32
                         obtain ⟨ht₁, hs₂⟩ := St.ValidA.pop hs₁ h₁
                         obtain ⟨ht₂, hs₃⟩ := St.ValidA.pop hs₂ h₂
-                        have ht₂₁ : subOfA C t₂ t₁ = true := by
-                          rcases hc.2 with h | h
-                          · exact subOfA_symm_of_numvec hc.1.1 hc.1.2 h
-                          · exact h
-                        have hp : st.popsA C [t₁, t₁, ValType.i32] = some s₃ := by
+                        let u := if t₁ == ValType.bot then t₂ else t₁
+                        have huValid : ValValidA C u := by
+                          dsimp [u]
+                          split <;> assumption
+                        have huNvb : ValType.nvb u = true := by
+                          dsimp [u]
+                          split
+                          · exact hc.1.2
+                          · exact hc.1.1
+                        have ht₁u : subOfA C t₁ u = true := by
+                          dsimp [u]
+                          by_cases hb : (t₁ == ValType.bot) = true
+                          · simp only [hb, if_pos]
+                            cases t₁ <;> simp_all [subOfA, decValtypeSubN]
+                          · simp only [hb, Bool.false_eq_true, if_false,
+                              subOfA_refl]
+                        have ht₂u : subOfA C t₂ u = true := by
+                          dsimp [u]
+                          by_cases hb : (t₁ == ValType.bot) = true
+                          · simp only [hb, if_pos, subOfA_refl]
+                          · simp only [hb, Bool.false_eq_true, if_false]
+                            rcases hc.2 with h | h
+                            · apply subOfA_symm_of_nvb hc.1.1 hc.1.2
+                              · intro heq
+                                subst t₁
+                                simp at hb
+                              · exact h
+                            · exact h
+                        obtain ⟨u', huu', hu'NV⟩ :=
+                          valtype_sub_numvec (C := C) huNvb
+                        have hp : st.popsA C [u, u, ValType.i32] = some s₃ := by
                           simp only [St.popsA, hi32,
-                            St.popEA_of_pop_subOfA h₁ (subOfA_refl C t₁),
-                            St.popEA_of_pop_subOfA h₂ ht₂₁]
+                            St.popEA_of_pop_subOfA h₁ ht₁u,
+                            St.popEA_of_pop_subOfA h₂ ht₂u]
+                        simp only [Option.some.injEq, Prod.mk.injEq] at hrun
+                        obtain ⟨rfl, rfl⟩ := hrun
                         apply instrSoundFullA_apply
-                          (Instr_okA.select_impl (ht₁ C (SameTypeEnv.refl C))
-                            (valtype_subA_refl t₁) hc.1.1)
-                          (ResultValidA.triple ht₁ ht₁ (ValValidA.num C .i32))
-                          (ResultValidA.singleton ht₁) ?_ hst
+                          (Instr_okA.select_impl
+                            (huValid C (SameTypeEnv.refl C)) huu' hu'NV)
+                          (ResultValidA.triple huValid huValid
+                            (ValValidA.num C .i32))
+                          (ResultValidA.singleton huValid) ?_ hst
                         unfold applyTypeA
                         simp only [hp]
                         rfl
@@ -3297,80 +3425,52 @@ theorem instrSoundFullA_step (i : Instr)
       simp only [checkInstrA] at hrun
       split at hrun
       · rename_i hrt
-        cases href : st.popRef with
-        | none => simp only [href] at hrun; contradiction
-        | some p =>
-            obtain ⟨rt', s⟩ := p
-            simp only [href] at hrun
-            split at hrun
-            · rename_i hsub
-              simp only [Option.some.injEq, Prod.mk.injEq] at hrun
-              obtain ⟨rfl, rfl⟩ := hrun
-              have htarget := valValidA_ref_of_check hrt
-              obtain ⟨hs, hactual⟩ := St.popRef_valid hst href
-              cases rt' with
-              | none =>
-                  apply instrSoundFullA_apply
-                    (Instr_okA.ref_test (reftype_okA_of_valValid_ref htarget)
-                      (reftype_okA_of_valValid_ref htarget)
-                      (decReftypeSubN_sound hsub))
-                    (ResultValidA.singleton htarget)
-                    (ResultValidA.singleton (ValValidA.num C .i32)) ?_ hst
-                  unfold applyTypeA
-                  simp only [St.popRef_popsA_of_sub href (by rfl)]
-                  rfl
-              | some actual =>
-                  apply instrSoundFullA_apply
-                    (Instr_okA.ref_test (reftype_okA_of_valValid_ref htarget)
-                      (reftype_okA_of_valValid_ref hactual)
-                      (decReftypeSubN_sound hsub))
-                    (ResultValidA.singleton hactual)
-                    (ResultValidA.singleton (ValValidA.num C .i32)) ?_ hst
-                  unfold applyTypeA
-                  rw [show st.popsA C [.ref actual] = some s by
-                    simpa [poppedRefValType] using St.popRef_popsA (C := C) href]
-                  rfl
-            · contradiction
+        cases htop : validationInputTopA C rt with
+        | none => simp only [htop] at hrun; contradiction
+        | some input =>
+            simp only [htop] at hrun
+            cases hp : st.popEA C (.ref input) with
+            | none => simp only [hp] at hrun; contradiction
+            | some s =>
+                simp only [hp, Option.some.injEq, Prod.mk.injEq] at hrun
+                obtain ⟨rfl, rfl⟩ := hrun
+                have htarget := valValidA_ref_of_check hrt
+                have hinput := validationInputTopA_valid htop
+                apply instrSoundFullA_apply
+                  (Instr_okA.ref_test (reftype_okA_of_valValid_ref htarget)
+                    (reftype_okA_of_valValid_ref hinput)
+                    (validationInputTopA_sound htop))
+                  (ResultValidA.singleton hinput)
+                  (ResultValidA.singleton (ValValidA.num C .i32)) ?_ hst
+                unfold applyTypeA
+                simp only [St.popsA, hp]
+                rfl
       · contradiction
   case refCast rt =>
       intro C hC st st' xs hrun hst
       simp only [checkInstrA] at hrun
       split at hrun
       · rename_i hrt
-        cases href : st.popRef with
-        | none => simp only [href] at hrun; contradiction
-        | some p =>
-            obtain ⟨rt', s⟩ := p
-            simp only [href] at hrun
-            split at hrun
-            · rename_i hsub
-              simp only [Option.some.injEq, Prod.mk.injEq] at hrun
-              obtain ⟨rfl, rfl⟩ := hrun
-              have htarget := valValidA_ref_of_check hrt
-              obtain ⟨hs, hactual⟩ := St.popRef_valid hst href
-              cases rt' with
-              | none =>
-                  apply instrSoundFullA_apply
-                    (Instr_okA.ref_cast (reftype_okA_of_valValid_ref htarget)
-                      (reftype_okA_of_valValid_ref htarget)
-                      (decReftypeSubN_sound hsub))
-                    (ResultValidA.singleton htarget)
-                    (ResultValidA.singleton htarget) ?_ hst
-                  unfold applyTypeA
-                  simp only [St.popRef_popsA_of_sub href (by rfl)]
-                  rfl
-              | some actual =>
-                  apply instrSoundFullA_apply
-                    (Instr_okA.ref_cast (reftype_okA_of_valValid_ref htarget)
-                      (reftype_okA_of_valValid_ref hactual)
-                      (decReftypeSubN_sound hsub))
-                    (ResultValidA.singleton hactual)
-                    (ResultValidA.singleton htarget) ?_ hst
-                  unfold applyTypeA
-                  rw [show st.popsA C [.ref actual] = some s by
-                    simpa [poppedRefValType] using St.popRef_popsA (C := C) href]
-                  rfl
-            · contradiction
+        cases htop : validationInputTopA C rt with
+        | none => simp only [htop] at hrun; contradiction
+        | some input =>
+            simp only [htop] at hrun
+            cases hp : st.popEA C (.ref input) with
+            | none => simp only [hp] at hrun; contradiction
+            | some s =>
+                simp only [hp, Option.some.injEq, Prod.mk.injEq] at hrun
+                obtain ⟨rfl, rfl⟩ := hrun
+                have htarget := valValidA_ref_of_check hrt
+                have hinput := validationInputTopA_valid htop
+                apply instrSoundFullA_apply
+                  (Instr_okA.ref_cast (reftype_okA_of_valValid_ref htarget)
+                    (reftype_okA_of_valValid_ref hinput)
+                    (validationInputTopA_sound htop))
+                  (ResultValidA.singleton hinput)
+                  (ResultValidA.singleton htarget) ?_ hst
+                unfold applyTypeA
+                simp only [St.popsA, hp]
+                rfl
       · contradiction
   case externConvertAny =>
       intro C hC st st' xs hrun hst

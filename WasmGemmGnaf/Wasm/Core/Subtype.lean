@@ -161,6 +161,17 @@ def typeuseShape (C : Context) : TypeUse → Option AbsHeapType
       | none => none
   | .recu _ => none
 
+/-- AMD-022's executable shape view. Source indices and literal defined types
+use the ordinary expansion view; a recursive variable has exactly the outer
+shape stored at its `C.RECS` entry. -/
+def typeuseShapeA (C : Context) : TypeUse → Option AbsHeapType
+  | .defd dt => dt.absShape
+  | .idx x => match C.types[x.val]? with
+      | some dt => dt.absShape
+      | none => none
+  | .recu i => (C.recs[i]?).map fun
+      | .sub _ _ ct => ct.absShape
+
 /-! ## Node equality and the declared-supertype walk -/
 
 /-- The normal form `Deftype_sub/refl` compares: a `deftype` modulo
@@ -226,6 +237,11 @@ theorem typeuseShape_eq_of_types_eq {C D : Context} (h : C.types = D.types)
     (tu : TypeUse) : C.typeuseShape tu = D.typeuseShape tu := by
   cases tu <;> simp [Context.typeuseShape, h]
 
+theorem typeuseShapeA_eq_of_env_eq {C D : Context}
+    (htypes : C.types = D.types) (hrecs : C.recs = D.recs)
+    (tu : TypeUse) : C.typeuseShapeA tu = D.typeuseShapeA tu := by
+  cases tu <;> simp [Context.typeuseShapeA, htypes, hrecs]
+
 theorem normHeapType_eq_of_types_eq {C D : Context} (h : C.types = D.types)
     (ht : HeapType) : C.normHeapType ht = D.normHeapType ht := by
   cases ht with
@@ -287,14 +303,14 @@ def decHeapSubR (C : Context) (n : Nat) : HeapType -> HeapType -> Bool
   | .abs a, .abs b => decAbsSub a b
   | .abs .bot, .use _ => true
   | .abs .none, .use tu =>
-      match C.typeuseShape tu with
+      match C.typeuseShapeA tu with
       | some .struct => true
       | some .array => true
       | _ => false
-  | .abs .nofunc, .use tu => decide (C.typeuseShape tu = some .func)
+  | .abs .nofunc, .use tu => decide (C.typeuseShapeA tu = some .func)
   | .abs _, .use _ => false
   | .use tu₁, .abs b =>
-      match C.typeuseShape tu₁ with
+      match C.typeuseShapeA tu₁ with
       | some s => decAbsSub s b
       | none => false
   | .use tu₁, .use (.defd d₂) => C.reachDef n (.use tu₁) (.use (.defd d₂))
@@ -387,7 +403,8 @@ def decResulttypeSubN (C : Context) (n : Nat) (ts₁ ts₂ : List ValType) : Boo
 other than `TYPES` when the fuel is held fixed.  The context's `RECS` length
 is accounted for separately when choosing that fuel. -/
 
-theorem decHeapSubR_eq_of_types_eq {C D : Context} (h : C.types = D.types)
+theorem decHeapSubR_eq_of_env_eq {C D : Context} (htypes : C.types = D.types)
+    (hrecs : C.recs = D.recs)
     (n : Nat) (ht₁ ht₂ : HeapType) :
     decHeapSubR C n ht₁ ht₂ = decHeapSubR D n ht₁ ht₂ := by
   cases ht₁ with
@@ -396,43 +413,51 @@ theorem decHeapSubR_eq_of_types_eq {C D : Context} (h : C.types = D.types)
       | abs b => rfl
       | use tu =>
           cases a <;>
-            simp [decHeapSubR, Context.typeuseShape_eq_of_types_eq h]
+            simp [decHeapSubR,
+              Context.typeuseShapeA_eq_of_env_eq htypes hrecs]
   | use tu₁ =>
       cases ht₂ with
       | abs b =>
-          simp [decHeapSubR, Context.typeuseShape_eq_of_types_eq h]
+          simp [decHeapSubR,
+            Context.typeuseShapeA_eq_of_env_eq htypes hrecs]
       | use tu₂ =>
           cases tu₂ <;>
-            simp [decHeapSubR, Context.heapEq_eq_of_types_eq h,
-              Context.reachDef_eq_of_types_eq h]
+            simp [decHeapSubR, Context.heapEq_eq_of_types_eq htypes,
+              Context.reachDef_eq_of_types_eq htypes]
 
-theorem decHeaptypeSubN_eq_of_types_eq {C D : Context} (h : C.types = D.types)
+theorem decHeaptypeSubN_eq_of_env_eq {C D : Context}
+    (htypes : C.types = D.types) (hrecs : C.recs = D.recs)
     (n : Nat) (ht₁ ht₂ : HeapType) :
     decHeaptypeSubN C n ht₁ ht₂ = decHeaptypeSubN D n ht₁ ht₂ := by
   unfold decHeaptypeSubN
-  rw [Context.resolveIdx_eq_of_types_eq h]
-  exact decHeapSubR_eq_of_types_eq h n ht₁ (D.resolveIdx ht₂)
+  rw [Context.resolveIdx_eq_of_types_eq htypes]
+  exact decHeapSubR_eq_of_env_eq htypes hrecs n ht₁ (D.resolveIdx ht₂)
 
-theorem decReftypeSubN_eq_of_types_eq {C D : Context} (h : C.types = D.types)
+theorem decReftypeSubN_eq_of_env_eq {C D : Context}
+    (htypes : C.types = D.types) (hrecs : C.recs = D.recs)
     (n : Nat) (rt₁ rt₂ : RefType) :
     decReftypeSubN C n rt₁ rt₂ = decReftypeSubN D n rt₁ rt₂ := by
   cases rt₁
   cases rt₂
-  simp [decReftypeSubN, decHeaptypeSubN_eq_of_types_eq h]
+  simp [decReftypeSubN,
+    decHeaptypeSubN_eq_of_env_eq htypes hrecs]
 
-theorem decValtypeSubN_eq_of_types_eq {C D : Context} (h : C.types = D.types)
+theorem decValtypeSubN_eq_of_env_eq {C D : Context}
+    (htypes : C.types = D.types) (hrecs : C.recs = D.recs)
     (n : Nat) (t₁ t₂ : ValType) :
     decValtypeSubN C n t₁ t₂ = decValtypeSubN D n t₁ t₂ := by
   cases t₁ <;> cases t₂ <;>
-    simp [decValtypeSubN, decReftypeSubN_eq_of_types_eq h]
+    simp [decValtypeSubN,
+      decReftypeSubN_eq_of_env_eq htypes hrecs]
 
-theorem decResulttypeSubN_eq_of_types_eq {C D : Context} (h : C.types = D.types)
+theorem decResulttypeSubN_eq_of_env_eq {C D : Context}
+    (htypes : C.types = D.types) (hrecs : C.recs = D.recs)
     (n : Nat) (ts₁ ts₂ : List ValType) :
     decResulttypeSubN C n ts₁ ts₂ = decResulttypeSubN D n ts₁ ts₂ := by
   unfold decResulttypeSubN
   apply congrArg (fun f => decSeq₂ f ts₁ ts₂)
   funext t₁ t₂
-  exact decValtypeSubN_eq_of_types_eq h n t₁ t₂
+  exact decValtypeSubN_eq_of_env_eq htypes hrecs n t₁ t₂
 
 /-- **`relation Comptype_sub`, decided.**
 
@@ -694,6 +719,41 @@ theorem typeuseShape_sound {C : Context} {tu : TypeUse} {s : AbsHeapType}
       · simp only [Context.typeuseShape, hx] at h
         exact .typeidx_l hx (absShape_sound h)
 
+/-- AMD-022's REC-aware executable shape view is sound for the sole amended
+heap-subtyping relation. -/
+theorem typeuseShapeA_sound {C : Context} {tu : TypeUse} {s : AbsHeapType}
+    (h : C.typeuseShapeA tu = some s) :
+    Heaptype_subA C (.use tu) (.abs s) := by
+  cases tu with
+  | defd d =>
+      exact absShape_sound (by simpa [Context.typeuseShapeA] using h)
+  | idx x =>
+      rcases hx : C.types[x.val]? with _ | dt
+      · simp [Context.typeuseShapeA, hx] at h
+      · exact .typeidx_l hx (absShape_sound
+          (by simpa [Context.typeuseShapeA, hx] using h))
+  | recu i =>
+      rcases hr : C.recs[i]? with _ | st
+      · simp [Context.typeuseShapeA, hr] at h
+      · cases st with
+        | sub fin sups ct =>
+            cases ct with
+            | struct fts =>
+                have hs : s = .struct := by
+                  simpa [Context.typeuseShapeA, hr] using h.symm
+                subst s
+                exact .rec_struct hr
+            | array ft =>
+                have hs : s = .array := by
+                  simpa [Context.typeuseShapeA, hr] using h.symm
+                subst s
+                exact .rec_array hr
+            | func dom cod =>
+                have hs : s = .func := by
+                  simpa [Context.typeuseShapeA, hr] using h.symm
+                subst s
+                exact .rec_func hr
+
 /-- `Context.resolveIdx` on the RIGHT-hand side is `Heaptype_sub/typeidx-r`. -/
 theorem resolveIdx_sound {C : Context} {h₁ h₂ : HeapType}
     (h : Heaptype_subA C h₁ (C.resolveIdx h₂)) : Heaptype_subA C h₁ h₂ := by
@@ -721,29 +781,29 @@ theorem decHeapSubR_sound {C : Context} {n : Nat} {h₁ h₂ : HeapType}
           | bot => exact .bot
           | none =>
               simp only [decHeapSubR] at h
-              rcases hs : C.typeuseShape tu with _ | sh
+              rcases hs : C.typeuseShapeA tu with _ | sh
               · simp only [hs] at h; exact absurd h (by simp)
               · cases sh with
-                | struct => exact .none_ (by simp) (.trans .abs (typeuseShape_sound hs)
+                | struct => exact .none_ (by simp) (.trans .abs (typeuseShapeA_sound hs)
                     (.trans .abs .struct_eq .eq_any))
-                | array => exact .none_ (by simp) (.trans .abs (typeuseShape_sound hs)
+                | array => exact .none_ (by simp) (.trans .abs (typeuseShapeA_sound hs)
                     (.trans .abs .array_eq .eq_any))
                 | any | eq | i31 | func | nofunc | exn | noexn | extern | noextern | none | bot =>
                     rw [hs] at h
                     exact absurd h (by simp)
           | nofunc =>
               simp only [decHeapSubR, decide_eq_true_eq] at h
-              exact .nofunc (by simp) (typeuseShape_sound h)
+              exact .nofunc (by simp) (typeuseShapeA_sound h)
           | any | eq | i31 | struct | array | func | noexn | exn | noextern | extern =>
               exact absurd h (by simp [decHeapSubR])
   | use tu₁ =>
       cases h₂ with
       | abs b =>
           rw [decHeapSubR] at h
-          rcases hs : C.typeuseShape tu₁ with _ | sh
+          rcases hs : C.typeuseShapeA tu₁ with _ | sh
           · rw [hs] at h; exact absurd h (by simp)
           · rw [hs] at h
-            exact .trans Heaptype_okA.abs (typeuseShape_sound hs) (decAbsSub_soundA h)
+            exact .trans Heaptype_okA.abs (typeuseShapeA_sound hs) (decAbsSub_soundA h)
       | use tu₂ =>
           cases tu₂ with
           | defd d₂ => exact reachDef_sound n h

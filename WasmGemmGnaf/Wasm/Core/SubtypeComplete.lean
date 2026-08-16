@@ -7,7 +7,7 @@
   recursion directly; keeping it downstream of `SubtypeSound` leaves the
   source-graph certificate interface independently buildable.
 -/
-import WasmGemmGnaf.Wasm.Core.SubtypeSound
+import WasmGemmGnaf.Wasm.Core.TypeGraphClosure
 
 set_option autoImplicit false
 
@@ -18,6 +18,33 @@ theorem Comptype_subA.absShape_eq {C : Context} {ct₁ ct₂ : CompType}
   cases h <;> rfl
 
 namespace Context
+
+/-- The outer abstract family observed by the heap decision. -/
+def heapShapeA (C : Context) : HeapType → Option AbsHeapType
+  | .abs a => some a
+  | .use tu => C.typeuseShape tu
+
+/-- In a source type-section context (whose recursive-group scratch space is
+empty), every valid heap type has a concrete outer family.  Source indices use
+the checked graph certificate; literal semantic defined types use their own
+amended validity derivation. -/
+theorem Heaptype_okA.heapShapeA_exists {C : Context}
+    (hconcrete : SourceTypesConcreteA C) (hrecs : C.recs = [])
+    {ht : HeapType} (h : Heaptype_okA C ht) :
+    ∃ a : AbsHeapType, C.heapShapeA ht = some a := by
+  cases h with
+  | abs => exact ⟨_, rfl⟩
+  | typeuse htu =>
+      cases htu with
+      | typeidx hlookup =>
+          obtain ⟨a, ha, _⟩ := hconcrete (.idx hlookup)
+          exact ⟨a, ha⟩
+      | rec_ hlookup => simp [hrecs] at hlookup
+      | deftype hdt =>
+          obtain ⟨ct, hexpand⟩ := hdt.expand_exists
+          exact ⟨ct.absShape, by
+            simpa [heapShapeA, typeuseShape] using
+              absShape_eq_of_expand hexpand⟩
 
 theorem typeuseShape_of_unrollHt {C : Context} {tu : TypeUse}
     {fin : Option Final} {sups : TypeUses} {ct : CompType}
@@ -118,6 +145,24 @@ theorem SourceSubtypeWitnessA.of_heaptype_subA {C : Context}
         hgraph hshapes n hnode hshape
         (by simpa [Context.resolveIdx] using hreach)
       simp [Context.typeuseShape] at htarget
+  | .rec_struct _, .use hreach => by
+      obtain ⟨n, hreach⟩ := hreach
+      have htarget := reachDef_typeuseShape_of_sourceGraphOkA
+        hgraph hshapes n hnode hshape
+        (by simpa [Context.resolveIdx] using hreach)
+      simp [Context.typeuseShape] at htarget
+  | .rec_array _, .use hreach => by
+      obtain ⟨n, hreach⟩ := hreach
+      have htarget := reachDef_typeuseShape_of_sourceGraphOkA
+        hgraph hshapes n hnode hshape
+        (by simpa [Context.resolveIdx] using hreach)
+      simp [Context.typeuseShape] at htarget
+  | .rec_func _, .use hreach => by
+      obtain ⟨n, hreach⟩ := hreach
+      have htarget := reachDef_typeuseShape_of_sourceGraphOkA
+        hgraph hshapes n hnode hshape
+        (by simpa [Context.resolveIdx] using hreach)
+      simp [Context.typeuseShape] at htarget
   | .none_ _ _, .abs h => False.elim (hconcrete.not_none h)
   | .nofunc _ _, .abs h => False.elim (hconcrete.not_nofunc h)
   | .noexn _ _, .abs h => False.elim (hconcrete.not_noexn h)
@@ -148,27 +193,85 @@ theorem SourceSubtypeWitnessA.of_deftype_subA {C : Context}
         exact ⟨tu, List.mem_of_getElem? hget, rfl⟩
       have hfollow := reachDef_follow_equiv_super hgraph hclosure n
         hnode (by simpa [Context.resolveIdx] using hreach) hmem
-      obtain ⟨m, hresolved⟩ :=
-        reachDef_resolveIdx_of_reach hgraph hnode hfollow
       exact SourceSubtypeWitnessA.of_heaptype_subA hgraph hshapes hclosure
         hnode hshape hconcrete htail
-        (SourceSubtypeWitnessA.use ⟨m, hresolved⟩)
+        (SourceSubtypeWitnessA.use ⟨n + 2, hfollow⟩)
 
 end
 
 /-- Exact amended heap-decision completeness for a ranked source-defined
 left endpoint. -/
 theorem decHeaptypeSubN_complete_of_sourceTypeNodeA {C : Context}
-    (hgraph : SourceTypeGraphOkA C) (hvalid : SourceTypesValidA C)
+    (hgraph : SourceTypeGraphOkA C) (hconcrete : SourceTypesConcreteA C)
     (hshapes : SourceTypeShapesOkA C) (hclosure : SourceTypeClosureOkA C)
     {root : TypeUse} {r : Nat} (hnode : SourceTypeNodeA C (.use root) r)
     {target : HeapType} (hsub : Heaptype_subA C (.use root) target) :
     decHeaptypeSubN C C.subtypeFuel (.use root) target = true := by
-  obtain ⟨shape, hshape, hconcrete⟩ := hnode.concreteShape hvalid
+  obtain ⟨shape, hshape, hshapeConcrete⟩ := hnode.concreteShape hconcrete
   exact (SourceSubtypeWitnessA.of_heaptype_subA hgraph hshapes hclosure hnode
-    hshape hconcrete hsub
+    hshape hshapeConcrete hsub
     (SourceSubtypeWitnessA.initial hgraph hnode)).decides
       hgraph hshapes hnode hshape
 
 end Context
+
+/-- The full checked type section supplies every structural certificate needed
+by the executable heap-subtype converse for a source-ranked left endpoint. -/
+theorem Types_okA.decHeaptypeSubN_complete_of_sourceTypeNodeA
+    {tds : List TypeDef} {dts : List DefType}
+    (hsyn : tds.all TypeDef.isSyn = true)
+    (hvalid : Types_okA Context.empty tds dts)
+    {root : TypeUse} {r : Nat}
+    (hnode : Context.SourceTypeNodeA
+      { Context.empty with types := dts } (.use root) r)
+    {target : HeapType}
+    (hsub : Heaptype_subA { Context.empty with types := dts }
+      (.use root) target) :
+    decHeaptypeSubN { Context.empty with types := dts }
+      ({ Context.empty with types := dts } : Context).subtypeFuel
+      (.use root) target = true := by
+  exact Context.decHeaptypeSubN_complete_of_sourceTypeNodeA
+    (hvalid.sourceTypeGraphOkA hsyn)
+    hvalid.sourceTypesConcreteA
+    (hvalid.sourceTypeShapesOkA hsyn)
+    (hvalid.sourceTypeClosureOkA hsyn)
+    hnode hsub
+
+/-- The same source-ranked converse at the public context-selected decision
+entry point. -/
+theorem Types_okA.decHeaptypeSub_complete_of_sourceTypeNodeA
+    {tds : List TypeDef} {dts : List DefType}
+    (hsyn : tds.all TypeDef.isSyn = true)
+    (hvalid : Types_okA Context.empty tds dts)
+    {root : TypeUse} {r : Nat}
+    (hnode : Context.SourceTypeNodeA
+      { Context.empty with types := dts } (.use root) r)
+    {target : HeapType}
+    (hsub : Heaptype_subA { Context.empty with types := dts }
+      (.use root) target) :
+    decHeaptypeSub { Context.empty with types := dts }
+      (.use root) target = true := by
+  exact hvalid.decHeaptypeSubN_complete_of_sourceTypeNodeA hsyn hnode hsub
+
+/-- Every syntactic type-use is a ranked source index, so checked type-section
+provenance discharges the executable subtype converse directly. -/
+theorem Types_okA.decHeaptypeSub_complete_of_syn_typeuse
+    {tds : List TypeDef} {dts : List DefType}
+    (hsyn : tds.all TypeDef.isSyn = true)
+    (hvalid : Types_okA Context.empty tds dts)
+    {tu : TypeUse} (htuSyn : tu.isSyn = true)
+    (htuOk : Typeuse_okA { Context.empty with types := dts } tu)
+    {target : HeapType}
+    (hsub : Heaptype_subA { Context.empty with types := dts }
+      (.use tu) target) :
+    decHeaptypeSub { Context.empty with types := dts }
+      (.use tu) target = true := by
+  cases tu with
+  | idx x =>
+      cases htuOk with
+      | typeidx hlookup =>
+          exact hvalid.decHeaptypeSub_complete_of_sourceTypeNodeA hsyn
+            (.idx hlookup) hsub
+  | recu _ | defd _ => simp [TypeUse.isSyn] at htuSyn
+
 end WasmGemmGnaf.Wasm.Core

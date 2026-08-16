@@ -23,8 +23,7 @@ use crate::spec::{Outcome, Result, SpecError};
 use crate::{amendment, firewall, json, lean, manifest, repo, required, sha256, vendor};
 
 const CLAUSE: &str = "20.2";
-pub const RELEASE_THEOREM: &str =
-    "WasmGemmGnaf.Artifact.released_wasm_gemm_gnaf_global_optimal";
+pub const RELEASE_THEOREM: &str = "WasmGemmGnaf.Artifact.released_wasm_gemm_gnaf_global_optimal";
 
 /// The exact step-9 decision, factored so M6 can plant an absent/present
 /// environment response without depending on the repository's current closure
@@ -106,7 +105,10 @@ pub fn run(root: &Path) -> Result<Outcome> {
         "1",
         "manifest identity stages current and acyclic",
         manifest_report.is_ok(),
-        &clip(manifest_report.as_ref().err().map_or("", String::as_str), 150),
+        &clip(
+            manifest_report.as_ref().err().map_or("", String::as_str),
+            150,
+        ),
     );
 
     let toolchain = read_trimmed("lean-toolchain")?;
@@ -115,13 +117,15 @@ pub fn run(root: &Path) -> Result<Outcome> {
         .and_then(|l| l.get("toolchain"))
         .and_then(Value::as_str)
         .unwrap_or_default();
-    g.check("1", "Lean toolchain pin", toolchain == pinned_toolchain, &toolchain);
+    g.check(
+        "1",
+        "Lean toolchain pin",
+        toolchain == pinned_toolchain,
+        &toolchain,
+    );
 
     // SPEC 5: recompute the pins from content, never trust a checksum string.
-    let vendored = pins
-        .get("wasmCore")
-        .and_then(|w| w.get("vendored"))
-        == Some(&Value::Bool(true));
+    let vendored = pins.get("wasmCore").and_then(|w| w.get("vendored")) == Some(&Value::Bool(true));
     let digests = vendor::recompute("vendor/wasm-spec")?;
     g.check(
         "1",
@@ -148,7 +152,7 @@ pub fn run(root: &Path) -> Result<Outcome> {
         &clip(&binding.findings.join("; "), 200),
     );
 
-    // SPEC 7.3, AMD-005 and AMD-007--AMD-013: apply the vendored-tree discipline
+    // SPEC 7.3, AMD-005 and AMD-007--AMD-014: apply the vendored-tree discipline
     // to the canonical Core 3.0 authority-amendment set. This checks every exact
     // source digest and textual operation, the pinned tree identity, the
     // deviation/amendment register edges, every named amended Lean declaration,
@@ -169,7 +173,12 @@ pub fn run(root: &Path) -> Result<Outcome> {
         .ok_or_else(|| SpecError::new(CLAUSE, "model/claims.json has no `claims` array"))?;
     let ids: Vec<&str> = claims.iter().map(|c| str_field(c, "id")).collect();
 
-    g.check("2", "claim graph nonempty", !claims.is_empty(), &format!("{} claims", claims.len()));
+    g.check(
+        "2",
+        "claim graph nonempty",
+        !claims.is_empty(),
+        &format!("{} claims", claims.len()),
+    );
 
     let mut unique: Vec<&str> = ids.clone();
     unique.sort_unstable();
@@ -182,7 +191,12 @@ pub fn run(root: &Path) -> Result<Outcome> {
         .filter_map(Value::as_str)
         .filter(|d| !ids.contains(d))
         .collect();
-    g.check("2", "no orphan dependencies", dangling.is_empty(), &py_list(&dangling));
+    g.check(
+        "2",
+        "no orphan dependencies",
+        dangling.is_empty(),
+        &py_list(&dangling),
+    );
     g.check(
         "2",
         "complete SPEC 17.2 claim-row schema and falsifier linkage",
@@ -279,7 +293,10 @@ pub fn run(root: &Path) -> Result<Outcome> {
     // an empty list is not a justification.
     let undocumented: Vec<&str> = rows
         .iter()
-        .filter(|d| !d.get("intendedContentProvedBy").is_some_and(Value::is_supplied))
+        .filter(|d| {
+            !d.get("intendedContentProvedBy")
+                .is_some_and(Value::is_supplied)
+        })
         .map(|d| str_field(d, "id"))
         .collect();
     g.check(
@@ -333,9 +350,7 @@ pub fn run(root: &Path) -> Result<Outcome> {
     );
     let exact = crate::signature::exact_names(&signature_bindings);
     for name in &inventory.credited {
-        if !exact.iter().any(|e| e == name)
-            && !signature_bindings.iter().any(|b| b.name == *name)
-        {
+        if !exact.iter().any(|e| e == name) && !signature_bindings.iter().any(|b| b.name == *name) {
             signature_failures.push(format!("{name} has no signature binding"));
         }
     }
@@ -376,12 +391,15 @@ pub fn run(root: &Path) -> Result<Outcome> {
     );
 
     let required_definitions = crate::schema::scope_critical_definitions()?;
-    let schema_source = std::fs::read_to_string(Path::new(
-        "WasmGemmGnaf/Conformance/Schema.lean",
-    ))
-    .map_err(|e| {
-        SpecError::io(CLAUSE, "cannot read", Path::new("WasmGemmGnaf/Conformance/Schema.lean"), e)
-    })?;
+    let schema_source = std::fs::read_to_string(Path::new("WasmGemmGnaf/Conformance/Schema.lean"))
+        .map_err(|e| {
+            SpecError::io(
+                CLAUSE,
+                "cannot read",
+                Path::new("WasmGemmGnaf/Conformance/Schema.lean"),
+                e,
+            )
+        })?;
     let unbound = crate::schema::audit(
         &required_definitions,
         &crate::schema::parse(&schema_source),
@@ -416,7 +434,12 @@ pub fn run(root: &Path) -> Result<Outcome> {
         Path::new("artifacts/wasm-gemm-gnaf.wasm").exists(),
         "artifact not emitted",
     );
-    g.check("7", "artifact decode/validate/ABI/cost theorems", false, "gated on WS-001");
+    g.check(
+        "7",
+        "artifact decode/validate/ABI/cost theorems",
+        false,
+        "gated on WS-001",
+    );
     g.check(
         "8",
         "universal lower bound and attainment",
@@ -436,7 +459,12 @@ pub fn run(root: &Path) -> Result<Outcome> {
     );
 
     // ---- 10-13 --------------------------------------------------------------
-    g.check("10", "Atlas seal reconstructs", false, "seal not constructed");
+    g.check(
+        "10",
+        "Atlas seal reconstructs",
+        false,
+        "seal not constructed",
+    );
 
     let mutation = run_command(Command::new(self_exe()?).arg("mutation"))?;
     g.check(
@@ -446,7 +474,12 @@ pub fn run(root: &Path) -> Result<Outcome> {
         &tail(mutation.stdout.trim(), 160),
     );
 
-    g.check("12", "two clean emissions byte-identical", false, "gated on step 6");
+    g.check(
+        "12",
+        "two clean emissions byte-identical",
+        false,
+        "gated on step 6",
+    );
 
     let root_check = crate::root::report(true)?;
     g.check(
@@ -479,7 +512,10 @@ pub fn run(root: &Path) -> Result<Outcome> {
 /// This binary, for the one step that must run in a separate process.
 pub fn self_exe() -> Result<std::path::PathBuf> {
     std::env::current_exe().map_err(|e| {
-        SpecError::new(CLAUSE, format!("cannot locate the gate binary to re-invoke: {e}"))
+        SpecError::new(
+            CLAUSE,
+            format!("cannot locate the gate binary to re-invoke: {e}"),
+        )
     })
 }
 
@@ -494,7 +530,10 @@ pub fn run_command(command: &mut Command) -> Result<Ran> {
     let output = command.output().map_err(|e| {
         SpecError::new(
             CLAUSE,
-            format!("cannot run `{}`: {e}", command.get_program().to_string_lossy()),
+            format!(
+                "cannot run `{}`: {e}",
+                command.get_program().to_string_lossy()
+            ),
         )
     })?;
     Ok(Ran {
@@ -624,7 +663,10 @@ mod tests {
         let rows = devs.as_array().expect("array");
         let supplied: Vec<bool> = rows
             .iter()
-            .map(|d| d.get("intendedContentProvedBy").is_some_and(Value::is_supplied))
+            .map(|d| {
+                d.get("intendedContentProvedBy")
+                    .is_some_and(Value::is_supplied)
+            })
             .collect();
         assert_eq!(supplied, vec![true, false, false, true, false]);
     }

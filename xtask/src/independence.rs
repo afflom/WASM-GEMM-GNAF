@@ -195,7 +195,10 @@ pub fn report_over(root: &Path, entries: &[Entry]) -> Result<Report> {
     // so a mention in one block is not blamed on another.
     let mut findings = Vec::new();
     for entry in entries {
-        for (label, kind) in [(entry.declarative, "definition"), (entry.required, "proof term")] {
+        for (label, kind) in [
+            (entry.declarative, "definition"),
+            (entry.required, "proof term"),
+        ] {
             let Some(block) = print_block(&output, label) else {
                 return Err(SpecError::new(
                     CLAUSE,
@@ -221,7 +224,10 @@ pub fn report_over(root: &Path, entries: &[Entry]) -> Result<Report> {
         }
     }
 
-    Ok(Report { checked: entries.len(), findings })
+    Ok(Report {
+        checked: entries.len(),
+        findings,
+    })
 }
 
 /// Whether `block` mentions the Lean constant `name` as a WHOLE identifier.
@@ -261,7 +267,9 @@ fn print_block<'a>(output: &'a str, name: &str) -> Option<&'a str> {
     let mut end = rest.len();
     for (index, _) in rest.match_indices('\n') {
         let line = &rest[index + 1..];
-        if line.starts_with("theorem ") || line.starts_with("def ") || line.starts_with("inductive ")
+        if line.starts_with("theorem ")
+            || line.starts_with("def ")
+            || line.starts_with("inductive ")
         {
             end = index + 1;
             break;
@@ -273,7 +281,11 @@ fn print_block<'a>(output: &'a str, name: &str) -> Option<&'a str> {
 pub fn run(root: &Path) -> Result<Outcome> {
     let report = report(root)?;
     println!("{}", report.render());
-    Ok(if report.is_ok() { Outcome::Pass } else { Outcome::Fail })
+    Ok(if report.is_ok() {
+        Outcome::Pass
+    } else {
+        Outcome::Fail
+    })
 }
 
 #[cfg(test)]

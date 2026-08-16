@@ -791,45 +791,14 @@ abbrev Externaddr_okPinned := @Externaddr_ok pinnedExecutionAuthority
 /-- The exact AMD-011 external-address typing relation. -/
 abbrev Externaddr_okA := @Externaddr_ok amendedExecutionAuthority
 
-/-! ## Coverage-neutral inclusion
+/-! ## No amended-to-pinned inclusion
 
-The amended runtime relations only remove the bad AMD-011 bottom-collapse
-derivations.  Every amended derivation therefore remains a derivation of the
-byte-identical pinned transcription.
+AMD-022 adds the source-sorted `REC` shape edges that the pinned relation
+omits.  Consequently the amended runtime relations are intentionally not
+convertible to the byte-identical pinned transcription.  The former
+`to_pinned` helpers were unused and are retired rather than asserting that
+now-false inclusion.
 -/
-
-def Ref_okA.to_pinned {s : Store} {r : Ref} {rt : RefType}
-    (h : Ref_okA s r rt) : Ref_okPinned s r rt := by
-  letI : ExecutionAuthority := pinnedExecutionAuthority
-  induction h with
-  | null hs => exact .null hs.to_pinned
-  | i31 => exact .i31
-  | «struct» h₁ h₂ => exact .struct h₁ h₂
-  | array h₁ h₂ => exact .array h₁ h₂
-  | func h₁ h₂ => exact .func h₁ h₂
-  | exn h => exact .exn h
-  | host => exact .host
-  | «extern» _ ih => exact .extern ih
-  | sub _ hs ih => exact .sub ih hs.to_pinned
-
-def Val_okA.to_pinned {s : Store} {v : Val} {t : ValType}
-    (h : Val_okA s v t) : Val_okPinned s v t := by
-  letI : ExecutionAuthority := pinnedExecutionAuthority
-  cases h with
-  | num h => exact .num h
-  | vec h => exact .vec h
-  | ref h => exact .ref (Ref_okA.to_pinned h)
-
-def Externaddr_okA.to_pinned {s : Store} {xa : ExternAddr} {xt : ExternType}
-    (h : Externaddr_okA s xa xt) : Externaddr_okPinned s xa xt := by
-  letI : ExecutionAuthority := pinnedExecutionAuthority
-  induction h with
-  | tag h => exact .tag h
-  | global h => exact .global h
-  | mem h => exact .mem h
-  | table h => exact .table h
-  | func h => exact .func h
-  | sub _ hs ih => exact .sub ih hs.to_pinned
 
 /-! ## Type instantiation
 

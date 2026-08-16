@@ -199,7 +199,8 @@ theorem checkTypeOkA_of_frag {C : Context} {td : TypeDef}
   apply Or.inl
   rw [Bool.and_eq_true]
   constructor
-  · simp [checkSubtypeOkA, checkComptypeOkA, hd', hc']
+  · simp [checkSubtypeOkA, checkComptypeOkA, hd', hc',
+      RecType.noRebasedRecSupers, SubTypes.noRebasedRecSupers]
   · rfl
 
 theorem checkTypesOkA_of_frag {C : Context} {tds : List TypeDef}
@@ -538,8 +539,8 @@ theorem local_ok_set {C : Context} {l : Local} {lct : LocalType}
     (hnv : ValType.nv l.valtype = true) (h : Local_okA C l lct) :
     lct = ⟨Init.set, l.valtype⟩ := by
   cases h with
-  | set _ => rfl
-  | unset hnd =>
+  | set _ _ => rfl
+  | unset _ hnd =>
       cases hnd with
       | mk hnd => rw [noDefault_of_nv hnv] at hnd; exact absurd hnd (by simp)
 

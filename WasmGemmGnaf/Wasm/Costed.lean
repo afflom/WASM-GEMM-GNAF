@@ -55,7 +55,7 @@ import WasmGemmGnaf.Cost.Aggregate
 
 set_option autoImplicit false
 
-namespace WasmGemmGnaf.Wasm
+namespace WasmGemmGnaf.Wasm.Subset
 
 open WasmGemmGnaf.Foundation
 
@@ -1882,7 +1882,7 @@ theorem exprDerivationEdges_le_cons (i : Instr) (e : Expr) :
     exprDerivationEdges e ≤ exprDerivationEdges (.cons i e) := by
   simp [exprDerivationEdges]
 
-namespace Subset.Module
+namespace Module
 
 /-- The node count of the canonical declarative-validation derivation. -/
 def validationNodes (m : Subset.Module) : Nat :=
@@ -1924,7 +1924,7 @@ theorem validationEdges_cons_func (m : Subset.Module) (f : Func) :
   simp [List.sum_cons]
   omega
 
-end Subset.Module
+end Module
 
 /-- **SPEC section 7.5, `Wasm.validationCost`.**  One unit per node plus one
 unit per premise edge of the canonical declarative-validation derivation of
@@ -2134,4 +2134,4 @@ theorem allocated_memory_size_le_instantiatedStaticBytes (P : Profile)
   simp [memStaticBytes]
   omega
 
-end WasmGemmGnaf.Wasm
+end WasmGemmGnaf.Wasm.Subset

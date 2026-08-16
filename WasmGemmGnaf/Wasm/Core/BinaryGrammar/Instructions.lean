@@ -456,10 +456,9 @@ inductive BinstrCast : Bytes → Instr → Prop where
         l:Blabelidx ht_1:Bheaptype ht_2:Bheaptype
         => BR_ON_CAST l (REF null_1? ht_1) (REF null_2? ht_2)`.
 
-  This production spans two lines in the pinned source, so `xtask core`'s
-  extractor -- which reads one production per line -- puts no checklist entry
-  for it, and no coverage marker may claim one.  The production is transcribed
-  regardless; coverage is a floor, not a ceiling. -/
+  The coverage extractor joins the two source lines before identifying this
+  production, so it remains a distinct pinned obligation. -/
+  -- core-opcode: 0xFB 24 BR_ON_CAST
   | brOnCast (bo bc bl b₁ b₂ : Bytes) (n₁ n₂ : Option Null) (l : LabelIdx)
       (ht₁ ht₂ : HeapType) :
       Bprefixed 0xFB 24 bo → Bcastop bc (n₁, n₂) → Blabelidx bl l →
@@ -470,7 +469,9 @@ inductive BinstrCast : Bytes → Instr → Prop where
         l:Blabelidx ht_1:Bheaptype ht_2:Bheaptype
         => BR_ON_CAST_FAIL l (REF null_1? ht_1) (REF null_2? ht_2)`.
 
-  Two lines in the pinned source, as `0xFB 24` is; the same note applies. -/
+  Two lines in the pinned source, as `0xFB 24` is; the same joined-production
+  extraction applies. -/
+  -- core-opcode: 0xFB 25 BR_ON_CAST_FAIL
   | brOnCastFail (bo bc bl b₁ b₂ : Bytes) (n₁ n₂ : Option Null) (l : LabelIdx)
       (ht₁ ht₂ : HeapType) :
       Bprefixed 0xFB 25 bo → Bcastop bc (n₁, n₂) → Blabelidx bl l →

@@ -243,13 +243,18 @@ def SourceTypeGraphOkA (C : Context) : Prop :=
     ∀ g ∈ C.heapSupers h,
       ∃ s : Nat, s < r ∧ SourceTypeNodeA C g s
 
-/-- Every ranked node is valid in the amended source context.  This is the
-validity half of the certificate extracted from the whole `Types_okA`
-derivation; rank and validity remain separate so neither hides a decision
-theorem in a structure field. -/
-def SourceTypesValidA (C : Context) : Prop :=
+/-- The three expansion families that a stored source-defined type can have. -/
+def ConcreteAbsShapeA (a : AbsHeapType) : Prop :=
+  a = .struct ∨ a = .array ∨ a = .func
+
+/-- Every ranked source node expands to one of the concrete composite
+families.  This is the exact structural fact consumed by normalization; it
+does not assert a checker-completeness theorem or require re-validating a
+rolled semantic `deftype` as source syntax. -/
+def SourceTypesConcreteA (C : Context) : Prop :=
   ∀ {tu : TypeUse} {r : Nat}, SourceTypeNodeA C (.use tu) r →
-    Typeuse_okA C tu
+    ∃ a : AbsHeapType,
+      C.typeuseShape tu = some a ∧ ConcreteAbsShapeA a
 
 /-- Declared-super edges preserve the outer concrete composite family of a
 ranked source node. -/
@@ -259,15 +264,17 @@ def SourceTypeShapesOkA (C : Context) : Prop :=
     ∀ g ∈ C.heapSupers (.use tu),
       ∃ tu' : TypeUse, g = .use tu' ∧ C.typeuseShape tu' = some a
 
-/-- Declared-super lists are invariant, up to `heapEq`, across literal
-defined types with the same closure as a stored source node.  This is the
-finite-graph bisimulation needed to eliminate arbitrary proof-internal
-representatives introduced by declarative transitivity. -/
+/-- A declared-super edge exposed by a closure-equivalent literal defined
+type re-enters the finite source graph after resolving a possible source
+index.  Closing a source supertype turns `_IDX x` into its literal defined
+type, so direct `heapEq` is deliberately too strong here; one executable
+declared-super step is the exact structural correspondence. -/
 def SourceTypeClosureOkA (C : Context) : Prop :=
   ∀ {i : Nat} {raw d : DefType}, C.types[i]? = some raw →
     C.heapEq (.use (.defd raw)) (.use (.defd d)) = true →
     ∀ g ∈ C.heapSupers (.use (.defd d)),
-      ∃ g' ∈ C.heapSupers (.use (.defd raw)), C.heapEq g' g = true
+      ∃ g' ∈ C.heapSupers (.use (.defd raw)),
+        C.reachDef 1 g' (C.resolveIdx g) = true
 
 theorem absShape_eq_of_expand {dt : DefType} {ct : CompType}
     (h : Expand dt ct) : dt.absShape = some ct.absShape := by
@@ -277,26 +284,17 @@ theorem absShape_eq_of_expand {dt : DefType} {ct : CompType}
 /-- Every valid ranked source node has one of the three concrete composite
 families used by executable heap subtyping. -/
 theorem SourceTypeNodeA.shape_exists {C : Context}
-    (hvalid : SourceTypesValidA C) {h : HeapType} {r : Nat}
+    (hconcrete : SourceTypesConcreteA C) {h : HeapType} {r : Nat}
     (hnode : SourceTypeNodeA C h r) :
     ∃ (tu : TypeUse) (a : AbsHeapType),
       h = .use tu ∧ C.typeuseShape tu = some a := by
   cases hnode with
   | idx hlookup =>
-      have hdef : Typeuse_okA C (.defd _) :=
-        hvalid (.defd hlookup)
-      cases hdef with
-      | deftype hok =>
-          obtain ⟨ct, hexpand⟩ := hok.expand_exists
-          exact ⟨_, ct.absShape, rfl, by
-            simp [Context.typeuseShape, hlookup, absShape_eq_of_expand hexpand]⟩
+      obtain ⟨a, ha, _⟩ := hconcrete (.idx hlookup)
+      exact ⟨_, a, rfl, ha⟩
   | defd hlookup =>
-      have hdef := hvalid (.defd hlookup)
-      cases hdef with
-      | deftype hok =>
-          obtain ⟨ct, hexpand⟩ := hok.expand_exists
-          exact ⟨_, ct.absShape, rfl, by
-            simp [Context.typeuseShape, absShape_eq_of_expand hexpand]⟩
+      obtain ⟨a, ha, _⟩ := hconcrete (.defd hlookup)
+      exact ⟨_, a, rfl, ha⟩
 
 /-- A ranked declared-super walk stays in the source node's concrete family,
 including an endpoint accepted through `heapEq` closure equivalence. -/
@@ -334,7 +332,7 @@ theorem reachDef_follow_equiv_super {C : Context}
       SourceTypeNodeA C h r →
       C.reachDef n h (.use (.defd d)) = true →
       g ∈ C.heapSupers (.use (.defd d)) →
-      C.reachDef (n + 1) h g = true := by
+      C.reachDef (n + 2) h (C.resolveIdx g) = true := by
   intro n
   induction n with
   | zero =>
@@ -344,25 +342,23 @@ theorem reachDef_follow_equiv_super {C : Context}
       | idx hlookup =>
           simp [Context.heapEq, Context.normHeapType] at hreach
       | defd hlookup =>
-          obtain ⟨g', hg', heq⟩ := hclosure hlookup hreach g hg
+          obtain ⟨g', hg', hgreach⟩ := hclosure hlookup hreach g hg
           rw [Context.reachDef, Bool.or_eq_true]
           right
-          exact List.any_eq_true.mpr ⟨g', hg', by
-            simpa [Context.reachDef] using heq⟩
+          exact List.any_eq_true.mpr ⟨g', hg', hgreach⟩
   | succ n ih =>
       intro h r d g hnode hreach hg
       rw [Context.reachDef, Bool.or_eq_true] at hreach
       rcases hreach with heq | hsupers
-      · have hbase : C.reachDef 1 h g = true := by
+      · have hbase : C.reachDef 2 h (C.resolveIdx g) = true := by
           cases hnode with
           | idx hlookup =>
               simp [Context.heapEq, Context.normHeapType] at heq
           | defd hlookup =>
-              obtain ⟨g', hg', heq'⟩ := hclosure hlookup heq g hg
+              obtain ⟨g', hg', hgreach⟩ := hclosure hlookup heq g hg
               rw [Context.reachDef, Bool.or_eq_true]
               right
-              exact List.any_eq_true.mpr ⟨g', hg', by
-                simpa [Context.reachDef] using heq'⟩
+              exact List.any_eq_true.mpr ⟨g', hg', hgreach⟩
         exact reachDef_mono (by omega) hbase
       · obtain ⟨next, hnext, hnextReach⟩ := List.any_eq_true.mp hsupers
         obtain ⟨s, _, hnextNode⟩ := hgraph hnode next hnext
@@ -566,10 +562,6 @@ theorem decHeaptypeSubN_source_idx_of_reach {C : Context}
   cases hnode <;>
     simpa [decHeaptypeSubN, decHeapSubR, Context.resolveIdx, hx] using hb
 
-/-- The three expansion families that a valid source-defined type can have. -/
-def ConcreteAbsShapeA (a : AbsHeapType) : Prop :=
-  a = .struct ∨ a = .array ∨ a = .func
-
 theorem ConcreteAbsShapeA.not_none {a : AbsHeapType}
     (h : ConcreteAbsShapeA a) : decAbsSub a .none ≠ true := by
   rcases h with rfl | rfl | rfl <;> decide
@@ -595,32 +587,11 @@ theorem concreteAbsShapeA_of_compType (ct : CompType) :
   cases ct <;> simp [ConcreteAbsShapeA, CompType.absShape]
 
 theorem SourceTypeNodeA.concreteShape {C : Context}
-    (hvalid : SourceTypesValidA C) {root : TypeUse} {r : Nat}
+    (hconcrete : SourceTypesConcreteA C) {root : TypeUse} {r : Nat}
     (hnode : SourceTypeNodeA C (.use root) r) :
     ∃ a : AbsHeapType,
       C.typeuseShape root = some a ∧ ConcreteAbsShapeA a := by
-  obtain ⟨tu, a, heq, hshape⟩ := hnode.shape_exists hvalid
-  cases heq
-  have htu : Typeuse_okA C root := hvalid hnode
-  cases htu with
-  | deftype hd =>
-      obtain ⟨ct, hexpand⟩ := hd.expand_exists
-      have ha : a = ct.absShape := by
-        have := absShape_eq_of_expand hexpand
-        simp only [Context.typeuseShape] at hshape
-        exact Option.some.inj (hshape.symm.trans this)
-      exact ⟨a, hshape, ha ▸ concreteAbsShapeA_of_compType ct⟩
-  | typeidx hx =>
-      have hdef : Typeuse_okA C (.defd _) := hvalid (.defd hx)
-      cases hdef with
-      | deftype hd =>
-          obtain ⟨ct, hexpand⟩ := hd.expand_exists
-          have ha : a = ct.absShape := by
-            have := absShape_eq_of_expand hexpand
-            simp only [Context.typeuseShape, hx] at hshape
-            exact Option.some.inj (hshape.symm.trans this)
-          exact ⟨a, hshape, ha ▸ concreteAbsShapeA_of_compType ct⟩
-  | rec_ _ => cases hnode
+  exact hconcrete hnode
 
 /-- Normal form of a declarative subtype derivation whose leftmost endpoint
 is a ranked source-defined type.  A type-use result is a declared-super walk
@@ -651,9 +622,12 @@ theorem SourceSubtypeWitnessA.decides {C : Context}
     {shape : AbsHeapType} (hshape : C.typeuseShape root = some shape)
     {target : HeapType} (h : SourceSubtypeWitnessA C root shape target) :
     decHeaptypeSubN C C.subtypeFuel (.use root) target = true := by
+  have hshapeA : C.typeuseShapeA root = some shape := by
+    cases hnode <;>
+      simpa [Context.typeuseShapeA, Context.typeuseShape] using hshape
   cases h with
   | abs habs =>
-      simpa [decHeaptypeSubN, decHeapSubR, Context.resolveIdx, hshape]
+      simpa [decHeaptypeSubN, decHeapSubR, Context.resolveIdx, hshapeA]
         using habs
   | use hreach =>
       rename_i tu
@@ -717,6 +691,9 @@ theorem source_bot_of_target_bot {C : Context} {h₁ h₂ : HeapType}
     | .typeidx_l _ hs => fun he => nomatch go hs he
     | .typeidx_r _ _ => fun he => nomatch he
     | .rec_ _ _ => fun he => nomatch he
+    | .rec_struct _ => fun he => nomatch he
+    | .rec_array _ => fun he => nomatch he
+    | .rec_func _ => fun he => nomatch he
     | .none_ hne _ => fun he => absurd he hne
     | .nofunc hne _ => fun he => absurd he hne
     | .noexn hne _ => fun he => absurd he hne
@@ -935,7 +912,7 @@ theorem heapDecision_not_complete_of_endpoint_validity :
     .typeuse (.deftype endpointCounterFunc_ok), .abs,
     endpointCounterFunc_sub_struct, fun n => by
       simp [decHeaptypeSubN, decHeapSubR, Context.resolveIdx,
-        Context.typeuseShape, DefType.absShape, CompType.absShape,
+        Context.typeuseShapeA, DefType.absShape, CompType.absShape,
         decAbsSub, endpointCounterFunc_expand]⟩
 
 /-- The pinned missing-premise hierarchy fails executable completeness even

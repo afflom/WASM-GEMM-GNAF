@@ -4,20 +4,18 @@
 
   SCOPE — read this before citing anything here.
 
-  This is the legacy subset seam corresponding to SPEC section 10.1, not its
-  public-Core release instantiation.  Every competitor predicate below
+  This is the public amended-Core universe of SPEC section 10.1.  Every
+  competitor predicate below
   quantifies over all raw invocations and all maximal executions of the selected
-  seam, and nothing is artifact-, selector-, or conclusion-dependent.  However,
-  `ProfileValid` decodes to `Wasm.Subset.Module`, so these definitions do not yet
-  range over the public representable amended-Core carrier required by the
-  release claim.
+  public machine, and nothing is artifact-, selector-, or conclusion-dependent.
+  `ProfileValid`, `SystemEvaluation`, configurations, events and observations
+  all use the public representable Core carrier; `Wasm.Subset` cannot inhabit
+  any of those positions.
 
   `Wasm/Costed.lean`, `Gemm/Reference.lean`, and `Gemm/Problem.lean` now exist.
-  This file nevertheless retains older parameter records around the subset
-  machine:
+  Parameter records keep the public evaluator independent of the release
+  artifact:
 
-    * `Universal.Semantics P`     — the event cost map and the two static cost
-                                    counters of SPEC section 7.5;
     * `Universal.CostedMachine`   — costed initialization and the bounded
                                     all-branch costed explorer;
     * `Universal.Problem P`       — the problem's resource contract, workload
@@ -29,9 +27,9 @@
   `validationSteps`, `staticDataBytes` parameters).  No field of any of these
   records is a *conclusion*: none asserts correctness, feasibility, coverage,
   optimality, or finiteness of anything.  They are the data and the executable
-  functions supplied at a particular legacy seam.  Migrating the release path
-  requires restating these carriers over the public Core machine; merely
-  inhabiting the records with subset functions does not close that obligation.
+  functions supplied at a particular public-Core setting.  The executable
+  release evaluator must instantiate them with the exact public successor tree;
+  the records themselves cannot assert a checker conclusion.
 
   Every declaration in this file is either a definition or a proved theorem.
   Nothing is assumed.
@@ -41,9 +39,14 @@ import WasmGemmGnaf.Foundation.Order
 import WasmGemmGnaf.Foundation.Finite
 import WasmGemmGnaf.Wasm.Binary
 import WasmGemmGnaf.Wasm.Validate
-import WasmGemmGnaf.Wasm.Fuel
+import WasmGemmGnaf.Wasm.CoreValidation
+import WasmGemmGnaf.Wasm.Evaluate
+import WasmGemmGnaf.Wasm.PublicFuel
+import WasmGemmGnaf.Wasm.PublicCostedExplore
 import WasmGemmGnaf.Wasm.Profile
 import WasmGemmGnaf.Gemm.Classify
+import WasmGemmGnaf.Gemm.Problem
+import WasmGemmGnaf.Gemm.Reference
 import WasmGemmGnaf.Cost.Aggregate
 import WasmGemmGnaf.Cost.Trace
 
@@ -51,159 +54,97 @@ set_option autoImplicit false
 
 namespace WasmGemmGnaf.Universal
 
-/-! ## Legacy subset profile validity
+/-! ## Public amended-Core profile validity -/
 
-`ProfileValid` is defined here from the legacy subset validator and the
-profile's own first-order limit table.  It is not a callback. -/
+/-- The public module has the required `memory` and `(i32,i32) -> i32` `gemm`
+exports, and no export under any other name.  Kind and function type are checked
+by the Core profile's own export predicate; module validation supplies the
+Core-level unique-export-name invariant. -/
+def HasExactGemmExports (_P : Wasm.Profile) (m : Wasm.Module) : Prop :=
+  Wasm.Core.Module.satisfiesExport m.core
+      { name := "memory", kind := .memory } = true ∧
+  Wasm.Core.Module.satisfiesExport m.core
+      { name := "gemm", kind := .function Wasm.gemmFuncType } = true ∧
+  ∀ e ∈ m.core.exports,
+    Wasm.Core.nameMatches "gemm" e.name = true ∨
+      Wasm.Core.nameMatches "memory" e.name = true
 
-/-- Every index-space population of the module is inside the profile's declared
-limit table (SPEC §7.2). -/
-def WithinProfileLimits (P : Wasm.Profile) (m : Wasm.Subset.Module) : Bool :=
-  decide (m.types.length ≤ P.body.limits.maxTypes) &&
-  decide (m.funcs.length ≤ P.body.limits.maxFunctions) &&
-  decide (m.tables.length ≤ P.body.limits.maxTables) &&
-  decide (m.mems.length ≤ P.body.limits.maxMemories) &&
-  decide (m.globals.length ≤ P.body.limits.maxGlobals) &&
-  decide (m.tags.length ≤ P.body.limits.maxTags) &&
-  decide (m.elems.length ≤ P.body.limits.maxElementSegments) &&
-  decide (m.datas.length ≤ P.body.limits.maxDataSegments) &&
-  decide (m.imports.length ≤ P.body.limits.maxImports) &&
-  decide (m.exports.length ≤ P.body.limits.maxExports)
-
-/-- The legacy subset validator together with the profile's limit table. -/
-def validateUnder (P : Wasm.Profile) (m : Wasm.Subset.Module) : Bool :=
-  Wasm.validate m && WithinProfileLimits P m
-
-/-- The legacy subset check that the required memory and `gemm` exports are
-present with the pinned ABI type and no other export exists. -/
-def HasExactGemmExports (_P : Wasm.Profile) (m : Wasm.Subset.Module) : Prop :=
-  Wasm.Subset.Module.exportsMemory m = true ∧
-  Wasm.Subset.Module.checkGemmExport m = true ∧
-  ∀ e ∈ m.exports, e.name = Wasm.gemmExportName ∨ e.name = Wasm.memoryExportName
-
-/-- The current legacy-subset `Universal.ProfileValid`.
-
-SCOPE, and it is load-bearing for every "universal" claim downstream: the
-decoder here is `Wasm.Subset.decode`, the codec of `Wasm/Binary.lean`, not the
-public amended-Core decoder `Wasm.decode` of `Wasm/CoreFrontEnd.lean`.  The
-competitor universe is therefore the byte strings that decode under the SUBSET
-grammar into the subset syntax of `Wasm/Syntax.lean`.  That was already true
-before the front-end migration; what changed is that the type now says so
-instead of the name `Wasm.decode` implying the pinned format.  Migrating this
-predicate to the Core decoder is a separate step and would change what the
-release theorem quantifies over. -/
+/-- **SPEC §10.1**, public amended-Core profile validity.  The quantified module
+is the image of the full amended binary grammar; no legacy subset module can
+inhabit this proposition. -/
 def ProfileValid (P : Wasm.Profile) (bytes : ByteArray) : Prop :=
-  ∃ module : Wasm.Subset.Module,
-    Wasm.Subset.decode bytes = .ok module ∧
-    validateUnder P module = true ∧
-    module.imports = [] ∧
+  ∃ module : Wasm.Module,
+    Wasm.decode bytes = .ok module ∧
+    Wasm.validateUnder P module = true ∧
+    module.core.imports = [] ∧
     HasExactGemmExports P module
 
-/-! ## The parameterized legacy costed-semantics seam -/
+/-! ## The public costed-semantics seam -/
 
-/-- The legacy seam's charge of one subset reduction event and its two static
-cost counters.  Pure data and pure functions; no proposition. -/
-structure Semantics (_P : Wasm.Profile) where
-  /-- SPEC §7.5: the charge of one relational reduction event. -/
-  costEvent : Wasm.Event → Cost.Event
-  /-- SPEC §7.5: `Wasm.validationCost` applied to the module's derivation. -/
-  validationSteps : Wasm.Subset.Module → Nat
-  /-- SPEC §7.5: `Wasm.instantiatedStaticBytes`. -/
-  staticDataBytes : Wasm.Subset.Module → Nat
+/-- Universal evaluation uses the public initializer evidence directly. -/
+abbrev InitializationObservation := Wasm.InitializationObservation
 
-/-- **SPEC §10.1**, `Wasm.InitializationObservation`: the configuration a costed
-GEMM invocation starts from, and the charge of reaching it. -/
-structure InitializationObservation (_P : Wasm.Profile) where
-  /-- The configuration handed to the reduction relation. -/
-  initial : Wasm.Config
-  /-- The charge of decoding, instantiating, installing and entering. -/
-  cost : Cost.DynamicVector
+/-- Universal evaluation uses the public relational-prefix carrier directly. -/
+abbrev RelationalPrefix := Wasm.RelationalPrefix
 
-/-- **SPEC §10.1**, `Wasm.RelationalPrefix`: a reduction of exactly `n` labelled
-steps out of `initial`. -/
-structure RelationalPrefix (_initial : Wasm.Config) (n : Nat) where
-  /-- The labels of the prefix. -/
-  events : List Wasm.Event
-  /-- The configuration the prefix reaches. -/
-  final : Wasm.Config
-  /-- The prefix has exactly `n` steps. -/
-  lengthEq : events.length = n
+/-- The public explorer's proof-carrying overrun witness. -/
+abbrev NonterminalPrefix := Wasm.NonterminalPrefix
 
-/-- A relational prefix is valid when it really is a reduction of `initial`. -/
-def RelationalPrefix.Valid {initial : Wasm.Config} {n : Nat}
-    (p : RelationalPrefix initial n) : Prop :=
-  Wasm.Reduces initial p.events p.final
+/-- Costed observations are exactly the public profile-indexed observations. -/
+abbrev CostedExecutionObservation := Wasm.CostedExecutionObservation
 
-/-- SPEC §10.1's `NonterminalPrefix` payload: a *valid* prefix that overruns the
-step budget. -/
-structure NonterminalPrefix (initial : Wasm.Config) (n : Nat) where
-  /-- The overrunning prefix. -/
-  witness : RelationalPrefix initial n
-  /-- Its reduction proof. -/
-  valid : witness.Valid
+/-- Completed coverage is exactly the public explorer's coverage proposition. -/
+abbrev CostedCoverage := Wasm.CostedCoverage
 
-/-- **SPEC §10.1**, `Wasm.CostedExecutionObservation`: a finite execution of
-`initial` together with the exact charge of its trace. -/
-structure CostedExecutionObservation {P : Wasm.Profile} (W : Semantics P)
-    (initial : Wasm.Config) where
-  /-- The observation reached. -/
-  observation : Wasm.ExecutionObservation
-  /-- Its reduction proof: the observation is a real execution of `initial`. -/
-  execution : Wasm.FiniteExecution initial observation
-  /-- The charge of the trace. -/
-  cost : Cost.DynamicVector
-  /-- The charge is exactly the trace cost; no freedom is left. -/
-  costExact : cost = Cost.traceCost (observation.trace.map W.costEvent)
+/-- The Universal checker consumes the public costed-tree result directly. -/
+abbrev CostedTreeResult := Wasm.CostedTreeResult
 
-/-- The coverage obligation of a completed costed exploration: every listed
-entry is a real execution, and every real execution inside the bound is
-listed.  This mirrors `Wasm.CoversEveryMaximalFiniteBranch`. -/
-def CostedCoverage {P : Wasm.Profile} (W : Semantics P) (bound : Nat)
-    (initial : Wasm.Config)
-    (observations :
-      Foundation.NonemptyCanonicalFrontier (CostedExecutionObservation W initial)) :
-    Prop :=
-  (∀ o ∈ observations.elements, Wasm.FiniteExecution initial o.observation) ∧
-  (∀ o : Wasm.ExecutionObservation, Wasm.FiniteExecution initial o →
-    o.trace.length ≤ bound → ∃ c ∈ observations.elements, c.observation = o)
+/-- Empty token selecting the sole public costed machine.  It stores no
+initializer, successor function, explorer, cost function, or conclusion. -/
+structure CostedMachine (_P : Wasm.Profile) where
 
-/-- **SPEC §10.1**, the result of `Wasm.exploreAllCosted`. -/
-inductive CostedTreeResult {P : Wasm.Profile} (W : Semantics P) (bound : Nat)
-    (initial : Wasm.Config)
-  /-- Every branch terminated inside the bound. -/
-  | complete
-      (observations :
-        Foundation.NonemptyCanonicalFrontier (CostedExecutionObservation W initial))
-      (coverage : CostedCoverage W bound initial observations)
-  /-- Some branch was still running after `bound + 1` steps. -/
-  | nonterminalPrefix (overrun : NonterminalPrefix initial (bound + 1))
-  /-- Instantiation failed before any reduction. -/
-  | initializationFailure (fault : Wasm.InstantiationFault)
+namespace CostedMachine
 
-/-- The two executable entry points supplied by a legacy subset costed seam. -/
-structure CostedMachine {P : Wasm.Profile} (W : Semantics P) where
-  /-- SPEC §10.1's `Wasm.initialGemmInvocationCosted`. -/
-  initialGemmInvocationCosted :
-    Wasm.Subset.Module → Wasm.Invocation P →
-      Except Foundation.FailureReport (InitializationObservation P)
-  /-- SPEC §10.1's `Wasm.exploreAllCosted`. -/
-  exploreAllCosted :
-    (bound : Nat) → (initial : Wasm.Config) → CostedTreeResult W bound initial
+/-- Method spelling retained for the Universal evaluator.  The token is
+ignored and SPEC §10.1's canonical public explorer is called directly. -/
+def exploreAllCosted {P : Wasm.Profile} (_machine : CostedMachine P)
+    (bound : Nat) (initial : Wasm.Config) : CostedTreeResult P bound initial :=
+  Wasm.exploreAllCosted P bound initial
+
+end CostedMachine
 
 /-! ## The parameterized problem seam -/
 
-/-- Problem-level data for this seam: the resource contract, workload repetition
-count, and reference acceptance relation.  `Accepts` is a field of the problem,
-never of the artifact. -/
+/-- Problem-level data for this seam. The complete first-order GEMM problem is
+retained directly; the only extra evidence states SPEC §9.2's positivity of the
+workload multiplicity. No acceptance or resource callback is configurable. -/
 structure Problem (P : Wasm.Profile) where
-  /-- SPEC §8.2: the per-invocation costed step budget. -/
-  maxSteps : Nat
-  /-- SPEC §8.2: the per-invocation resource limit vector. -/
-  limit : Cost.DynamicVector
-  /-- SPEC §9.2: how many times the workload is charged. -/
-  workloadRepetitions : Nat
-  /-- SPEC §8.4: the reference acceptance relation. -/
-  Accepts : Gemm.RawInvocation P → Wasm.ExecutionObservation → Prop
+  /-- SPEC §8: the canonical first-order problem. -/
+  gemm : Gemm.Problem P
+  /-- SPEC §9.2: the workload multiplicity is positive. -/
+  workloadRepetitionsPositive : 1 ≤ gemm.workloadRepetitions
+
+namespace Problem
+
+variable {P : Wasm.Profile}
+
+/-- The problem's exact public step budget. -/
+def maxSteps (problem : Problem P) : Nat := problem.gemm.maxSteps
+
+/-- The complete public dynamic resource limit. -/
+def limit (problem : Problem P) : Cost.DynamicVector :=
+  problem.gemm.resources.limit
+
+/-- The exact workload multiplicity stored in the first-order problem. -/
+def workloadRepetitions (problem : Problem P) : Nat :=
+  problem.gemm.workloadRepetitions
+
+/-- SPEC §8.4's one fixed reference relation. -/
+def Accepts (problem : Problem P) (raw : Gemm.RawInvocation P)
+    (observation : Wasm.ExecutionObservation) : Prop :=
+  Gemm.Reference.Accepts problem.gemm raw observation
+
+end Problem
 
 /-- **SPEC §8.3**, `Gemm.Problem.RawInvocation`.  The raw-input carrier is fixed
 *before* classification and cannot be narrowed by the problem. -/
@@ -226,10 +167,8 @@ def toWasmInvocation {P : Wasm.Profile} (raw : Gemm.RawInvocation P) :
 /-- Everything the extensional definitions need, in one record: the costed
 semantics, the costed machine, and the problem. -/
 structure Setting (P : Wasm.Profile) where
-  /-- The costed WebAssembly semantics. -/
-  semantics : Semantics P
   /-- The costed initialization and exploration entry points. -/
-  machine : CostedMachine semantics
+  machine : CostedMachine P
   /-- The exact GEMM problem. -/
   problem : Problem P
 
@@ -241,7 +180,7 @@ variable {P : Wasm.Profile}
 
 /-- **SPEC §10.1**, `Universal.InputEvaluation`: the exact result of the bounded
 all-successor tree on one raw invocation. -/
-structure InputEvaluation (S : Setting P) (module : Wasm.Subset.Module)
+structure InputEvaluation (S : Setting P) (module : Wasm.Module)
     (raw : Gemm.RawInvocation P) where
   /-- The configuration the invocation starts from. -/
   initial : Wasm.Config
@@ -251,12 +190,12 @@ structure InputEvaluation (S : Setting P) (module : Wasm.Subset.Module)
   initialConfigEq : initialization.initial = initial
   /-- It is the machine's costed initialization of this module and invocation. -/
   initialEq :
-    S.machine.initialGemmInvocationCosted module (toWasmInvocation raw) =
+    Wasm.initialGemmInvocationCosted P module (toWasmInvocation raw) =
       .ok initialization
   /-- The canonically ordered, nonempty list of costed observations. -/
   observations :
     Foundation.NonemptyCanonicalFrontier
-      (CostedExecutionObservation S.semantics initial)
+      (CostedExecutionObservation P initial)
   /-- The tree completed inside the problem's step budget with exactly those
   observations. -/
   treeComplete : ∃ coverage,
@@ -273,7 +212,7 @@ structure InputEvaluation (S : Setting P) (module : Wasm.Subset.Module)
 initial configuration escapes the recorded costed observations.  A divergent
 execution has no finite observation, so it falsifies this predicate. -/
 def InputEvaluation.CoversEveryMaximalExecution {S : Setting P}
-    {module : Wasm.Subset.Module} {raw : Gemm.RawInvocation P}
+    {module : Wasm.Module} {raw : Gemm.RawInvocation P}
     (ie : InputEvaluation S module raw) : Prop :=
   ∀ execution : Wasm.MaximalExecution ie.initial,
     ∃ costed ∈ ie.observations.elements,
@@ -294,9 +233,9 @@ variable [Foundation.Fintype (Gemm.RawInvocation P)]
 -/
 structure SystemEvaluation (S : Setting P) (bytes : ByteArray) where
   /-- The decoded module. -/
-  module : Wasm.Subset.Module
+  module : Wasm.Module
   /-- It is exactly what `bytes` decodes to. -/
-  decodeEq : Wasm.Subset.decode bytes = .ok module
+  decodeEq : Wasm.decode bytes = .ok module
   /-- One input evaluation for *every* raw invocation. -/
   perInput : ∀ raw : Gemm.RawInvocation P, InputEvaluation S module raw
   /-- Each of them covers every maximal execution. -/
@@ -305,11 +244,7 @@ structure SystemEvaluation (S : Setting P) (bytes : ByteArray) where
   cost : Cost.CompleteSystemCost
   /-- It is the exact aggregate of SPEC §9.1. -/
   costExact :
-    Cost.ExactAggregateCost bytes (Wasm.Subset.decode bytes = .ok module)
-      (P.body.costTableBody.decodeCost bytes)
-      (S.semantics.validationSteps module)
-      (S.semantics.staticDataBytes module)
-      S.problem.workloadRepetitions
+    Cost.ExactAggregateCost P bytes module S.problem.workloadRepetitions
       (fun raw => (perInput raw).resourceVector) cost
 
 /-- **SPEC §10.1**, `Universal.EvaluationResult`. -/
@@ -328,26 +263,18 @@ inductive EvaluationResult (S : Setting P) (bytes : ByteArray)
   | resourceExhausted (raw : Gemm.RawInvocation P)
       (report : Foundation.ResourceReport)
 
-/-- SPEC §10.1's `Universal.evaluate`: the implemented finite decoder,
-validator, input enumerator and all-branch explorer.  It is a total function of
-the bytes alone — it receives no artifact, no selector and no conclusion. -/
-structure Decider (S : Setting P) where
-  /-- The evaluator. -/
-  evaluate : (bytes : ByteArray) → EvaluationResult S bytes
-
-/-- **SPEC §10.1**, `Universal.SystemEvaluationRel`. -/
-def SystemEvaluationRel (S : Setting P) (D : Decider S) (bytes : ByteArray)
-    (evaluation : SystemEvaluation S bytes) : Prop :=
-  D.evaluate bytes = .complete evaluation
+/-! The executable `Decider`, canonical `evaluate`, and
+`SystemEvaluationRel` live in `Universal/Evaluate.lean`, after the finite
+decoder/input/explorer computation they expose.  Keeping those executable
+names out of this extensional layer prevents an arbitrary callback from
+becoming part of the competitor universe. -/
 
 end Evaluation
 
 /-! ## The extensional semantic predicates (SPEC §10.1)
 
-These are extensional predicates for the current legacy-subset seam.  They do
-not yet instantiate the public amended-Core competitor universe required by the
-release theorem.  None mentions an evaluation, certificate, artifact, or
-selector. -/
+These are extensional predicates for the public amended-Core machine.  None
+mentions an evaluation, certificate, artifact, or selector. -/
 
 section Semantic
 
@@ -358,10 +285,10 @@ def StartsCostedInvocation (S : Setting P) (bytes : ByteArray)
     (raw : Gemm.RawInvocation P)
     (initialization : InitializationObservation P) (initial : Wasm.Config) :
     Prop :=
-  ∃ module : Wasm.Subset.Module,
-    Wasm.Subset.decode bytes = .ok module ∧
-    validateUnder P module = true ∧
-    S.machine.initialGemmInvocationCosted module (toWasmInvocation raw) =
+  ∃ module : Wasm.Module,
+    Wasm.decode bytes = .ok module ∧
+    Wasm.validateUnder P module = true ∧
+    Wasm.initialGemmInvocationCosted P module (toWasmInvocation raw) =
       .ok initialization ∧
     initialization.initial = initial
 
@@ -417,8 +344,8 @@ theorem hasFiniteObservation_finite {initial : Wasm.Config}
 /-- **SPEC §10.1**, `MaximalExecution.CostedAs`. -/
 def CostedAs {S : Setting P} {initial : Wasm.Config}
     (execution : Wasm.MaximalExecution initial)
-    (costed : CostedExecutionObservation S.semantics initial) : Prop :=
-  HasFiniteObservation execution costed.observation
+    (costed : CostedExecutionObservation P initial) : Prop :=
+  execution.CostedAs costed
 
 /-- **SPEC §10.1**, `Universal.IsMaximalExecution`. -/
 def IsMaximalExecution (S : Setting P) (bytes : ByteArray)
@@ -459,7 +386,7 @@ def SemanticWithinResourcesAt (S : Setting P) (bytes : ByteArray)
   (∀ (initialization : InitializationObservation P)
     (initial : Wasm.Config) (execution : Wasm.MaximalExecution initial),
     IsMaximalExecution S bytes raw initialization execution →
-    ∃ costed : CostedExecutionObservation S.semantics initial,
+    ∃ costed : CostedExecutionObservation P initial,
       CostedAs (S := S) execution costed ∧
       Cost.DynamicVector.ComponentwiseLE
         (Cost.sequentialCompose initialization.cost costed.cost)
@@ -564,7 +491,7 @@ theorem semanticWithinResourcesAt_charge {S : Setting P} {bytes : ByteArray}
     {initialization : InitializationObservation P} {initial : Wasm.Config}
     (execution : Wasm.MaximalExecution initial)
     (hmax : IsMaximalExecution S bytes raw initialization execution) :
-    ∃ costed : CostedExecutionObservation S.semantics initial,
+    ∃ costed : CostedExecutionObservation P initial,
       CostedAs (S := S) execution costed ∧
       Cost.DynamicVector.ComponentwiseLE
         (Cost.sequentialCompose initialization.cost costed.cost)
@@ -574,15 +501,15 @@ theorem semanticWithinResourcesAt_charge {S : Setting P} {bytes : ByteArray}
 /-- `ProfileValid` really does produce a decoded, validated, closed module. -/
 theorem profileValid_module {P : Wasm.Profile} {bytes : ByteArray}
     (h : ProfileValid P bytes) :
-    ∃ module : Wasm.Subset.Module,
-      Wasm.Subset.decode bytes = .ok module ∧ validateUnder P module = true ∧
-      module.imports = [] ∧ HasExactGemmExports P module :=
+    ∃ module : Wasm.Module,
+      Wasm.decode bytes = .ok module ∧ Wasm.validateUnder P module = true ∧
+      module.core.imports = [] ∧ HasExactGemmExports P module :=
   h
 
 /-- `ProfileValid` is decode-functional: the module it names is unique. -/
 theorem profileValid_module_unique {bytes : ByteArray}
-    {a b : Wasm.Subset.Module} (ha : Wasm.Subset.decode bytes = .ok a)
-    (hb : Wasm.Subset.decode bytes = .ok b) : a = b := by
+    {a b : Wasm.Module} (ha : Wasm.decode bytes = .ok a)
+    (hb : Wasm.decode bytes = .ok b) : a = b := by
   rw [ha] at hb
   exact (Except.ok.injEq _ _ ▸ hb).symm ▸ rfl
 

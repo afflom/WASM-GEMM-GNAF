@@ -388,9 +388,6 @@ abbrev InstantiatePinned := @Instantiate pinnedExecutionAuthority
 /-- AMD-011 instantiation with an explicit numeric provider. -/
 abbrev InstantiateAmendedFor := @Instantiate amendedExecutionAuthority
 
-/-- Released instantiation: amended runtime typing and released numerics. -/
-abbrev InstantiateA := InstantiateAmendedFor releasedNumerics
-
 /-- Byte-identical pinned invocation, retained as the authority reference. -/
 abbrev InvokePinned := @Invoke pinnedExecutionAuthority
 

@@ -414,6 +414,6 @@ theorem refMatchesN_not_complete_on_raw (fuel : Nat) :
     _, counter_ref_struct, counter_struct_sub_abstract⟩
   simp [refMatchesN, principalRefTypeN, principalAddrRefTypeN, counterStore,
     decReftypeSubN, decHeaptypeSubN, decHeapSubR, Context.resolveIdx,
-    Context.typeuseShape, counterFunc_shape, decAbsSub]
+    Context.typeuseShapeA, counterFunc_shape, decAbsSub]
 
 end WasmGemmGnaf.Wasm.Core.Exec
